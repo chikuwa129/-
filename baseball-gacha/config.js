@@ -11,7 +11,7 @@
     // 保存キーは「ゲーム名_」で始める(リセットでまとめて消せるように)。
     //   ゲームのセーブ:bbgacha_v{saveVersion}_save / 調整画面:bbgacha_tune_*
     storagePrefix: 'bbgacha_',
-    saveVersion: 7,                // セーブデータの形式。違うバージョンのセーブは初期化する
+    saveVersion: 8,                // セーブデータの形式。違うバージョンのセーブは初期化する
     logLimit: 300,                 // 出来事ログの保存件数
 
     // ---- カレンダー(4月始まり) ----
@@ -322,6 +322,42 @@
     },
     growthTopN: 3,
 
+    // ---- 前史(新規ゲームの開始時に、過去の数年を通常のルールで内部シミュレーションする) ----
+    //   残った2・3年生と評判を1年目4月に持ち越す。前史専用の乱数を使い、本編の乱数には影響しない
+    preHistory: { years: 4, seedSalt: 0x7a3c19e5 },   // 仕様の仮値は3年。3年だと開始時の上級生が少なく弱くなるため4年
+
+    // ---- 学校の評判と新入生の質 ----
+    //   評判(0〜100)= 評判 ×(1 − rate)+ 今年の得点 × rate(毎年3月)
+    //   今年の得点 = 大会点(夏・秋の勝ち上がりの平均 × tourneyMax)+ プロ入り点(1人 proPer、上限 proMax)+ 指導力点(Lv × leadPerLv、上限 leadMax)
+    //   影響度 x = (評判 − baseline) ÷ (100 − baseline) を 0〜1 に収める。新入生の抽選にだけ効く
+    reputation: {
+      baseline: 40,
+      rate: 0.25,
+      tourneyMax: 60,
+      proPer: 7,
+      proMax: 20,
+      leadPerLv: 2,
+      leadMax: 20,
+      topShareBase: 0.15,          // x = 0 のとき、通常の新入生が上位層(総合値120〜160)になる割合
+      topShareMax: 0.36,           // x = 1 のときの上位層の割合
+      talentRateMaxMult: 1.9,      // x = 1 のときの、天才・転生の出現率の倍率
+      trend: [0.15, 0.5, 0.8],     // 入学画面の「新入生の傾向」:並 / やや良 / 良 / 非常に良 の境目(x)
+    },
+
+    // ---- 表示(テンポ優先。詳しい内容は折りたたみ) ----
+    display: {
+      defaultLevel: 'min',         // 表示の詳しさの初期値:'min' 最小 / 'std' 標準 / 'full' 詳細
+      // 「標準」で開くパネル(折りたたみのキーの先頭部分)
+      panelDefaults: { std: ['power', 'month', 'yearSum', 'tune-params'] },
+      wallRatio: 0.95,             // 能力の詳細で、実効上限のこの割合以上の項目に「壁」を付ける
+      growthTopN: 10,              // 成長タブの初期表示の人数(変化が大きい順)
+    },
+    // ---- 方針の見直し画面 ----
+    policyScreen: {
+      strongWeight: 0.8,           // 方針の重みがこれ以上の項目に ◎(伸びやすい)
+      midWeight: 0.3,              // これ以上の項目に ○
+    },
+
     // ---- 見える化(表示と、成績用の乱数で決めるハイライトだけに使う。勝敗や成長には影響しない) ----
     visual: {
       opponentTournament: 'summer',  // 他校の比較に使う「相手の強さの分布」(この大会の1回戦〜決勝の相手)
@@ -359,15 +395,22 @@
       shareExp:     { min: 0.32, max: 0.48, label: '成長の内訳:試合経験値', pct: true, tune: 'growth.exp.growthPerExp' },
       lv5Years:     { min: 5, max: 10, label: '指導力Lv5までの年数(Lv10が最も早いシード)', tune: 'leadership.needPerLv' },
       lv10Years:    { min: 15, max: 30, label: '指導力Lv10までの年数(最も早いシード)', tune: 'leadership.needPerLv' },
-      summerTitle:  { min: 0.10, max: 0.20, label: '夏の地区優勝率', pct: true, tune: 'tournaments.summer.oppBase' },
-      autumnTitle:  { min: 0.10, max: 0.20, label: '秋の地区優勝率', pct: true, tune: 'tournaments.autumn.oppBase' },
+      summerTitle:  { min: 0.10, max: 0.22, label: '夏の地区優勝率', pct: true, tune: 'tournaments.summer.oppBase' },
+      autumnTitle:  { min: 0.10, max: 0.22, label: '秋の地区優勝率', pct: true, tune: 'tournaments.autumn.oppBase' },
       promisingUp:  { min: 0.10, max: 0.25, label: 'ラベル:有望以上の割合(在校生)', pct: true, tune: 'labelTop / 世代の基準の再計算' },
       monsterUp:    { min: 0.01, max: 0.04, label: 'ラベル:怪物級以上の割合(在校生)', pct: true, tune: 'labelTop / 世代の基準の再計算' },
       calibration:  { max: 0.05, label: '勝率予想の校正(区間ごとの最大のずれ)', pct: true, tune: '勝率の計算(Core.winProbability)を見直す' },
-      powerGrowth:  { min: 0.0, max: 0.5, label: 'チーム戦力の伸び(最後の5年の平均 / 1年目)', pct: true, tune: 'growth.* / leadership.monthlyMultMax' },
+      powerGrowth:  { min: 0.05, max: 0.40, label: 'チーム戦力の伸び(最後の5年の平均 / 1年目)', pct: true, tune: 'reputation.topShareMax / reputation.talentRateMaxMult / leadership.monthlyMultMax' },
       growthReflect: { min: 0.0, max: 0.3, label: '成長の反映(対 他校平均の勝率予想:各学年の3年目4月 − 1年目4月の平均)', pct: true, tune: 'growth.* / visual.opponentTournament' },
       highlightsPerGame: { min: 1, max: 2.5, label: '1試合あたりの活躍選手の人数', tune: 'visual.highlightMinScore / visual.highlightMax' },
       growthNoteShare: { min: 0.05, max: 0.25, label: '活躍選手に「成長の成果」が付く割合', pct: true, tune: 'visual.growthNoteRating' },
+      startVsBench: { max: 0.15, label: '開始時の2・3年生の総合値の平均と、世代の基準(4月のp50)のずれ', pct: true, tune: 'preHistory.years' },
+      startPowerGap: { max: 0.10, label: '1年目4月のチーム戦力と、2〜3年目4月の平均のずれ', pct: true, tune: 'preHistory.years' },
+      preHistoryMs: { max: 1000, label: '前史の所要時間(新規開始、ミリ秒)', tune: 'preHistory.years' },
+      repTopGain:   { min: 10, max: 25, label: 'x=1 の新入生の平均総合値(天才・転生を除く)の、基準校との差', tune: 'reputation.topShareMax' },
+      repNormalShare: { min: 0.55, label: 'x=1 でも通常層(80〜120)が新入生に占める割合', pct: true, tune: 'reputation.topShareMax / reputation.talentRateMaxMult' },
+      repTalentMult: { min: 1.7, max: 2.0, label: 'x=1 の天才・転生の出現率(基準の何倍)', tune: 'reputation.talentRateMaxMult' },
+      repCapYears:  { max: 0.20, label: '評判が x=1 に張り付いた年の割合', pct: true, tune: 'reputation.rate / reputation.baseline' },
       storageShare: { max: 0.5, label: '50年プレイした場合の保存容量(上限に対する割合)', pct: true, tune: 'visual.keepMonthlyYears / logLimit' },
     },
 
@@ -383,7 +426,7 @@
     // ---- 大会(簡易版。フェーズ2で本格的なトーナメントに置き換える) ----
     // 相手校の強さはチームの強さと同じ尺度
     tournaments: {
-      summer: { name: '夏の地区大会', rounds: 5, oppBase: 41, oppStep: 2.5, oppSd: 6 },
+      summer: { name: '夏の地区大会', rounds: 5, oppBase: 42, oppStep: 2.5, oppSd: 6 },
       autumn: { name: '秋の地区大会', rounds: 4, oppBase: 33, oppStep: 2.5, oppSd: 6 },
     },
     opponentNames: [
@@ -422,6 +465,10 @@
     { id: 'strength', label: 'チームの強さ・他校の強さ' },
     { id: 'tourney', label: '大会' },
     { id: 'visual', label: '見える化' },
+    { id: 'disp', label: '表示' },
+    { id: 'policy', label: '見直し画面' },
+    { id: 'pre', label: '前史' },
+    { id: 'rep', label: '評判' },
   ];
   CONFIG.paramMeta = [
     ['rating.normal.mean', 'rating', '通常の新入生の総合値の平均'],
@@ -526,6 +573,24 @@
     ['visual.storageQuotaChars', 'visual', 'localStorage の上限の目安(文字数)', true],
     ['visual.storageWarnRatio', 'visual', '保存容量の警告を出す割合', true],
     ['visual.calibrationMinGames', 'visual', '勝率予想の校正で、判定に使う区間の最少試合数', true],
+    ['display.wallRatio', 'disp', '能力の詳細で「壁」を付ける、実効上限に対する割合', true],
+    ['display.growthTopN', 'disp', '成長タブの初期表示の人数(変化が大きい順)', true],
+    ['policyScreen.strongWeight', 'policy', '方針の選択肢で ◎ を付ける重み', true],
+    ['policyScreen.midWeight', 'policy', '方針の選択肢で ○ を付ける重み', true],
+    ['preHistory.years', 'pre', '新規開始時に内部で再現する過去の年数'],
+    ['reputation.baseline', 'rep', '評判の初期値・基準(これ以下は新入生の質に影響しない)'],
+    ['reputation.rate', 'rep', '評判の更新の速さ(今年の得点の割合)'],
+    ['reputation.tourneyMax', 'rep', '今年の得点:大会点の上限'],
+    ['reputation.proPer', 'rep', '今年の得点:プロ入り1人あたり'],
+    ['reputation.proMax', 'rep', '今年の得点:プロ入り点の上限'],
+    ['reputation.leadPerLv', 'rep', '今年の得点:指導力Lvあたり'],
+    ['reputation.leadMax', 'rep', '今年の得点:指導力点の上限'],
+    ['reputation.topShareBase', 'rep', '通常の新入生が上位層(120〜160)になる割合(x=0)'],
+    ['reputation.topShareMax', 'rep', '上位層の割合(x=1)'],
+    ['reputation.talentRateMaxMult', 'rep', '天才・転生の出現率の倍率(x=1)'],
+    ['reputation.trend.0', 'rep', '「新入生の傾向」がやや良になる x', true],
+    ['reputation.trend.1', 'rep', '「新入生の傾向」が良になる x', true],
+    ['reputation.trend.2', 'rep', '「新入生の傾向」が非常に良になる x', true],
   ].map((x) => ({ path: x[0], group: x[1], desc: x[2], displayOnly: !!x[3] }));
 
   if (typeof module === 'object' && module.exports) module.exports = CONFIG;

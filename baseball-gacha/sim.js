@@ -22,7 +22,7 @@ const runner = Sim.createRunner({ seeds: Array.from({ length: SEEDS }, (_, i) =>
 while (!runner.step()) { /* 1年ずつ進める */ }
 const states = runner.states();
 const state = states[0]; // くわしい内訳は、最初のシードで表示する
-const metrics = Sim.analyze(states, runner.labels);
+const metrics = Sim.analyze(states, runner.labels, { preMs: runner.startMs() });
 
 // ---------- 集計 ----------
 const S = state.stats;

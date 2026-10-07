@@ -253,7 +253,8 @@
   function isSpecial(p) { return isBloomingGenius(p) || !!p.reincarnation; }
 
   // 新入生の初期の総合値を抽選する
-  function drawInitialRating(rng, talent, reincarnation) {
+  //   highRate:通常の新入生が上位層(120〜160)になる割合(評判で変わる。省くと rating.normal.highRate)
+  function drawInitialRating(rng, talent, reincarnation, highRate) {
     const R = CONFIG.rating;
     if (reincarnation) {
       const r = rng.float(R.reincarnation.min, R.reincarnation.max);
@@ -261,7 +262,7 @@
     }
     if (talent === 'genius') return rng.float(R.genius.min, R.genius.max);
     const N = R.normal;
-    if (rng.chance(N.highRate)) return rng.float(N.highMin, N.highMax);
+    if (rng.chance(highRate != null ? highRate : N.highRate)) return rng.float(N.highMin, N.highMax);
     return clamp(rng.normal(N.mean, N.sd), N.min, N.max);
   }
 
@@ -278,12 +279,15 @@
     for (const k of keys) abilities[k] = round1(abilities[k]);
   }
 
-  // opts: { id, year, grade, takenSurnames, position, positionWeights, forceTwoWay, ratingOverride }
+  // opts: { id, year, grade, takenSurnames, position, positionWeights, forceTwoWay, ratingOverride, quality }
+  //   quality:{ talentMult, highRate }(学校の評判による新入生の質。天才・転生の出現率の倍率と、上位層の割合)
   function createPlayer(rng, opts) {
     const T = CONFIG.talent;
-    const reincarnation = rng.chance(T.reincarnationRate)
+    const q = opts.quality || {};
+    const tm = q.talentMult || 1;
+    const reincarnation = rng.chance(T.reincarnationRate * tm)
       ? rng.pick(Object.keys(CONFIG.reincarnationTypes)) : null;
-    const talent = rng.chance(T.geniusRate) ? 'genius' : 'normal';
+    const talent = rng.chance(T.geniusRate * tm) ? 'genius' : 'normal';
     const geniusBust = talent === 'genius' && rng.chance(T.geniusBustRate);
     const twoWay = opts.forceTwoWay != null ? opts.forceTwoWay : rng.chance(T.twoWayRate);
 
@@ -294,7 +298,7 @@
     else position = rng.weighted(opts.positionWeights || CONFIG.positionRates);
 
     const side = sideOf(position);
-    const targetRating = opts.ratingOverride != null ? opts.ratingOverride : drawInitialRating(rng, talent, reincarnation);
+    const targetRating = opts.ratingOverride != null ? opts.ratingOverride : drawInitialRating(rng, talent, reincarnation, q.highRate);
     const abilities = {};
     // 得意項目への偏り(守備区分と転生の型)
     const bonusFor = (s) => {
@@ -475,6 +479,30 @@
       ];
     }
     return [{ weights: policyWeights(mainSide(p), p.policy), share: 1 }];
+  }
+
+  // 選手の今の方針で、各項目がどれだけ伸びやすいか(最大を1にした重み)。表示用
+  function policyWeightMap(p) {
+    const w = {};
+    for (const t of growthTargets(p)) for (const k of Object.keys(t.weights)) w[k] = (w[k] || 0) + t.weights[k] * t.share;
+    const mx = Math.max.apply(null, Object.values(w).concat([1e-9]));
+    for (const k of Object.keys(w)) w[k] /= mx;
+    return w;
+  }
+  // 方針の選択肢に添える、伸びやすい項目(◎ 重みが大きい / ○ 中くらい)
+  function policyHint(setName, key) {
+    const PS = CONFIG.policyScreen;
+    if (setName === 'twoWay') {
+      const tw = POLICIES.twoWay.find((x) => x.key === key);
+      return tw && tw.side ? SIDE_LABEL[tw.side] + 'の全体' : '投手系・野手系の全体(伸びを分け合う)';
+    }
+    const w = policyWeights(setName, key);
+    const mx = Math.max.apply(null, Object.values(w));
+    const keys = Object.keys(w);
+    if (keys.every((k) => w[k] === mx)) return '全体が少しずつ';
+    const strong = keys.filter((k) => w[k] / mx >= PS.strongWeight).map((k) => ABILITY_LABEL[k] + '◎');
+    const mid = keys.filter((k) => w[k] / mx >= PS.midWeight && w[k] / mx < PS.strongWeight).map((k) => ABILITY_LABEL[k] + '○');
+    return strong.concat(mid).join(' ') || '-';
   }
 
   // amount(能力値の合計)だけ成長させる。source は 'practice' / 'camp' / 'exp'
@@ -1042,7 +1070,9 @@
   }
   // 世代の基準の作成に関わる設定のハッシュ(基準が古いかどうかの判定用)
   function benchmarkConfigHash() {
-    const src = JSON.stringify({ rating: CONFIG.rating, growth: CONFIG.growth, statCap: CONFIG.statCap, limitBreak: CONFIG.limitBreak, coach: CONFIG.baselineCoachLv });
+    const R = CONFIG.reputation;
+    const src = JSON.stringify({ rating: CONFIG.rating, growth: CONFIG.growth, statCap: CONFIG.statCap, limitBreak: CONFIG.limitBreak, coach: CONFIG.baselineCoachLv,
+      rep: { baseline: R.baseline, topShareBase: R.topShareBase, topShareMax: R.topShareMax, talentRateMaxMult: R.talentRateMaxMult }, pre: CONFIG.preHistory });
     let h = 0x811c9dc5;
     for (let i = 0; i < src.length; i++) {
       h ^= src.charCodeAt(i);
@@ -1080,6 +1110,8 @@
     visibleKeys: visibleKeys,
     subKeysOf: subKeysOf,
     growthKeys: growthKeys,
+    policyWeightMap: policyWeightMap,
+    policyHint: policyHint,
     rating: rating,
     ratingSides: ratingSides,
     ratingOfKeys: ratingOfKeys,
@@ -1404,6 +1436,8 @@
       policyReview: { reviewed: 0, changed: 0 },
       stops: 0,                // 「次のイベントまで」で止まった回数
       overCap: { n: 0, strengthDiff: 0, winDiff: 0 },
+      repByYear: [],           // 年度末の評判 { y, rep, x, score }
+      start: null,             // 開始時の2・3年生の総合値の平均 { g2, g3, rep }
       calib: [],               // 勝率予想の校正 [区間] = { n, w }
       upsets: 0,               // 番狂わせ
       shocks: 0,               // 波乱
@@ -1506,38 +1540,54 @@
     return { grown: grown, watchLines: watchLines };
   }
 
-  // ---------- 新しいゲーム ----------
-  // 開始時の在校生の、入学からこれまでの成長を再現する(月ごとの練習・経験値・合宿)
-  function simulatePast(state, rng, p, years) {
-    addTimeline(p, '入学');
-    for (let g = 1; g <= years; g++) {
-      const y = p.enrolledYear + g - 1;
-      for (const c of CAL) {
-        // 試合の経験値は、出場の度合いがわからないので平均的な量を与える
-        p.exp += rng.float(0, 6);
-        growPlayerMonth(null, rng, p, c.month, 1);
-        const ev = c.events.map((e) => CONFIG.eventTypes[e]).find((t) => t && t.kind === 'camp');
-        if (ev) {
-          campGrowth(rng, p, y, ev.label, 0);
-          addTimeline(p, p.grade + '年' + ev.term);
-        }
-      }
-      addHistory(p, y, '練習・試合経験(1年間)', '', p.yearGain);
-      p.yearGain = {};
-      takeSnapshot(p, y);
-      p.grade++;
-    }
+  // ---------- 学校の評判 ----------
+  // 影響度 x(0〜1)。評判が基準以下なら 0(マイナスの補正は入れない)
+  function reputationX(state) {
+    const R = CONFIG.reputation;
+    if (state.fixedRep) return 0;
+    return clamp((state.schoolRep - R.baseline) / (100 - R.baseline), 0, 1);
+  }
+  function recruitQuality(x) {
+    const R = CONFIG.reputation;
+    return { x: x, highRate: R.topShareBase + (R.topShareMax - R.topShareBase) * x, talentMult: 1 + (R.talentRateMaxMult - 1) * x };
+  }
+  function recruitTrend(x) {
+    const t = CONFIG.reputation.trend;
+    return x >= t[2] ? '非常に良' : x >= t[1] ? '良' : x >= t[0] ? 'やや良' : '並';
+  }
+  // 年度末に評判を更新する(移動平均)。戻り値は今年の得点の内訳
+  function updateReputation(state, pros) {
+    const R = CONFIG.reputation;
+    const rec = state.yearRecords[state.year] || {};
+    const prog = ['summer', 'autumn'].map((k) => (rec[k + 'Wins'] != null ? rec[k + 'Wins'] / CONFIG.tournaments[k].rounds : 0));
+    const tourney = mean(prog) * R.tourneyMax;
+    const pro = Math.min(R.proMax, pros * R.proPer);
+    const lead = Math.min(R.leadMax, state.leadership.lv * R.leadPerLv);
+    const score = tourney + pro + lead;
+    if (!state.fixedRep) state.schoolRep = clamp(state.schoolRep * (1 - R.rate) + score * R.rate, 0, 100);
+    state.stats.repByYear.push({ y: state.year, rep: round1(state.schoolRep), x: round1(reputationX(state) * 1000) / 1000, score: round1(score) });
+    return { tourney: tourney, pro: pro, lead: lead, score: score };
   }
 
+  // ---------- 新しいゲーム(前史つき) ----------
+  //   開始時の2・3年生は、過去 preHistory.years 年を通常のルールで内部シミュレーションして作る。
+  //   前史は専用の乱数を使うので、本編の乱数の消費には影響しない。画面も通知も出さない。
+  function hashSeed(seed, salt) {
+    let h = (seed ^ salt) >>> 0;
+    h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;
+    h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;
+    return (h ^ (h >>> 16)) >>> 0;
+  }
   function newGame(opts) {
     opts = opts || {};
     const seed = (opts.seed != null ? Number(opts.seed) : Math.floor(Math.random() * 4294967296)) >>> 0;
+    const preYears = Math.max(0, Math.round(CONFIG.preHistory.years));
     const state = {
       version: CONFIG.saveVersion,
       seed: seed,
-      rngState: seed,
-      statRngState: (seed ^ 0x5bd1e995) >>> 0, // 成績専用の乱数(試合展開の乱数とは別系統)
-      year: 1,
+      rngState: hashSeed(seed, CONFIG.preHistory.seedSalt),          // 前史の間は前史専用の乱数
+      statRngState: hashSeed(seed ^ 0x5bd1e995, CONFIG.preHistory.seedSalt),
+      year: 1 - preYears,
       month: 0,              // CONFIG.calendar の添字(0 = 4月)
       awaiting: null,        // 'policy' のとき方針の選択待ち
       policyContext: null,   // 'enrollment'(4月) / 'review'(見直し)
@@ -1550,7 +1600,9 @@
       lastEvents: [],
       carryCards: [],        // 次の月のまとめに載せる結果(入学の結果など)
       monthNotices: [],
-      reputation: null,
+      prevSummerStrength: CONFIG.newcomers.strengthPivot,   // 前年夏のチームの強さ(新入生の人数に使う)
+      schoolRep: CONFIG.reputation.baseline,                 // 学校の評判(0〜100)
+      fixedRep: !!opts.fixedRep,                             // 世代の基準づくりでは評判を固定(効果なし)
       leadership: { lv: opts.fixedCoachLv || 1, exp: 0 },
       fixedCoachLv: opts.fixedCoachLv || null,
       overrides: opts.overrides || {},   // このゲームを作ったときの上書き設定(調整画面)
@@ -1558,30 +1610,52 @@
       yearRecords: {},       // 年度ごとの記録 { 年: { summer, autumn, upsets, shocks } }
       stats: emptyStats(),
     };
-
-    withRng(state, (rng) => {
-      const positions = [];
-      const IC = CONFIG.initialComposition;
-      for (const pos of POSITIONS) {
-        const n = rng.int(IC[pos][0], IC[pos][1]);
-        for (let i = 0; i < n; i++) positions.push(pos);
+    // 前史:方針は「おまかせ」(新入生と、選び直しが必要な選手)
+    if (preYears > 0) {
+      beginMonth(state);
+      while (!(state.year === 1 && state.awaiting === 'policy' && state.policyContext === 'enrollment')) {
+        if (state.awaiting) {
+          const pol = {};
+          for (const p of state.pendingRecruits) pol[p.id] = autoPolicy(p);
+          for (const p of reviewablePlayers(state)) if (p.needsPolicy) pol[p.id] = autoPolicy(p);
+          confirmPolicies(state, pol);
+          continue;
+        }
+        processMonth(state);
       }
-      positions.forEach((pos, i) => {
-        const grade = i % 2 === 0 ? 3 : 2;
-        const p = newPlayer(state, rng, { position: pos });
-        p.origin = 'initial';
-        p.enrolledYear = state.year - (grade - 1);
-        p.reincarnationRevealed = true;
-        p.twoWayRevealed = true;
-        p.policy = rng.pick(POLICIES[policySetOf(p)]).key;
-        computeLimitCaps(p);
-        addHistory(p, p.enrolledYear, '入学', '方針:' + policyLabel(p));
-        takeSnapshot(p, p.enrolledYear);
-        simulatePast(state, rng, p, grade - 1);
-        state.players.push(p);
-      });
-    });
-    state.reputation = calcTeamStrength(state.players);
+      // 前史の最後(3月の卒業・進級のあと)の在校生を、1年目4月の2・3年生として持ち越す
+      state.pendingRecruits = [];
+      state.awaiting = null;
+      state.policyContext = null;
+      const keepFrom = monthSerial(1, 0) - CAL.length;   // 成長のスナップショットは最後の12か月分だけ残す
+      for (const p of state.players) {
+        for (const h of p.history) h.ev += '(開始前)';
+        if (p.mlog) {
+          const cut = Math.max(0, keepFrom - p.mlog.s);
+          p.mlog = cut >= p.mlog.a.length ? null : { s: p.mlog.s + cut, a: p.mlog.a.slice(cut) };
+        }
+        p.lastNotice = null;
+        p.watched = false;
+        p.origin = 'pre';    // 開始前からの部員(卒業生の集計では、就任後に入った選手と分ける)
+      }
+      // 持ち越さないもの:指導力・大会成績・チーム戦力の記録・練習試合の戦績・前年のまとめ・卒業生・ログ
+      state.leadership = { lv: opts.fixedCoachLv || 1, exp: 0 };
+      state.stats = emptyStats();
+      state.powerLog = [];
+      state.yearRecords = {};
+      state.alumni = [];
+      state.log = [];
+      state.lastEvents = [];
+      state.carryCards = [];
+      state.monthNotices = [];
+      state.newcomerInfo = null;
+    }
+    state.year = 1;
+    state.month = 0;
+    state.rngState = seed;
+    state.statRngState = (seed ^ 0x5bd1e995) >>> 0; // 成績専用の乱数(試合展開の乱数とは別系統)
+    const avgOfGrade = (g) => mean(state.players.filter((p) => p.grade === g && !p.helper).map((p) => rating(p)));
+    state.stats.start = { g2: round1(avgOfGrade(2)), g3: round1(avgOfGrade(3)), rep: round1(state.schoolRep) };
     pushLog(state, CONFIG.schoolName + 'の監督に就任した。', 3);
     beginMonth(state);
     return state;
@@ -1590,7 +1664,7 @@
   // 新入生の人数を決める
   function newcomerCount(state, rng) {
     const N = CONFIG.newcomers;
-    const strength = state.reputation != null ? state.reputation : calcTeamStrength(state.players);
+    const strength = state.prevSummerStrength != null ? state.prevSummerStrength : calcTeamStrength(state.players);
     let n = N.base + Math.round((strength - N.strengthPivot) * N.perStrength) + rng.int(-N.noise, N.noise);
     n = clamp(n, N.min, N.max);
     const room = Math.max(0, N.rosterCap - members(state).length);
@@ -1602,6 +1676,9 @@
     withRng(state, (rng) => {
       state.pendingRecruits = [];
       const info = newcomerCount(state, rng);
+      const quality = recruitQuality(reputationX(state));
+      info.x = quality.x;
+      info.trend = recruitTrend(quality.x);
       state.newcomerInfo = info;
       for (let i = 0; i < info.count; i++) {
         const counts = countByPosition(members(state).concat(state.pendingRecruits));
@@ -1610,8 +1687,9 @@
           const d = CONFIG.positionDeficit[pos];
           weights[pos] = CONFIG.positionRates[pos] * (counts[pos] < d.min ? d.mult : 1);
         }
-        const p = newPlayer(state, rng, { positionWeights: weights });
+        const p = newPlayer(state, rng, { positionWeights: weights, quality: quality });
         p.origin = 'recruit';
+        p.recruitX = quality.x;
         if (p.reincarnation && CONFIG.reincarnationReveal === 'enrollment') p.reincarnationRevealed = true;
         if (p.twoWay && CONFIG.twoWayReveal === 'enrollment') p.twoWayRevealed = true;
         p.policy = POLICIES[policySetOf(p)][POLICIES[policySetOf(p)].length - 1].key; // バランス / 両方
@@ -1736,7 +1814,7 @@
         state.players.push(p);
         S.recruits++;
         const grp = p.reincarnation && p.talent === 'genius' ? '天才かつ転生' : p.reincarnation ? '転生' : p.talent === 'genius' ? '天才' : p.twoWay ? '二刀流' : '通常';
-        S.recruitRatings.push({ g: grp, r: rating(p), tw: p.twoWay });
+        S.recruitRatings.push({ g: grp, r: rating(p), tw: p.twoWay, x: p.recruitX || 0 });
         if (p.talent === 'genius') S.genius++;
         if (p.twoWay) S.twoWay++;
         if (p.reincarnation) {
@@ -1953,7 +2031,7 @@
     state.stats.teamStrengthSum += myStrength;
     state.stats.teamStrengthCount++;
     if (key === 'summer') {
-      state.reputation = myStrength;
+      state.prevSummerStrength = myStrength;
       const fs = activeMembers(state).filter((p) => p.grade === 1 && isSpecial(p));
       state.stats.freshmanSpecial.onRoster += fs.length;
       state.stats.freshmanSpecial.starting += fs.filter((p) => members_.indexOf(p) >= 0).length;
@@ -2053,6 +2131,7 @@
     lines.splice(1, 0, { text: resultText, cls: champion ? 'special' : 'summary' });
     pushLog(state, resultText, 3);
     yearRecord(state, state.year)[key] = resultLabel(wins, T.rounds, champion);
+    yearRecord(state, state.year)[key + 'Wins'] = champion ? T.rounds : wins;
     const out = {
       type: 'tournament', title: formatYear(state.year) + ' ' + T.name,
       lines: lines, games: games,
@@ -2145,6 +2224,7 @@
       if (p.watched) summaries.push.apply(summaries, watchSummary(state, p, career));
     }
     if (pros) gainLeadership(state, pros * CONFIG.leadership.gains.pro, 'プロ入り' + pros + '人');
+    updateReputation(state, pros);
     state.players = state.players.filter((p) => p.grade < 3 && !p.helper);
     for (const p of state.players) {
       takeSnapshot(p, state.year);
@@ -2369,6 +2449,9 @@
     watchedPlayers: watchedPlayers,
     countByPosition: countByPosition,
     leadershipNeed: leadershipNeed,
+    reputationX: reputationX,
+    recruitQuality: recruitQuality,
+    recruitTrend: recruitTrend,
     monthSerial: monthSerial,
     serialLabel: serialLabel,
     abilitiesAt: abilitiesAt,
@@ -2440,6 +2523,7 @@
     overrides: CONFIG.storagePrefix + 'tune_overrides',
     benchmark: CONFIG.storagePrefix + 'tune_benchmark',
     lastTrial: CONFIG.storagePrefix + 'tune_lastTrial',
+    ui: CONFIG.storagePrefix + 'v' + CONFIG.saveVersion + '_ui',   // 折りたたみの開閉の記憶・表示の詳しさ
   };
   function readJson(storage, key) {
     try {
@@ -2459,6 +2543,7 @@
   function saveOverrides(storage, ov) { return writeJson(storage, KEYS.overrides, ov || {}); }
   // 新しいゲームを作る:今の上書き設定を、このゲームの設定として固定する
   function startGame(storage, seed) {
+    try { storage.removeItem(KEYS.ui); } catch (e) { /* なし */ }   // 開閉の記憶もリセットで消す
     const ov = loadOverrides(storage);
     applyOverrides(ov);
     const state = newGame({ seed: seed, overrides: ov });
@@ -2541,9 +2626,12 @@
   // 1シードを1年ずつ進めるランナー。opts: { seed, years, policyMode, fixedCoachLv, observer }
   function createSeedRunner(opts) {
     const choose = makeChooser(opts.seed, opts.policyMode || 'auto');
-    const state = newGame({ seed: opts.seed, fixedCoachLv: opts.fixedCoachLv });
+    const t0 = Date.now();
+    const state = newGame({ seed: opts.seed, fixedCoachLv: opts.fixedCoachLv, fixedRep: opts.fixedRep });
+    const startMs = Date.now() - t0;   // 前史の所要時間(状態には入れない。同じシードで同じ結果にするため)
     return {
       state: state,
+      startMs: startMs,
       done: () => state.stats.years >= opts.years,
       stepYear: () => {
         const target = state.stats.years + 1;
@@ -2597,6 +2685,7 @@
         return idx >= opts.seeds.length;
       },
       states: () => runners.map((r) => r.state),
+      startMs: () => Math.max.apply(null, runners.map((r) => r.startMs).concat([0])),
     };
   }
   function quantile(sorted, q) {
@@ -2620,7 +2709,8 @@
     };
   }
   // 結果の集計(目安と比べる項目)
-  function analyze(states, labels) {
+  //   extra:{ preMs }(前史の所要時間。ランナーの startMs())
+  function analyze(states, labels, extra) {
     const grads = [];
     let years = 0;
     let limitBreaks = 0;
@@ -2670,9 +2760,54 @@
       lvReach: reach,
       summerTitle: mean_(titles.summer),
       autumnTitle: mean_(titles.autumn),
+      preHistoryMs: extra && extra.preMs != null ? extra.preMs : NaN,
       promisingUp: labels && labels.total ? labels.promising / labels.total : NaN,
       monsterUp: labels && labels.total ? labels.monster / labels.total : NaN,
-    }, analyzeVisual(states));
+    }, analyzeVisual(states), analyzeStartAndRep(states), repSynthetic());
+  }
+  // 前史と評判の集計
+  function analyzeStartAndRep(states) {
+    const b = benchmark;
+    const st = states.filter((s) => s.stats.start);
+    const g2 = mean_(st.map((s) => s.stats.start.g2));
+    const g3 = mean_(st.map((s) => s.stats.start.g3));
+    let startVsBench = NaN;
+    if (b && b.rows['2-4'] && b.rows['3-4']) startVsBench = Math.max(Math.abs(g2 / b.rows['2-4'].p50 - 1), Math.abs(g3 / b.rows['3-4'].p50 - 1));
+    const april = (s, y) => { const e = s.powerLog.find((x) => x.y === y && x.m === 4); return e ? e.p : null; };
+    const p1 = st.map((s) => april(s, 1)).filter((v) => v != null);
+    const p23 = st.map((s) => [april(s, 2), april(s, 3)].filter((v) => v != null)).filter((a) => a.length).map((a) => mean_(a));
+    const reps = [];
+    for (const s of states) for (const r of s.stats.repByYear) reps.push(r);
+    return {
+      startG2: g2,
+      startG3: g3,
+      startVsBench: startVsBench,
+      startPowerGap: p1.length && p23.length ? Math.abs(mean_(p1) / mean_(p23) - 1) : NaN,
+      repCapYears: reps.length ? reps.filter((r) => r.x >= 0.999).length / reps.length : NaN,
+      repAvg: reps.length ? mean_(reps.map((r) => r.rep)) : NaN,
+      repXAvg: reps.length ? mean_(reps.map((r) => r.x)) : NaN,
+    };
+  }
+  // 評判の効果:x = 0 と x = 1 で新入生をたくさん抽選して比べる(試し抽選。ゲームには影響しない)
+  function repSynthetic(n) {
+    n = n || 20000;
+    const draw = (x) => {
+      const rng = new Rng(20240607);
+      const q = recruitQuality(x);
+      const list = [];
+      for (let i = 0; i < n; i++) list.push(createPlayer(rng, { id: i, year: 1, quality: q }));
+      return list;
+    };
+    const special = (p) => p.talent === 'genius' || !!p.reincarnation;
+    const a0 = draw(0);
+    const a1 = draw(1);
+    const normAvg = (list) => mean_(list.filter((p) => !special(p)).map((p) => rating(p)));
+    const talentRate = (list) => list.filter(special).length / list.length;
+    return {
+      repTopGain: normAvg(a1) - normAvg(a0),
+      repNormalShare: a1.filter((p) => !special(p) && rating(p) >= 80 && rating(p) <= 120).length / a1.length,
+      repTalentMult: talentRate(a1) / talentRate(a0),
+    };
   }
   // 見える化の集計:勝率予想の校正・チーム戦力の推移・成長の反映・ハイライト・保存容量
   function analyzeVisual(states) {
@@ -2773,7 +2908,7 @@
       finished: () => i >= opts.seeds,
       step: () => {
         if (i >= opts.seeds) return true;
-        if (!cur) cur = createSeedRunner({ seed: opts.seedBase + i, years: opts.years, policyMode: 'auto', fixedCoachLv: opts.coachLv, observer: observer });
+        if (!cur) cur = createSeedRunner({ seed: opts.seedBase + i, years: opts.years, policyMode: 'auto', fixedCoachLv: opts.coachLv, fixedRep: true, observer: observer });
         cur.stepYear();
         done++;
         if (cur.done()) { i++; cur = null; }

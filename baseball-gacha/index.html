@@ -163,6 +163,32 @@
   .grow-row .dn { font-size: 12px; color: var(--lose); }
   .chip { padding: 4px 10px; border: 1px solid var(--line); background: #fff; border-radius: 14px; font-size: 12px; }
   .chip.on { background: var(--ink); color: #fff; }
+  .col { margin: 2px 0; }
+  .colhead { display: block; width: 100%; text-align: left; background: none; border: none; padding: 5px 0; font-size: 14px; color: var(--ink); cursor: pointer; }
+  .colhead .ar { display: inline-block; width: 1.1em; color: var(--accent); }
+  .colhead .more { font-size: 11px; color: var(--accent); margin-left: 4px; white-space: nowrap; }
+  .colbody { padding: 2px 0 6px 1.1em; border-left: 2px solid #eee4d2; margin-left: 2px; }
+  .pst { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 4px 10px; margin-top: 4px; }
+  .pst .it { font-size: 12px; }
+  .pst .it.sub { opacity: .55; }
+  .pst .hd { display: flex; justify-content: space-between; gap: 4px; }
+  .pst .hd b { font-size: 14px; }
+  .pst .mk { font-size: 10px; padding: 0 4px; border-radius: 6px; margin-left: 2px; }
+  .mk.best { background: #e6f4ea; color: #1d7a3a; } .mk.worst { background: #fbe9e7; color: #b03a2e; } .mk.wall { background: #eee; color: #555; } .mk.up { color: #b07d00; }
+  .pst .dd { font-size: 11px; color: var(--sub); }
+  .bar { height: 5px; background: #eee; border-radius: 3px; position: relative; overflow: hidden; margin-top: 1px; }
+  .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); }
+  .bar i.ov { background: #d4a017; }
+  .polcard { border-top: 1px solid var(--line); padding: 4px 0; }
+  .polcard.changed { background: #fff6dc; }
+  .polline { font-size: 13px; }
+  .polline .bw { font-size: 11px; color: var(--sub); }
+  .undo { font-size: 12px; margin: 2px 0; }
+  .ml3 div { font-size: 13px; padding: 1px 0; }
+  .pflex { display: flex; align-items: flex-start; gap: 2px; }
+  .pflex > .star { margin-top: 5px; }
+  .pflex > .grow { flex: 1; min-width: 0; }
+  .polcard select { max-width: 100%; }
 </style>
 </head>
 <body>
@@ -201,7 +227,6 @@
   let alumniFilter = 'all';
   let autoTarget = 'new';        // おまかせの対象:'new'(新入生のみ) / 'all'(全員)
   let pendingWatchId = null;     // 上限を超えて注目しようとした選手
-  const openDetails = new Set(); // 開いている詳細(描き直しても開いたままにする)
   const draftPolicies = {};      // 方針の選択画面で選択中の方針
 
   // ---------- セーブ / ロード ----------
@@ -221,6 +246,84 @@
     }
   })();
   let modal = null;              // 確認のダイアログ { text, action }
+  // 表示の詳しさ(最小 / 標準 / 詳細)と、折りたたみの開閉の記憶(パネルごと)。リセットで消える
+  let uiPrefs = loadUiPrefs();
+  function loadUiPrefs() {
+    const u = Persist.readJson(storage, Persist.KEYS.ui) || {};
+    return { level: u.level || CONFIG.display.defaultLevel, open: u.open || {}, polSort: u.polSort || 'need', polFilter: u.polFilter || 'all' };
+  }
+  function saveUi() { Persist.writeJson(storage, Persist.KEYS.ui, uiPrefs); }
+  // 開いているか:個別に開閉した記憶 → 表示の詳しさ(詳細=全部 / 標準=panelDefaults / 最小=閉じる)→ defaultOpen
+  function isOpen(key, defaultOpen) {
+    if (Object.prototype.hasOwnProperty.call(uiPrefs.open, key)) return !!uiPrefs.open[key];
+    if (uiPrefs.level === 'full') return true;
+    if (uiPrefs.level === 'std' && CONFIG.display.panelDefaults.std.some((k) => key === k || key.indexOf(k + ':') === 0)) return true;
+    return !!defaultOpen;
+  }
+  // 共通部品:1行の要約(押せる)+ 押して開いたときに初めて描画する詳細(遅延描画)
+  //   options:{ defaultOpen, cls, forceOpen, after(要約の下に常に出す部分。ボタンの外なのでプルダウンも置ける) }
+  function renderCollapsible(key, summary, renderDetail, options) {
+    options = options || {};
+    const open = options.forceOpen || isOpen(key, options.defaultOpen);
+    return '<div class="col ' + (options.cls || '') + '"><button class="colhead" data-col="' + esc(key) + '" aria-expanded="' + open + '">'
+      + '<span class="ar">' + (open ? '▾' : '▸') + '</span>' + summary + (open ? '' : '<span class="more">詳しく</span>') + '</button>'
+      + (options.after || '') + (open ? '<div class="colbody">' + renderDetail() + '</div>' : '') + '</div>';
+  }
+
+  // 共通部品:能力の詳細(項目ごとの現在値・入学時からの増減・前回の見直しからの増減・横棒・印)
+  //   options:{ policy }(▲ の計算に使う方針。省くと今の方針)。二刀流は投手系と野手系を分けて出す
+  function lastReviewAbilities(p) {
+    if (!p.mlog) return null;
+    const cur = HighSchool.monthSerial(state.year, state.month);
+    for (let sv = cur - 1; sv >= cur - 12; sv--) {
+      const idx = ((sv % 12) + 12) % 12;
+      const m = HighSchool.CALENDAR[idx].month;
+      if (CONFIG.policyReviewMonths.indexOf(m) >= 0) return HighSchool.abilitiesAt(p, sv - 1);
+    }
+    return null;
+  }
+  function renderPlayerStatsCompact(p, options) {
+    options = options || {};
+    const a = p.finalAbilities || p.abilities;
+    const dec = growthView.decimal;
+    const fmt = (v) => (dec ? Core.round1(v).toFixed(1) : String(Math.round(v)));
+    const dlt = (v) => { const r = dec ? Core.round1(v) : Math.round(v); return r === 0 ? '±0' : (r > 0 ? '+' : '') + (dec ? r.toFixed(1) : r); };
+    const prev = p.finalAbilities ? null : lastReviewAbilities(p);
+    const weights = p.finalAbilities ? {} : Core.policyWeightMap(options.policy != null && options.policy !== p.policy ? Object.assign({}, p, { policy: options.policy }) : p);
+    const sides = Core.isTwoWayKnown(p) || (p.finalAbilities && p.twoWay) ? [Core.PITCH_KEYS, Core.BAT_KEYS] : [Core.sideKeys(Core.sideOf(p.position))];
+    const item = (k, keys, sub) => {
+      const v = a[k];
+      const vals = keys.map((x) => a[x]);
+      const marks = [];
+      if (!sub && keys.length > 1 && v === Math.max.apply(null, vals)) marks.push('<span class="mk best">最高</span>');
+      if (!sub && keys.length > 1 && v === Math.min.apply(null, vals)) marks.push('<span class="mk worst">最低</span>');
+      if (!sub && weights[k] >= CONFIG.policyScreen.strongWeight && Object.values(weights).some((w) => w < CONFIG.policyScreen.strongWeight)) marks.push('<span class="mk up">▲</span>');
+      const cap = p.limit && p.limit.caps[k] != null ? p.limit.caps[k] : p.statCap;
+      if (!sub && cap && v >= cap * CONFIG.display.wallRatio) marks.push('<span class="mk wall">壁</span>');
+      const base = Math.min(v, 100);
+      return '<div class="it' + (sub ? ' sub' : '') + '"><div class="hd"><span>' + Core.ABILITY_LABEL[k] + marks.join('') + '</span><b>' + fmt(v) + '</b></div>'
+        + '<div class="bar"><i style="width:' + base + '%"></i>' + (v > 100 ? '<i class="ov" style="left:' + (100 - Math.min(v - 100, 100)) + '%;width:' + Math.min(v - 100, 100) + '%"></i>' : '') + '</div>'
+        + '<div class="dd">入学時から ' + dlt(v - p.initialAbilities[k]) + (prev ? ' / 前回の見直しから ' + dlt(v - prev[k]) : '') + '</div></div>';
+    };
+    let html = sides.map((keys) => (sides.length > 1 ? '<div class="sublabel">' + (keys === Core.PITCH_KEYS ? '投手系' : '野手系') + '</div>' : '')
+      + '<div class="pst">' + keys.map((k) => item(k, keys, false)).join('') + '</div>').join('');
+    // 副能力:判明している場合のみ、本職側とは分けて薄く表示
+    const known = p.finalAbilities ? p.subRevealed : Core.isSubKnown(p);
+    if (sides.length === 1 && known) {
+      const sk = Core.ALL_KEYS.filter((k) => sides[0].indexOf(k) < 0);
+      html += '<div class="sublabel">副能力(判明済み)</div><div class="pst">' + sk.map((k) => item(k, sk, true)).join('') + '</div>';
+    }
+    return html;
+  }
+  // 本職側の最高・最低の項目(1行の要約用)
+  function bestWorst(p) {
+    const a = p.finalAbilities || p.abilities;
+    const keys = Core.visibleKeys(p);
+    let b = keys[0];
+    let w = keys[0];
+    for (const k of keys) { if (a[k] > a[b]) b = k; if (a[k] < a[w]) w = k; }
+    return '最高 ' + Core.ABILITY_LABEL[b] + ' ' + Math.round(a[b]) + ' / 最低 ' + Core.ABILITY_LABEL[w] + ' ' + Math.round(a[w]);
+  }
   const growthView = { serial: null, filter: 'all', changedOnly: false, decimal: false };  // 成長タブ
   let storageWarn = false;       // 保存容量の警告
   let trial = { running: false, progress: 0, result: null, label: '' };   // 試し計算
@@ -242,7 +345,6 @@
     alumniFilter = 'all';
     autoTarget = 'new';
     pendingWatchId = null;
-    openDetails.clear();
     clearDraft();
     modal = null;
     copyText = null;
@@ -251,6 +353,7 @@
     growthView.changedOnly = false;
     growthView.decimal = false;
     storageWarn = false;
+    uiPrefs = loadUiPrefs();
   }
   // 進行中のゲームに使う設定(作ったときの上書き + 表示だけに使う値は今の上書き)
   function applyGameConfig() { Tuning.applyOverrides(Tuning.effectiveOverrides(state.overrides, pending)); }
@@ -270,13 +373,7 @@
         + (base ? '<span class="small">' + (diff > 0 ? '+' + diff : '±0') + '</span>' : '') + '</div>';
     }).join('') + '</div>';
   }
-  function mainGrids(p, abilities, base) {
-    if (Core.isTwoWayKnown(p) || (p.finalAbilities && p.twoWay)) {
-      return '<div class="sublabel">投手系</div>' + abilGrid(Core.PITCH_KEYS, abilities, base)
-        + '<div class="sublabel">野手系</div>' + abilGrid(Core.BAT_KEYS, abilities, base);
-    }
-    return abilGrid(Core.sideKeys(Core.sideOf(p.position)), abilities, base);
-  }
+
   // 同世代の上位○%(世代の基準と比べる)。卒業生・引退後の3年生は3年3月、入学前は1年4月の基準
   function genRank(p) {
     const isAlumni = !!p.finalAbilities;
@@ -404,7 +501,6 @@
       + Core.ABILITY_LABEL[k]).join('') + '</div>';
     return '<div class="sublabel">能力の推移(月ごと。点は学期:入・夏・冬・卒)</div>' + svg + legend;
   }
-  function detailsOpen(key) { return openDetails.has(key) ? ' open' : ''; }
   function renderWatchChooser() {
     if (pendingWatchId == null) return '';
     const cur = HighSchool.watchedPlayers(state);
@@ -419,13 +515,12 @@
   function renderWatchCard() {
     const list = HighSchool.watchedPlayers(state);
     if (!list.length) return '';
-    return '<div class="card"><h2>★ 注目選手(' + list.length + '/' + CONFIG.watch.max + ')</h2>' + list.map((p) =>
-      '<div class="watchrow">' + starBtn(p) + '<b>' + esc(p.name) + '</b> '
-      + '<span class="small">' + (state.pendingRecruits.indexOf(p) >= 0 ? '入学前' : p.grade + '年') + '・' + Core.POSITION_LABEL[p.position] + '</span> '
-      + '<span class="small">' + ratingHtml(p) + '</span>'
-      + growthLabel(p)
-      + '<span class="note">' + (p.lastNotice ? whenText(p.lastNotice) + ':' + esc(p.lastNotice.t) : 'まだ通知はありません') + '</span></div>'
-    ).join('') + '</div>';
+    // 1人1行:名前、守備区分、総合値、入学時からの増減
+    return '<div class="card"><h2>★ 注目選手</h2>' + list.map((p) => {
+      const d = Core.rating(p) - Core.initialRating(p);
+      return '<div class="watchrow">' + starBtn(p) + '<b>' + esc(p.name) + '</b> <span class="small">' + Core.POSITION_SHORT[p.position]
+        + ' / 総合値 ' + Core.rating(p) + (state.pendingRecruits.indexOf(p) < 0 ? '(入学時から ' + signed(d) + ')' : '(入学前)') + '</span></div>';
+    }).join('') + '</div>';
   }
 
   function linesHtml(lines) {
@@ -445,24 +540,50 @@
     if (hitters.length) html += '<div class="small">打撃:' + hitters.join(' / ') + (b.unearned ? '(打点のつかない得点 ' + b.unearned + ')' : '') + '</div>';
     return html;
   }
-  function highlightsHtml(hs) {
-    return (hs || []).map((h) => '<div class="hl">☆ ' + esc(h.text) + (h.note ? '<b>' + esc(h.note) + '</b>' : '') + '</div>').join('');
+  // 活躍選手:1行(成長の成果は詳細に)
+  function highlightLine(hs) {
+    if (!hs || !hs.length) return '';
+    return '<div class="hl">☆ ' + hs.map((h) => esc(h.text)).join(' / ') + '</div>';
   }
-  // 1試合ぶん(勝率予想・結果・活躍選手・中身)
+  function growthNotes(hs) {
+    const n = (hs || []).filter((h) => h.note);
+    return n.length ? '<div class="small">' + n.map((h) => esc(h.text.split(' ')[0]) + ':' + esc(h.note)).join(' / ') + '</div>' : '';
+  }
+  // 1試合:1行(相手・スコア・勝率予想)+ 活躍選手1行。「詳しく」でラインスコア・勝敗投手・打点・成長の成果
   function gameHtml(g, key) {
-    const head = g.text ? esc(g.text)
-      : esc(g.title) + ' <span class="pred">勝率予想 ' + Math.round(g.pred * 100) + '%</span> → ' + (g.box ? g.box.my + '対' + g.box.opp : '') + (g.win ? ' 勝利' : ' 敗戦') + (g.tag ? ' 【' + g.tag + '】' : '');
-    return '<div class="game"><div class="' + (g.tag ? 'special' : g.win ? 'win' : 'lose') + '" style="color:' + (g.tag ? 'var(--special)' : g.win ? 'var(--win)' : 'var(--lose)') + '">' + head + '</div>'
-      + highlightsHtml(g.highlights)
-      + (g.box ? '<details data-open="' + key + '"' + detailsOpen(key) + '><summary class="small">試合の中身</summary>' + boxHtml(g.box) + '</details>' : '') + '</div>';
+    const vs = g.round ? g.round + ' 対' + (g.text.match(/vs ([^(]+)/) || ['', ''])[1] : g.title;
+    const head = '<span style="color:' + (g.tag ? 'var(--special)' : g.win ? 'var(--win)' : 'var(--lose)') + '">' + esc(vs) + ' '
+      + (g.box ? g.box.my + '対' + g.box.opp : '') + 'で' + (g.win ? '勝利' : '敗戦') + (g.tag ? '【' + g.tag + '】' : '') + '</span>'
+      + ' <span class="pred">(勝率予想 ' + Math.round(g.pred * 100) + '%)</span>';
+    return '<div class="game">' + renderCollapsible(key, head, () => boxHtml(g.box) + growthNotes(g.highlights)) + highlightLine(g.highlights) + '</div>';
   }
-  let cardSeq = 0;
-  function eventCard(ev) {
-    const id = 'c' + (cardSeq++);
-    if (ev.yearSummary) return eventCard(ev.yearSummary) + eventCard(Object.assign({}, ev, { yearSummary: null }));
-    let html = '<div class="card"><h2>' + esc(ev.title) + '</h2>' + linesHtml(ev.lines);
-    if (ev.games) html += ev.games.map((g, i) => gameHtml(g, id + '-' + i)).join('');
-    return html + (ev.lineup ? lineupTable(ev.lineup, 'この大会のスタメン') : '') + '</div>';
+  // イベントの結果のカード:1行の要約 + 「詳しく」
+  function eventCard(ev, key) {
+    if (ev.yearSummary) return yearSummaryCard(ev.yearSummary, key + ':ys', ev) + eventCard(Object.assign({}, ev, { yearSummary: null }), key);
+    const lines = ev.lines || [];
+    let html = '<div class="card"><h2>' + esc(ev.title) + '</h2>';
+    if (ev.type === 'tournament') {
+      // 結果の1行と、試合ごとの1行
+      html += linesHtml(lines.filter((l) => l.cls === 'special' || /優勝|敗退|準優勝|引退/.test(l.text || l)).slice(0, 2));
+      if (ev.games) html += ev.games.map((g, i) => gameHtml(g, key + ':g' + i)).join('');
+      html += renderCollapsible(key + ':more', '<span class="small">自校の強さ・通知・スタメン</span>', () => linesHtml(lines) + (ev.lineup ? lineupTable(ev.lineup, null) : ''));
+      return html + '</div>';
+    }
+    const first = lines[0];
+    if (first) html += linesHtml([first]);
+    if (lines.length > 1) html += renderCollapsible(key + ':more', '<span class="small">ほか ' + (lines.length - 1) + '行</span>', () => linesHtml(lines.slice(1)));
+    return html + '</div>';
+  }
+  // 年度末のまとめ:要点の3行 + 「詳しく」
+  function yearSummaryCard(ys, key, yearEnd) {
+    const L = ys.lines.map((l) => l.text || l);
+    const power = L.find((t) => /^チーム戦力/.test(t)) || '';
+    const tour = L.filter((t) => /地区大会/.test(t)).map((t) => t.replace('の地区大会', '')).join(' / ');
+    const top = ((yearEnd && yearEnd.lines) || []).find((l) => /^1位/.test(l.text || ''));
+    let html = '<div class="card"><h2>' + esc(ys.title) + '</h2><div class="ml3">'
+      + '<div>' + esc(power) + '</div><div>' + esc(tour) + '</div>' + (top ? '<div>成長トップ:' + esc(top.text.replace(/^1位 /, '')) + '</div>' : '') + '</div>';
+    html += renderCollapsible(key, '<span class="small">今年のまとめの詳細</span>', () => linesHtml(ys.lines));
+    return html + '</div>';
   }
   // 月のまとめの1行(練習の成長人数・練習試合など)
   function monthLine(m) {
@@ -472,48 +593,54 @@
     for (const s of m.summaries) parts.push(s);
     return parts.join(' / ');
   }
-  // 「次のイベントまで」などで進んだ月の表示。途中の月は1行、最後の月はくわしく
+  // 「次のイベントまで」などで進んだ月の表示。途中の月は1行、止まった月は最小表示(最大3行 + 詳しく)
   function renderMonths(list) {
     if (!list.length) return '';
     let html = '';
     const last = list[list.length - 1];
     const mid = list.slice(0, -1);
     if (mid.length) {
-      html += '<div class="card"><h2>途中の月</h2>' + mid.map((m) =>
+      const grown = mid.reduce((a, m) => a + m.grown, 0);
+      const nImp = mid.reduce((a, m) => a + m.notices.filter((n) => n.importance >= 3).length, 0);
+      html += '<div class="card">' + renderCollapsible('months:' + (last.serial != null ? last.serial : 'x'),
+        '途中の月(' + esc(mid[0].label + (mid.length > 1 ? '〜' + mid[mid.length - 1].label : '')) + '):成長 のべ' + grown + '人' + (nImp ? ' / 通知 ' + nImp + '件' : ''), () => mid.map((m) =>
         '<div class="mline"><span class="ml">' + esc(m.label) + '</span>' + esc(monthLine(m))
         + (m.winDelta != null ? ' <span class="' + (m.winDelta >= 0 ? 'up' : 'down') + '">勝率予想 ' + (m.winDelta >= 0 ? '+' : '') + (m.winDelta * 100).toFixed(1) + '%</span>' : '')
         + m.watchLines.map((w) => '<span class="wt">' + esc(w) + '</span>').join('')
         + m.notices.map((n) => '<span class="nt">' + esc(n.text) + '</span>').join('')
-        + (m.hidden ? '<span class="nt">ほか ' + m.hidden + '件</span>' : '') + '</div>').join('') + '</div>';
+        + (m.hidden ? '<span class="nt">ほか ' + m.hidden + '件</span>' : '') + '</div>').join('')) + '</div>';
     }
-    // 最後の月
-    html += '<div class="card"><h2>' + esc(HighSchool.formatYear(last.year) + ' ' + last.label) + 'のまとめ</h2>';
-    if (last.watchLines.length) {
-      html += '<div class="sublabel">★ 注目選手の成長</div>' + linesHtml(last.watchLines.map((t) => ({ text: t, cls: 'watch' })));
-    }
-    html += '<div class="mline">' + esc(monthLine(last)) + '</div>';
-    if (last.winDelta != null) {
-      const d = last.winDelta * 100;
-      html += '<div class="mline ' + (d >= 0 ? 'up' : 'down') + '">今月の成長で、対 他校平均の勝率予想 ' + (d >= 0 ? '+' : '') + d.toFixed(1) + '%</div>';
-    }
+    // 止まった月:最大3行(注目選手の成長 / 今月の成長トップ / 重要な通知)
+    const key = 'month:' + (last.serial != null ? last.serial : 'x');
+    const rows = [];
+    if (last.watchLines.length) rows.push('<div class="wt">' + esc(last.watchLines.join(' / ')) + '</div>');
     if (last.topGrowers && last.topGrowers.length) {
-      html += '<div class="sublabel">今月よく伸びた選手</div><div class="lines">' + last.topGrowers.map((t, i) =>
-        '<div class="small">' + (i + 1) + '位 ' + (t.watched ? '★' : '') + esc(t.name) + '(' + t.grade + '年)総合値 +' + Core.fmtNum(t.gain) + '</div>').join('') + '</div>';
+      rows.push('<div>今月の成長:' + last.topGrowers.map((t) => (t.watched ? '★' : '') + esc(t.name) + ' +' + Core.fmtNum(t.gain)).join('、') + '</div>');
     }
-    if (last.serial != null) html += '<div class="row"><button class="minibtn" data-growth-serial="' + last.serial + '">全員の変化を見る</button></div>';
-    if (last.practice && last.practice.length) {
-      const key = 'pg-' + last.serial;
-      html += '<details data-open="' + key + '"' + detailsOpen(key) + '><summary class="small">練習試合の詳細(' + last.practice.length + '試合)</summary>'
-        + last.practice.map((g, i) => gameHtml(g, key + '-' + i)).join('') + '</details>';
-    }
-    if (last.notices.length) {
-      html += '<div class="sublabel">通知</div>' + linesHtml(last.notices.map((n) => ({ text: n.text, cls: n.cls }))
-        .concat(last.hidden ? [{ text: 'ほか ' + last.hidden + '件', cls: 'none' }] : []));
-    }
+    const imp = last.notices.filter((n) => n.importance >= 3).slice(0, 3);
+    if (imp.length) rows.push('<div class="nt" style="color:var(--special)">' + imp.map((n) => esc(n.text)).join(' / ') + '</div>');
+    html += '<div class="card"><h2>' + esc(HighSchool.formatYear(last.year) + ' ' + last.label) + 'のまとめ</h2><div class="ml3">' + rows.slice(0, 3).join('') + '</div>';
+    html += renderCollapsible(key, '<span class="small">' + esc(monthLine(last)) + '</span>', () => {
+      let d = '';
+      if (last.winDelta != null) {
+        const v = last.winDelta * 100;
+        d += '<div class="mline ' + (v >= 0 ? 'up' : 'down') + '">今月の成長で、対 他校平均の勝率予想 ' + (v >= 0 ? '+' : '') + v.toFixed(1) + '%</div>';
+      }
+      if (last.topGrowers && last.topGrowers.length) {
+        d += '<div class="sublabel">今月よく伸びた選手</div><div class="lines">' + last.topGrowers.map((t, i) =>
+          '<div class="small">' + (i + 1) + '位 ' + (t.watched ? '★' : '') + esc(t.name) + '(' + t.grade + '年)総合値 +' + Core.fmtNum(t.gain) + '</div>').join('') + '</div>';
+      }
+      if (last.serial != null) d += '<div class="row"><button class="minibtn" data-growth-serial="' + last.serial + '">全員の変化を見る</button></div>';
+      if (last.practice && last.practice.length) d += '<div class="sublabel">練習試合</div>' + last.practice.map((g, i) => gameHtml(g, key + ':pg' + i)).join('');
+      if (last.notices.length) {
+        d += '<div class="sublabel">通知</div>' + linesHtml(last.notices.map((n) => ({ text: n.text, cls: n.cls }))
+          .concat(last.hidden ? [{ text: 'ほか ' + last.hidden + '件', cls: 'none' }] : []));
+      }
+      return d || '<div class="small">特になし</div>';
+    });
     html += '</div>';
-    for (const c of last.cards) html += eventCard(c);
-    // 途中の月の結果(入学など)
-    for (const m of mid) for (const c of m.cards) html += eventCard(c);
+    last.cards.forEach((c, i) => { html += eventCard(c, key + ':c' + i); });
+    mid.forEach((m, mi) => m.cards.forEach((c, i) => { html += eventCard(c, 'month:' + m.serial + ':c' + i + ':' + mi); }));
     return html;
   }
 
@@ -550,29 +677,32 @@
     }
     return html;
   }
+  // スタメン表。withStats のときは 打順・守備・名前・学年・総合値・打率(投手は防御率)の6列。
+  //   「詳細列」で、本塁打・打点・入学時からの増減・同世代の上位%を足す
   function lineupTable(lu, title, withStats) {
     const byId = {};
     for (const p of state.players) byId[p.id] = p;
+    const more = withStats && isOpen('lineupCols');
     const head = '<tr><th>打順</th><th>守</th><th>名前</th><th>学年</th>'
-      + (withStats ? '<th>総合値</th><th>打率</th><th>本</th><th>点</th>' : '<th>適性</th>') + '</tr>';
+      + (withStats ? '<th>総合値</th><th>打率</th>' + (more ? '<th>本</th><th>点</th><th>入学時から</th><th>同世代</th>' : '') : '<th>適性</th>') + '</tr>';
     const rows = lu.map((s) => {
       const p = byId[s.id];
       const isP = s.pos === 'P';
       const ord = isP ? '先発' + (s.order ? '<small>' + s.order + '番</small>' : '') : (s.order || '-');
-      let name = esc(s.name) + (withStats && p ? growthLabel(p) : '') + (s.twoWay ? ' <span class="tag twoway">二刀流</span>' : '') + (s.helper ? ' <span class="tag helper">助っ人</span>' : '')
-        + (s.outOfPosition && s.primary ? ' <span class="small">(本職:' + Core.POSITION_LABEL[s.primary] + ')</span>' : '');
+      const name = esc(s.name) + (s.twoWay ? ' <span class="tag twoway">二刀流</span>' : '') + (s.helper ? ' <span class="tag helper">助っ人</span>' : '')
+        + (s.outOfPosition && s.primary ? ' <span class="small">(本職:' + Core.POSITION_SHORT[s.primary] + ')</span>' : '');
       let cols;
       if (!withStats) {
         cols = '<td class="num small">' + (s.apt == null ? '-' : int(s.apt)) + '</td>';
       } else {
         const l = careerOf(p);
         const r = p ? Core.rating(p) : null;
-        const rCol = '<td class="num">' + (r == null ? '-' : r + (p ? ratingBadge(p) : '')) + '</td>';
-        if (isP) {
-          if (s.twoWay) name += '<div class="small">' + batText(l) + '</div>';
-          cols = rCol + '<td class="num" colspan="3">' + pitchText(l) + '</td>';
-        } else {
-          cols = rCol + '<td class="num">' + Core.formatAverage(l) + '</td><td class="num">' + l.hr + '</td><td class="num">' + l.rbi + '</td>';
+        const rk = p ? genRank(p) : null;
+        cols = '<td class="num">' + (r == null ? '-' : r + (rk && rk.label ? '<span class="rlabel">' + rk.label + '</span>' : '')) + '</td>'
+          + '<td class="num">' + (isP ? '防' + Core.formatEra(l) : Core.formatAverage(l)) + '</td>';
+        if (more) {
+          cols += '<td class="num">' + l.hr + '</td><td class="num">' + l.rbi + '</td><td class="num">' + (p ? growthLabel(p) || '-' : '-') + '</td>'
+            + '<td class="num small">' + (rk ? '上位' + Generation.formatTop(rk.top) : '-') + '</td>';
         }
       }
       const grade = s.helper ? '助' : (s.grade ? s.grade + '年' : '-');
@@ -580,9 +710,10 @@
         + '</td><td class="nm">' + name + '</td><td>' + grade + '</td>' + cols + '</tr>';
     }).join('');
     const table = '<div class="scroll"><table class="lu">' + head + rows + '</table></div>'
-      + (withStats ? '<div class="small">成績は通算(大会のみ)。赤字は本職外の起用。</div>' : '');
+      + (withStats ? '<div class="row"><button class="minibtn" data-col="lineupCols" aria-expanded="' + more + '">' + (more ? '詳細列を隠す' : '詳細列') + '</button>'
+        + '<span class="small">成績は通算(大会のみ)。赤字は本職外の起用。</span></div>' : '');
     if (!title) return table;
-    return '<details><summary class="small">' + esc(title) + '</summary>' + table + '</details>';
+    return renderCollapsible('lu:' + title, '<span class="small">' + esc(title) + '</span>', () => table);
   }
   // 入学時の第一印象(固定の文章リストから選ぶ)
   function impression(p) {
@@ -619,66 +750,99 @@
 
   // 方針の選択画面(4月:新入生と在校生 / 12月:在校生の見直し)
   function policySelect(p) {
-    const set = Core.POLICIES[Core.policySetOf(p)];
+    const setName = Core.policySetOf(p);
     const cur = draftPolicies[p.id] != null ? draftPolicies[p.id] : p.policy;
-    return '<select data-pid="' + p.id + '">' + set.map((pol) =>
-      '<option value="' + pol.key + '"' + (cur === pol.key ? ' selected' : '') + '>' + pol.label + '</option>'
+    // 選択肢に、伸びやすい項目を併記する(例:巧打特化(ミート◎ パワー○))
+    return '<select data-pid="' + p.id + '">' + Core.POLICIES[setName].map((pol) =>
+      '<option value="' + pol.key + '"' + (cur === pol.key ? ' selected' : '') + '>' + pol.label + '(' + esc(Core.policyHint(setName, pol.key)) + ')</option>'
     ).join('') + '</select>';
   }
-  function recruitCard(p) {
-    let html = '<div class="player">' + starBtn(p) + '<span class="pname">' + esc(p.name) + '</span>' + posTag(p.position) + extraTags(p)
-      + ' <span class="small">' + ratingHtml(p) + '</span>'
-      + '<div class="impress">' + esc(impression(p)) + '</div>'
-      + mainGrids(p, p.abilities);
-    if (p.reincarnation && p.reincarnationRevealed) {
-      html += '<div class="reveal">……!? この新入生、ただ者ではない。<br>【' + esc(Core.reincarnationName(p.reincarnation)) + '】の転生者だ!</div>';
-    }
-    if (p.twoWay && p.twoWayRevealed) {
-      html += '<div class="reveal">投げても打っても本職級……! <br>【二刀流】の素質を持っている!</div>';
-    }
-    return html + policySelect(p) + '</div>';
+  function policyLabelOf(p, key) {
+    const x = Core.POLICIES[Core.policySetOf(p)].find((q) => q.key === key);
+    return x ? x.label : key;
   }
-  function reviewRow(p) {
-    const changed = draftPolicies[p.id] != null && draftPolicies[p.id] !== p.policy;
-    return '<div class="player' + (changed ? ' changed' : '') + '"><span class="pname">' + esc(p.name) + '</span>'
-      + posTag(p.position) + extraTags(p) + ' <span class="small">' + ratingHtml(p) + ' / 現在:' + esc(Core.policyLabel(p)) + '</span>'
-      + (p.needsPolicy ? '<div class="needpol">⚠ 本職が変わったため方針がバランスに戻りました。選び直してください</div>' : '')
-      + (changed ? '<div class="small">変更あり</div>' : '')
-      + policySelect(p) + '</div>';
+  // 方針の選択画面の選手カード:常に見える1行(押すと能力の詳細)+ 方針のプルダウン
+  function polCard(p, isNew) {
+    const draft = draftPolicies[p.id];
+    const changed = !isNew && draft != null && draft !== p.policy;
+    const summary = '<span class="polline"><span class="pname">' + esc(p.name) + '</span>' + posTag(p.position) + extraTags(p)
+      + ' <span class="small">' + ratingHtml(p) + ' ・ ' + (isNew ? '新入生' : p.grade + '年') + '</span>'
+      + (Core.isCappedOut(p) ? '<span class="capped">頭打ち</span>' : '')
+      + (p.needsPolicy ? ' <span class="needpol">⚠選び直し</span>' : '')
+      + '<br><span class="bw">' + bestWorst(p) + '</span></span>';
+    let after = '';
+    if (isNew) {
+      after += '<div class="impress">' + esc(impression(p)) + '</div>';
+      if (p.reincarnation && p.reincarnationRevealed) {
+        after += '<div class="reveal">……!? この新入生、ただ者ではない。<br>【' + esc(Core.reincarnationName(p.reincarnation)) + '】の転生者だ!</div>';
+      }
+      if (p.twoWay && p.twoWayRevealed) after += '<div class="reveal">投げても打っても本職級……! <br>【二刀流】の素質を持っている!</div>';
+    }
+    if (p.needsPolicy) after += '<div class="needpol">⚠ 本職が変わったため方針がバランスに戻りました。選び直してください</div>';
+    after += '<div class="row">' + starBtn(p) + policySelect(p) + '</div>';
+    if (changed) {
+      after += '<div class="undo">変更:' + esc(policyLabelOf(p, p.policy)) + ' → <b>' + esc(policyLabelOf(p, draft)) + '</b> '
+        + '<button class="minibtn" data-undo="' + p.id + '">元に戻す</button></div>';
+    }
+    const pol = draft != null ? draft : p.policy;
+    return '<div class="polcard' + (changed ? ' changed' : '') + '">'
+      + renderCollapsible('pol:' + p.id, summary, () => renderPlayerStatsCompact(p, { policy: pol }),
+        { defaultOpen: !!p.needsPolicy, forceOpen: changed, after: after }) + '</div>';
+  }
+  // 在校生の並べ替えと絞り込み
+  function polList() {
+    let list = HighSchool.reviewablePlayers(state).slice();
+    const f = uiPrefs.polFilter;
+    if (/^g\d$/.test(f)) list = list.filter((p) => p.grade === Number(f.slice(1)));
+    else if (Core.POSITIONS.indexOf(f) >= 0) list = list.filter((p) => p.position === f);
+    else if (f === 'watched') list = list.filter((p) => p.watched);
+    else if (f === 'need') list = list.filter((p) => p.needsPolicy);
+    else if (f === 'capped') list = list.filter((p) => Core.isCappedOut(p));
+    const byRating = (a, b) => Core.rating(b) - Core.rating(a) || a.id - b.id;
+    if (uiPrefs.polSort === 'rating') list.sort(byRating);
+    else if (uiPrefs.polSort === 'grade') list.sort((a, b) => b.grade - a.grade || byRating(a, b));
+    else list.sort((a, b) => (b.needsPolicy ? 1 : 0) - (a.needsPolicy ? 1 : 0) || b.grade - a.grade || byRating(a, b));
+    return list;
+  }
+  function polControls(ids) {
+    const chip = (key, label) => '<button class="chip' + (uiPrefs.polFilter === key ? ' on' : '') + '" data-polf="' + key + '">' + label + '</button>';
+    const opt = (v, l) => '<option value="' + v + '"' + (uiPrefs.polSort === v ? ' selected' : '') + '>' + l + '</option>';
+    return '<div class="row"><button class="minibtn" data-polall="open" data-ids="' + ids.join(',') + '">全員の能力を開く</button>'
+      + '<button class="minibtn" data-polall="close" data-ids="' + ids.join(',') + '">閉じる</button>'
+      + '<span class="small">並べ替え</span><select id="polSort">' + opt('need', '要選び直し先頭') + opt('rating', '総合値') + opt('grade', '学年') + '</select></div>'
+      + '<div class="row">' + chip('all', '全員') + chip('g3', '3年') + chip('g2', '2年') + chip('g1', '1年')
+      + Core.POSITIONS.map((pos) => chip(pos, Core.POSITION_SHORT[pos])).join('') + chip('watched', '★') + chip('need', '要選び直し') + chip('capped', '頭打ち') + '</div>';
   }
   function renderPolicyScreen() {
     const isEnroll = state.policyContext === 'enrollment';
+    const list = polList();
+    const all = HighSchool.reviewablePlayers(state);
+    const need = all.filter((p) => p.needsPolicy).length;
+    const changed = all.filter((p) => draftPolicies[p.id] != null && draftPolicies[p.id] !== p.policy).length;
     let html = '';
     if (isEnroll) {
       const info = state.newcomerInfo || {};
       const n = state.pendingRecruits.length;
       html += '<div class="card"><h2>🌸 ' + HighSchool.formatYear(state.year) + ' 4月 新入生がやってきた!</h2>'
-        + '<div class="nc">今年の入部希望者は <b>' + n + '人</b>'
-        + (info.strength != null ? '(前年夏のチームの強さ ' + info.strength + ')' : '')
-        + (info.capped ? '。部員数の上限のため人数を絞った' : '') + '</div>'
-        + '<div class="small">育成方針を選んでください。特化:選んだ能力が伸びやすく、他はほとんど伸びない。バランス:全体が少しずつ伸びる。'
-        + '表示は本職側の能力だけです。総合値 = 本職側の能力の平均 × 5。</div>';
+        + '<div class="nc">今年の入部希望者は <b>' + n + '人</b>' + (info.capped ? '(部員数の上限のため絞った)' : '') + '</div>'
+        + (info.trend ? '<div class="small">今年の新入生の傾向:<b>' + esc(info.trend) + '</b></div>' : '')
+        + renderCollapsible('pol-help', '<span class="small">方針の選び方</span>', () => '<div class="small">特化:◎の能力がよく伸び、他はほとんど伸びない。バランス:全体が少しずつ伸びる。'
+          + '名前の行を押すと能力の詳細(▲ は今の方針で伸びやすい項目)。総合値 = 本職側の能力の平均 × 5。'
+          + (info.strength != null ? '前年夏のチームの強さ ' + info.strength + '。' : '') + '</div>');
       if (!n) html += '<div class="small">今年は新入生がいません。</div>';
-      html += '<details data-open="pol-new"' + (openDetails.has('pol-new-closed') ? '' : ' open') + '><summary><b>新入生(' + n + '人)</b></summary>'
-        + state.pendingRecruits.map(recruitCard).join('') + '</details></div>';
+      const recruits = state.pendingRecruits;
+      if (n) html += '<div class="row"><button class="minibtn" data-polall="open" data-ids="' + recruits.map((p) => p.id).join(',') + '">新入生の能力を開く</button>'
+        + '<button class="minibtn" data-polall="close" data-ids="' + recruits.map((p) => p.id).join(',') + '">閉じる</button></div>';
+      html += recruits.map((p) => polCard(p, true)).join('') + '</div>';
     } else {
       html += '<div class="card"><h2>📝 ' + HighSchool.formatYear(state.year) + ' ' + esc(HighSchool.monthLabel(state.month)) + ' 方針の見直し</h2>'
         + '<div class="small">冬合宿の前に、在校生の育成方針を見直せます。変更しなければそのまま進みます。</div></div>';
     }
-    // 在校生(学年ごとに折りたたみ)
-    const list = HighSchool.reviewablePlayers(state);
-    const grades = [3, 2, 1].filter((g) => list.some((p) => p.grade === g));
-    html += '<div class="card"><h2>在校生の方針</h2><div class="small">変更した選手は色が付きます。⚠ は選び直しが必要な選手です。</div>';
-    for (const g of grades) {
-      const ps = list.filter((p) => p.grade === g);
-      const need = ps.filter((p) => p.needsPolicy).length;
-      const changed = ps.filter((p) => draftPolicies[p.id] != null && draftPolicies[p.id] !== p.policy).length;
-      const key = 'pol-g' + g;
-      html += '<details data-open="' + key + '"' + (openDetails.has(key) || need ? ' open' : '') + '><summary><b>' + g + '年生(' + ps.length + '人)</b>'
-        + (need ? ' <span class="needpol">⚠' + need + '</span>' : '') + (changed ? ' <span class="small">変更 ' + changed + '人</span>' : '') + '</summary>'
-        + ps.map(reviewRow).join('') + '</details>';
-    }
-    html += '</div>';
+    // 在校生:1行の要約 + 並べ替え・絞り込み + 選手ごとの折りたたみ
+    html += '<div class="card">' + renderCollapsible('pol-cur', '<b>在校生の方針(' + all.length + '人)</b>'
+      + (need ? ' <span class="needpol">⚠選び直し ' + need + '人</span>' : '') + (changed ? ' <span class="small">変更 ' + changed + '人</span>' : ''),
+      () => polControls(list.map((p) => p.id)) + (list.length ? list.map((p) => polCard(p, false)).join('') : '<div class="small">該当する選手がいません。</div>'),
+      { defaultOpen: !isEnroll || need > 0, forceOpen: changed > 0 }) + '</div>';
     html += '<div class="autosel">おまかせの対象:<select id="autoTarget">'
       + '<option value="new"' + (autoTarget === 'new' ? ' selected' : '') + '>' + (isEnroll ? '新入生のみ' : '選び直しが必要な選手のみ') + '</option>'
       + '<option value="all"' + (autoTarget === 'all' ? ' selected' : '') + '>全員</option></select></div>'
@@ -698,17 +862,26 @@
     const ago = cur ? PL.find((e) => e.s === cur.s - 12) : null;
     const first = PL.length ? PL[0] : null;
     const p = live.power;
-    let html = '<div class="card"><h2>チーム戦力</h2><div class="pw"><span class="big">' + p + '</span>'
-      + (ago ? '<span class="dlt">前年同月比 ' + dltSpan(cur.p - ago.p) + '</span>' : '')
-      + (first && cur && cur.s !== first.s ? '<span class="dlt">1年目4月比 ' + dltSpan(cur.p - first.p) + '</span>' : '') + '</div>';
-    html += '<div class="small">他校平均より ' + dltSpan(p - ref.avgPower) + '、他校上位より ' + dltSpan(p - ref.topPower)
-      + '(他校平均 ' + ref.avgPower + ' / 他校上位 ' + ref.topPower + ')</div>'
-      + '<div class="small">勝率予想:対 他校平均 <b>' + Math.round(Core.winProbability(live.strength, ref.avg) * 100) + '%</b> / 対 他校上位 <b>'
-      + Math.round(Core.winProbability(live.strength, ref.top) * 100) + '%</b></div>';
-    html += '<table class="posp"><tr><th>守備区分</th><th>現在</th><th>前年同月比</th></tr>' + ['P', 'C', 'IF', 'OF'].map((k) =>
-      '<tr><td>' + Core.POSITION_LABEL[k] + '</td><td>' + live.byPos[k] + '</td><td>' + (ago ? dltSpan(live.byPos[k] - ago.pos[k]) : '-') + '</td></tr>').join('') + '</table>';
-    html += powerGraph(PL);
-    return html + '<div class="small">チーム戦力 = スタメンから計算するチームの強さを、総合値と同じ尺度にしたもの。毎月末に記録します。</div></div>';
+    // 1行の要約:「チーム戦力 207(前年同月比 +12 / 他校平均比 −4)」
+    const summary = 'チーム戦力 <b>' + p + '</b>(' + (ago ? '前年同月比 ' + dltSpan(cur.p - ago.p) + ' / ' : '') + '他校平均比 ' + dltSpan(p - ref.avgPower) + ')';
+    return '<div class="card">' + renderCollapsible('power', summary, () => {
+      let html = '<div class="pw"><span class="big">' + p + '</span>'
+        + (ago ? '<span class="dlt">前年同月比 ' + dltSpan(cur.p - ago.p) + '</span>' : '')
+        + (first && cur && cur.s !== first.s ? '<span class="dlt">1年目4月比 ' + dltSpan(cur.p - first.p) + '</span>' : '') + '</div>';
+      html += '<div class="small">他校平均より ' + dltSpan(p - ref.avgPower) + '、他校上位より ' + dltSpan(p - ref.topPower)
+        + '(他校平均 ' + ref.avgPower + ' / 他校上位 ' + ref.topPower + ')</div>'
+        + '<div class="small">勝率予想:対 他校平均 <b>' + Math.round(Core.winProbability(live.strength, ref.avg) * 100) + '%</b> / 対 他校上位 <b>'
+        + Math.round(Core.winProbability(live.strength, ref.top) * 100) + '%</b></div>';
+      html += '<table class="posp"><tr><th>守備区分</th><th>現在</th><th>前年同月比</th></tr>' + ['P', 'C', 'IF', 'OF'].map((k) =>
+        '<tr><td>' + Core.POSITION_LABEL[k] + '</td><td>' + live.byPos[k] + '</td><td>' + (ago ? dltSpan(live.byPos[k] - ago.pos[k]) : '-') + '</td></tr>').join('') + '</table>';
+      html += powerGraph(PL);
+      // チームの詳細:学校の評判(値と推移)
+      const R = state.stats.repByYear;
+      html += '<div class="sublabel">学校の評判</div><div class="small">評判 <b>' + state.schoolRep.toFixed(1) + '</b>(基準 ' + CONFIG.reputation.baseline
+        + ')/ 新入生の傾向:' + HighSchool.recruitTrend(HighSchool.reputationX(state))
+        + (R.length ? '<br>推移:' + R.slice(-8).map((r) => r.y + '年目 ' + r.rep.toFixed(0)).join(' → ') : '<br>推移:まだ記録がありません(毎年3月に更新)') + '</div>';
+      return html + '<div class="small">チーム戦力 = スタメンから計算するチームの強さを、総合値と同じ尺度にしたもの。毎月末に記録します。</div>';
+    }) + '</div>';
   }
   // 月ごとのチーム戦力の折れ線(他校平均・他校上位の線と、年の区切り)
   function powerGraph(PL) {
@@ -757,8 +930,6 @@
       const md = HighSchool.monthDelta(p, sv);
       if (!md) continue;
       const grade = y - p.enrolledYear + 1;
-      if (growthView.filter === 'watched' && !p.watched) continue;
-      if (/^g\d$/.test(growthView.filter) && Number(growthView.filter.slice(1)) !== grade) continue;
       const keys = p.finalAbilities ? p.mainKeys : Core.visibleKeys(p);
       const parts = [];
       let sum = 0;
@@ -767,23 +938,35 @@
         sum += md.d[k];
         if (d !== 0) parts.push({ k: k, d: d });
       }
-      if (growthView.changedOnly && !parts.length) continue;
       rows.push({ p: p, grade: grade, parts: parts, gain: sum / keys.length * CONFIG.ratingMultiplier });
     }
     rows.sort((a, b) => b.gain - a.gain || a.p.id - b.p.id);
     const chip = (key, label) => '<button class="chip' + (growthView.filter === key ? ' on' : '') + '" data-gfilter="' + key + '">' + label + '</button>';
+    const rowHtml = (r) => '<div class="grow-row">' + (r.p.watched ? '★' : '') + '<b>' + esc(r.p.name) + '</b> <span class="small">' + r.grade + '年・'
+      + Core.POSITION_SHORT[r.p.position] + (r.p.finalAbilities ? '・卒業生' : '') + '</span> '
+      + (r.parts.length ? r.parts.map((x) => '<span class="' + (x.d > 0 ? 'd' : 'dn') + '">' + Core.ABILITY_LABEL[x.k] + ' ' + (x.d > 0 ? '+' : '') + (growthView.decimal ? x.d.toFixed(1) : x.d) + '</span>').join(' ')
+        : '<span class="small">変化なし</span>') + '</div>';
     let html = '<div class="card"><h2>成長(' + esc(HighSchool.serialLabel(sv)) + ' 末)</h2>'
       + '<div class="row"><button class="minibtn" data-gstep="-1"' + (idx <= 0 ? ' disabled' : '') + '>◀ 前月</button>'
       + '<button class="minibtn" data-gstep="1"' + (idx >= serials.length - 1 ? ' disabled' : '') + '>次月 ▶</button>'
-      + '<button class="minibtn" data-gstep="latest">最新</button></div>'
-      + '<div class="row">' + chip('all', '全員') + chip('watched', '★注目') + chip('g1', '1年') + chip('g2', '2年') + chip('g3', '3年') + '</div>'
-      + '<div class="row"><label><input type="checkbox" id="gChanged"' + (growthView.changedOnly ? ' checked' : '') + '> 変化があった選手のみ</label>'
-      + '<label><input type="checkbox" id="gDecimal"' + (growthView.decimal ? ' checked' : '') + '> 小数で表示</label></div>'
-      + '<div class="small">' + rows.filter((r) => r.parts.length).length + '人に変化 / ' + rows.length + '人を表示(前月末、または入学時との差)</div>';
-    html += rows.map((r) => '<div class="grow-row">' + (r.p.watched ? '★' : '') + '<b>' + esc(r.p.name) + '</b> <span class="small">' + r.grade + '年・'
-      + Core.POSITION_SHORT[r.p.position] + (r.p.finalAbilities ? '・卒業生' : '') + '</span> '
-      + (r.parts.length ? r.parts.map((x) => '<span class="' + (x.d > 0 ? 'd' : 'dn') + '">' + Core.ABILITY_LABEL[x.k] + ' ' + (x.d > 0 ? '+' : '') + (growthView.decimal ? x.d.toFixed(1) : x.d) + '</span>').join(' ')
-        : '<span class="small">変化なし</span>') + '</div>').join('');
+      + '<button class="minibtn" data-gstep="latest">最新</button></div>';
+    // 最初に見せるのは、伸びた上位N人と注目選手だけ(絞り込みは「全員を見る」の中)
+    const N = CONFIG.display.growthTopN;
+    const top = rows.filter((r) => r.gain > 0).slice(0, N);
+    const stars = rows.filter((r) => r.p.watched && top.indexOf(r) < 0);
+    const changedN = rows.filter((r) => r.parts.length).length;
+    html += '<div class="small">' + changedN + '人に変化。よく伸びた上位' + top.length + '人' + (stars.length ? 'と★注目' : '') + '</div>'
+      + (top.concat(stars).map(rowHtml).join('') || '<div class="small">この月に伸びた選手はいません。</div>');
+    html += renderCollapsible('growth-all', '全員を見る(' + rows.length + '人・絞り込み・小数表示)', () => {
+      let list = rows;
+      if (growthView.filter === 'watched') list = list.filter((r) => r.p.watched);
+      if (/^g\d$/.test(growthView.filter)) list = list.filter((r) => r.grade === Number(growthView.filter.slice(1)));
+      if (growthView.changedOnly) list = list.filter((r) => r.parts.length);
+      return '<div class="row">' + chip('all', '全員') + chip('watched', '★注目') + chip('g1', '1年') + chip('g2', '2年') + chip('g3', '3年') + '</div>'
+        + '<div class="row"><label><input type="checkbox" id="gChanged"' + (growthView.changedOnly ? ' checked' : '') + '> 変化があった選手のみ</label>'
+        + '<label><input type="checkbox" id="gDecimal"' + (growthView.decimal ? ' checked' : '') + '> 小数で表示</label></div>'
+        + '<div class="small">' + list.length + '人を表示(前月末、または入学時との差)</div>' + list.map(rowHtml).join('');
+    });
     return html + '</div>';
   }
 
@@ -794,48 +977,41 @@
     if (state.awaiting === 'policy') {
       html += renderMonths(evs);
       html += renderPolicyScreen();
-    } else {
-      html += '<div class="btns"><button class="btn" id="btnNextEvent">次のイベントまで</button></div>'
-        + '<div class="btns"><button class="btn sub small" id="btnNextMonth">次の月へ</button>'
-        + '<button class="btn sub small" id="btnApril">次の4月まで</button></div>';
-      html += renderMonths(evs);
-      html += renderPowerCard();
-      html += renderWatchCard();
-      html += '<div class="card"><h2>現在のスタメン</h2>' + lineupTable(HighSchool.lineup(state), null, true) + '</div>';
+      return html;
     }
-    if (state.awaiting === 'policy') html += renderWatchCard();
+    html += '<div class="btns"><button class="btn" id="btnNextEvent">次のイベントまで</button></div>'
+      + '<div class="btns"><button class="btn sub small" id="btnNextMonth">次の月へ</button>'
+      + '<button class="btn sub small" id="btnApril">次の4月まで</button></div>';
+    html += renderPowerCard();
+    html += renderMonths(evs);
+    html += renderWatchCard();
+    html += '<div class="card"><h2>現在のスタメン</h2>' + lineupTable(HighSchool.lineup(state), null, true) + '</div>';
     const recent = state.log.slice(-10).reverse();
-    html += '<div class="card"><h2>最近の出来事</h2><div class="lines">'
-      + recent.map((l) => '<div>' + esc(whenText(l)) + ':' + esc(l.t) + '</div>').join('') + '</div></div>';
+    html += '<div class="card">' + renderCollapsible('log', '最近の出来事', () => '<div class="lines">'
+      + recent.map((l) => '<div>' + esc(whenText(l)) + ':' + esc(l.t) + '</div>').join('') + '</div>') + '</div>';
     return html;
   }
 
   function playerCard(p) {
     const keys = Core.visibleKeys(p);
     const capped = Core.isCappedOut(p);
-    let detail = '<div class="small">方針:' + esc(Core.policyLabel(p)) + (p.needsPolicy ? ' <span class="needpol">⚠選び直し</span>' : '')
-      + ' / 試合 ' + p.record.games + '(' + p.record.wins + '勝)'
-      + (p.originalPosition !== p.position ? ' / 元:' + Core.POSITION_LABEL[p.originalPosition] : '') + '</div>'
-      + '<div class="small">入学時の総合値 ' + Core.initialRating(p) + ' → 現在 ' + Core.rating(p)
-      + (capped ? ' <span class="capped">頭打ち</span>' : '') + (p.limitBreaks ? ' / 限界突破 ' + p.limitBreaks + '回' : '')
-      + ' / 試合経験値 ' + int(p.exp) + '(累計 ' + int(p.expTotal) + ')</div>'
-      + aptLine(p)
-      + snapTable(keys, p.snapshots, p.abilities);
-    if (Core.isSubKnown(p) && !Core.isTwoWayKnown(p)) {
-      detail += '<div class="sublabel">副能力(' + Core.SIDE_LABEL[Core.sideOf(p.position) === 'pitch' ? 'bat' : 'pitch'] + '・判明済み)</div>'
-        + abilGrid(Core.subKeysOf(p), p.abilities);
-    } else if (!Core.isTwoWayKnown(p)) {
-      detail += '<div class="sublabel">副能力:未判明(本職でない役割で出場すると分かる)</div>';
-    }
-    detail = '<div class="small">' + starBtn(p) + (p.watched ? '注目中(タップで外す)' : '注目する') + '</div>'
-      + detail + growthChart(p, keys) + statTable(p) + histList(p.history);
-    return '<div class="player">' + starBtn(p) + '<details data-open="p' + p.id + '"' + detailsOpen('p' + p.id) + ' style="display:inline-block;width:calc(100% - 32px);vertical-align:top">'
-      + '<summary><span class="pname">' + esc(p.name) + '</span>' + growthLabel(p) + ' '
+    const summary = '<span class="pname">' + esc(p.name) + '</span>' + growthLabel(p) + ' '
       + '<span class="small">' + (p.helper ? '' : p.grade + '年') + '</span>' + posTag(p.position) + extraTags(p)
-      + (capped ? '<span class="capped">頭打ち</span>' : '')
-      + '<div class="small">' + ratingHtml(p) + ' / ' + statBrief(p) + ' / ' + esc(Core.policyLabel(p)) + '</div></summary>'
-      + detail + '</details>'
-      + mainGrids(p, p.abilities) + '</div>';
+      + (capped ? '<span class="capped">頭打ち</span>' : '') + (p.needsPolicy ? ' <span class="needpol">⚠</span>' : '')
+      + '<div class="small">' + ratingHtml(p) + ' / ' + statBrief(p) + '</div>';
+    return '<div class="player pflex">' + starBtn(p) + '<div class="grow">' + renderCollapsible('p:' + p.id, summary, () => {
+      let d = '<div class="small">方針:' + esc(Core.policyLabel(p)) + (p.needsPolicy ? ' <span class="needpol">⚠選び直し</span>' : '')
+        + ' / 試合 ' + p.record.games + '(' + p.record.wins + '勝)'
+        + (p.originalPosition !== p.position ? ' / 元:' + Core.POSITION_LABEL[p.originalPosition] : '')
+        + ' / 入学時の総合値 ' + Core.initialRating(p) + (p.limitBreaks ? ' / 限界突破 ' + p.limitBreaks + '回' : '')
+        + ' / 試合経験値 ' + int(p.exp) + '(累計 ' + int(p.expTotal) + ')</div>'
+        + renderPlayerStatsCompact(p) + aptLine(p);
+      if (!Core.isSubKnown(p) && !Core.isTwoWayKnown(p)) d += '<div class="sublabel">副能力:未判明(本職でない役割で出場すると分かる)</div>';
+      d += renderCollapsible('pchart:' + p.id, '<span class="small">能力の推移(グラフ)</span>', () => growthChart(p, keys))
+        + renderCollapsible('pstat:' + p.id, '<span class="small">成績</span>', () => statTable(p))
+        + renderCollapsible('phist:' + p.id, '<span class="small">学期ごとの能力と成長履歴</span>', () => snapTable(keys, p.snapshots, p.abilities) + histList(p.history));
+      return d;
+    }) + '</div></div>';
   }
 
   function renderRoster() {
@@ -856,7 +1032,7 @@
     }
     const helpers = state.players.filter((p) => p.helper);
     if (helpers.length) html += '<div class="card"><h2>助っ人(' + helpers.length + '人)</h2>' + helpers.map(playerCard).join('') + '</div>';
-    html += '<div class="small">名前をタップすると、能力の推移・適性・副能力・成績・成長履歴が見られます。隠れた才能と成長限界は表示されません。</div>';
+    html += '<div class="small">名前の行を押すと、能力の詳細・適性が開きます。推移・成績・履歴はその中でさらに開けます。隠れた才能と成長限界は表示されません。</div>';
     return html;
   }
 
@@ -896,38 +1072,40 @@
       const ini = a.initialRating;
       const fin = a.rating;
       const gl = Core.formatBestGrowth(Core.growthSinceEntry(a, a.mainKeys));
-      html += '<div class="player">' + starBtn(a) + '<details data-open="a' + a.id + '"' + detailsOpen('a' + a.id)
-        + ' style="display:inline-block;width:calc(100% - 32px);vertical-align:top"><summary><span class="pname">' + esc(a.name) + '</span>'
+      const summary = '<span class="pname">' + esc(a.name) + '</span>'
         + posTag(a.position) + talent + extraTags(a, true) + (a.cappedOut ? '<span class="capped">頭打ち</span>' : '')
         + ' <span class="small">→ ' + esc(a.career) + '</span>'
         + '<div class="small">総合値 ' + ini + ' → <span class="rt">' + fin + '</span>' + ratingBadge(a)
         + ' <b style="color:var(--win)">(' + (fin - ini >= 0 ? '+' : '') + (fin - ini) + ')</b>'
-        + (gl ? ' / 一番伸びた:' + esc(gl) : '') + '</div>'
-        + '<div class="small">' + alumniStatLine(a) + '</div></summary>'
+        + (gl ? ' / 一番伸びた:' + esc(gl) : '') + '</div>';
+      html += '<div class="player pflex">' + starBtn(a) + '<div class="grow">' + renderCollapsible('a:' + a.id, summary, () =>
+        '<div class="small">通算成績:' + alumniStatLine(a) + '</div>'
         + '<div class="small">育成方針:' + esc(a.policyLabel || Core.policyLabelByKey(a.policy))
         + ' / 才能:' + Core.TALENT_LABEL[a.talent] + (a.geniusBust ? '(開花せず)' : '')
         + ' / 転生の型:' + esc(Core.reincarnationName(a.reincarnation))
         + (a.twoWay ? ' / 二刀流' : '')
         + (a.limitBreaks ? ' / 限界突破 ' + a.limitBreaks + '回' : '')
         + (a.originalPosition && a.originalPosition !== a.position ? ' / 入学時:' + Core.POSITION_LABEL[a.originalPosition] : '')
-        + (a.origin === 'initial' ? ' / 就任時の部員' : '') + (a.helper ? ' / 助っ人' : '') + '</div>'
-        + '<div class="small">通算成績:' + alumniStatLine(a) + '</div>'
+        + (a.origin === 'pre' ? ' / 就任時の部員' : '') + (a.helper ? ' / 助っ人' : '') + '</div>'
         + '<div class="small">チーム成績:試合 ' + a.record.games + '(' + a.record.wins + '勝)'
         + (a.record.titles.length ? ' / ' + esc(a.record.titles.join('、')) : '') + '</div>'
-        + growthChart(a, a.mainKeys)
-        + statTable(a)
-        + snapTable(a.mainKeys, a.snapshots)
-        + (subKeys.length ? '<div class="sublabel">副能力(' + (a.subRevealed ? '在学中に判明' : '在学中は未判明') + ')</div>'
-          + abilGrid(subKeys, a.finalAbilities, a.initialAbilities) : '')
-        + histList(a.history) + '</details>'
-        + mainGrids(a, a.finalAbilities, a.initialAbilities) + '</div>';
+        + renderPlayerStatsCompact(a)
+        + renderCollapsible('achart:' + a.id, '<span class="small">能力の推移(グラフ)</span>', () => growthChart(a, a.mainKeys))
+        + renderCollapsible('astat:' + a.id, '<span class="small">成績</span>', () => statTable(a))
+        + renderCollapsible('ahist:' + a.id, '<span class="small">学期ごとの能力と成長履歴</span>', () => snapTable(a.mainKeys, a.snapshots)
+          + (subKeys.length ? '<div class="sublabel">副能力(' + (a.subRevealed ? '在学中に判明' : '在学中は未判明') + ')</div>'
+            + abilGrid(subKeys, a.finalAbilities, a.initialAbilities) : '')
+          + histList(a.history))) + '</div></div>';
     }
     return html + '</div>';
   }
 
   function renderSettings() {
     const rv = (v) => (v === 'enrollment' ? '入学時' : '最初の合宿');
-    return '<div class="card"><h2>ゲーム情報</h2><div class="small">現在のシード:<b>' + state.seed + '</b>'
+    const lv = (v, l) => '<option value="' + v + '"' + (uiPrefs.level === v ? ' selected' : '') + '>' + l + '</option>';
+    return '<div class="card"><h2>表示の詳しさ</h2><div class="row"><select id="uiLevel">' + lv('min', '最小(要約だけ。押して詳細)') + lv('std', '標準(戦力・月・年度のまとめを開く)')
+      + lv('full', '詳細(すべて開く)') + '</select></div><div class="small">変えると、パネルごとに開閉した記憶は消えます。</div></div>'
+      + '<div class="card"><h2>ゲーム情報</h2><div class="small">現在のシード:<b>' + state.seed + '</b>'
       + '<br>セーブのバージョン:<b>v' + state.version + '</b>(保存キー ' + esc(Persist.KEYS.save) + ')'
       + (storage.memory ? '<br>⚠ この画面では保存が使えないため、ページを閉じると消えます' : '')
       + '<br>このゲームの上書き設定:' + (Object.keys(state.overrides || {}).length ? Object.keys(state.overrides).length + '件(調整タブ)' : 'なし')
@@ -960,8 +1138,7 @@
       const list = CONFIG.paramMeta.filter((m) => m.group === g.id);
       const n = list.filter((m) => pending[m.path] != null).length;
       const key = 'tune-' + g.id;
-      html += '<details data-open="' + key + '"' + detailsOpen(key) + '><summary><b>' + esc(g.label) + '</b>'
-        + (n ? ' <span class="small">変更 ' + n + '件</span>' : '') + '</summary><div class="scroll"><table class="tune">'
+      html += renderCollapsible(key, '<b>' + esc(g.label) + '</b>' + (n ? ' <span class="small">変更 ' + n + '件</span>' : ''), () => '<div class="scroll"><table class="tune">'
         + '<tr><th>名前</th><th class="num">値</th><th class="num">初期値</th><th></th></tr>'
         + list.map((m) => {
           const def = Tuning.defaultValue(m.path);
@@ -972,7 +1149,7 @@
             + '<td class="num"><input type="number" step="any" data-tune="' + esc(m.path) + '" value="' + esc(fmtVal(val)) + '"></td>'
             + '<td class="num">' + esc(fmtVal(def)) + '</td>'
             + '<td>' + (changed ? '<button class="minibtn" data-tunereset="' + esc(m.path) + '">戻す</button>' : '') + '</td></tr>';
-        }).join('') + '</table></div></details>';
+        }).join('') + '</table></div>');
     }
     return html + '</div>';
   }
@@ -1074,7 +1251,22 @@
     return html + '<div class="small">再計算には、調整中の設定を使います(' + CONFIG.benchmarkRuns.seeds + 'シード × ' + CONFIG.benchmarkRuns.years + '年)。</div></div>';
   }
   function renderTune() {
-    return renderTuneParams() + renderTuneState() + renderTuneTrial() + renderTuneBench();
+    // 1行の要約 + 押して詳細。(1)設定値は最初から開く。試し計算は計算中は開いたまま
+    const mod = Object.keys(pending).length;
+    const last = Persist.readJson(storage, Persist.KEYS.lastTrial);
+    const res = trial.result || (last && last.current);
+    let vsum = '';
+    if (res) {
+      const c = { '✓': 0, '△': 0, '✕': 0 };
+      for (const k of Object.keys(CONFIG.targets)) { const v = Sim.judgeValue(res.metrics[k], CONFIG.targets[k]); if (c[v] != null) c[v]++; }
+      vsum = '(前回の結果 ✓' + c['✓'] + ' △' + c['△'] + ' ✕' + c['✕'] + ')';
+    }
+    const stale = Tuning.withOverrides(pending, Tuning.effectiveOverrides(state.overrides, pending), () => Generation.isStale());
+    const strip = (h) => h.replace(/^<div class="card"><h2>[^<]*<\/h2>/, '').replace(/<\/div>$/, '');
+    return '<div class="card">' + renderCollapsible('tune-params', '<b>(1) 設定値</b> <span class="small">変更 ' + mod + '件</span>', () => strip(renderTuneParams()), { defaultOpen: true }) + '</div>'
+      + '<div class="card">' + renderCollapsible('tune-state', '<b>(2) 現在の状態</b> <span class="small">' + esc(HighSchool.formatYear(state.year) + ' ' + HighSchool.monthLabel(state.month)) + '</span>', () => strip(renderTuneState())) + '</div>'
+      + '<div class="card">' + renderCollapsible('tune-trial', '<b>(3) この設定で試す</b> <span class="small">' + (trial.running ? '計算中…' : vsum) + '</span>', () => strip(renderTuneTrial()), { forceOpen: trial.running }) + '</div>'
+      + '<div class="card">' + renderCollapsible('tune-bench', '<b>(4) 世代の基準</b> <span class="small">' + (stale ? '⚠ 古い可能性あり' : '✓ 一致') + '</span>', () => strip(renderTuneBench()), { forceOpen: benchJob.running }) + '</div>';
   }
 
   // 少しずつ実行する(画面が固まらないように)。step() が true を返したら終わり
@@ -1104,7 +1296,7 @@
       }),
       () => { trial.progress = runner ? runner.progress() : 0; updateProgressOnly(); },
       () => {
-        const metrics = Tuning.withOverrides(pending, gameOv, () => Sim.analyze(runner.states(), runner.labels));
+        const metrics = Tuning.withOverrides(pending, gameOv, () => Sim.analyze(runner.states(), runner.labels, { preMs: runner.startMs() }));
         const last = Persist.readJson(storage, Persist.KEYS.lastTrial);
         const cur = { label: label + '(' + new Date().toLocaleString() + ')', metrics: metrics, overrides: Object.assign({}, pending) };
         Persist.writeJson(storage, Persist.KEYS.lastTrial, { current: cur, previous: last && last.current ? last.current : null });
@@ -1148,7 +1340,6 @@
     renderHeader();
     document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
     const main = document.getElementById('main');
-    cardSeq = 0;
     main.innerHTML = (tab === 'home' ? renderHome() : tab === 'roster' ? renderRoster() : tab === 'growth' ? renderGrowth()
       : tab === 'alumni' ? renderAlumni() : tab === 'tune' ? renderTune() : renderSettings()) + renderModal();
   }
@@ -1159,17 +1350,10 @@
     const t = e.target.dataset && e.target.dataset.tab;
     if (t) { tab = t; render(); window.scrollTo(0, 0); }
   });
-  document.getElementById('main').addEventListener('toggle', (e) => {
-    const key = e.target.dataset && e.target.dataset.open;
-    if (!key) return;
-    if (key === 'pol-new') {
-      if (e.target.open) openDetails.delete('pol-new-closed'); else openDetails.add('pol-new-closed');
-      return;
-    }
-    if (e.target.open) openDetails.add(key); else openDetails.delete(key);
-  }, true);
   document.getElementById('main').addEventListener('change', (e) => {
     if (e.target.id === 'autoTarget') { autoTarget = e.target.value; return; }
+    if (e.target.id === 'polSort') { uiPrefs.polSort = e.target.value; saveUi(); render(); return; }
+    if (e.target.id === 'uiLevel') { uiPrefs.level = e.target.value; uiPrefs.open = {}; saveUi(); render(); return; }
     if (e.target.id === 'gChanged') { growthView.changedOnly = e.target.checked; render(); return; }
     if (e.target.id === 'gDecimal') { growthView.decimal = e.target.checked; render(); return; }
     if (e.target.dataset.tune) {
@@ -1192,7 +1376,6 @@
     const id = e.target.id;
     const ds = e.target.dataset || {};
     if (ds.watch) {
-      e.preventDefault(); // summary の中でも詳細を開閉しない
       const pid = Number(ds.watch);
       const all = state.players.concat(state.pendingRecruits);
       const p = all.find((q) => q.id === pid) || state.alumni.find((q) => q.id === pid);
@@ -1210,6 +1393,14 @@
       save(); render();
       return;
     }
+    const colBtn = e.target.closest && e.target.closest('[data-col]');
+    if (colBtn) {
+      const key = colBtn.dataset.col;
+      uiPrefs.open[key] = colBtn.getAttribute('aria-expanded') !== 'true';
+      saveUi();
+      render();
+      return;
+    }
     if (ds.growthSerial != null) {
       growthView.serial = Number(ds.growthSerial);
       tab = 'growth'; render(); window.scrollTo(0, 0);
@@ -1225,6 +1416,12 @@
       return;
     }
     if (ds.gfilter) { growthView.filter = ds.gfilter; render(); return; }
+    if (ds.undo) { delete draftPolicies[ds.undo]; render(); return; }
+    if (ds.polf) { uiPrefs.polFilter = ds.polf; saveUi(); render(); return; }
+    if (ds.polall) {
+      for (const pid of (ds.ids || '').split(',').filter(Boolean)) uiPrefs.open['pol:' + pid] = ds.polall === 'open';
+      saveUi(); render(); return;
+    }
     if (id === 'btnAuto') {
       // おまかせ:新入生のみ(見直しの月は選び直しが必要な選手のみ)/ 全員
       for (const p of state.pendingRecruits) draftPolicies[p.id] = Core.autoPolicy(p);

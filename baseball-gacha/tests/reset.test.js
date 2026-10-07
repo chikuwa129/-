@@ -125,8 +125,10 @@ test('見える化の保存データ(チーム戦力の記録・成長ログ・�
   const st = memoryStorage();
   const hasVisual = (s) => s.powerLog.length > 0 && s.players.some((p) => p.mlog && p.mlog.a.length > 0)
     && Object.keys(s.yearRecords).length > 0 && s.stats.calib.length > 0 && s.stats.highlights.games > 0;
-  const isFresh = (s) => s.powerLog.length === 0 && s.players.every((p) => !p.mlog)
-    && Object.keys(s.yearRecords).length === 0 && s.stats.calib.length === 0 && s.stats.highlights.games === 0;
+  // 新規開始の状態:前史から持ち越した最後の12か月分の成長スナップショット以外は、記録がない
+  const isFresh = (s) => s.powerLog.length === 0 && s.players.every((p) => !p.mlog || p.mlog.a.length <= 12)
+    && Object.keys(s.yearRecords).length === 0 && s.stats.calib.length === 0 && s.stats.highlights.games === 0
+    && JSON.stringify(s) === JSON.stringify(HighSchool.newGame({ seed: s.seed, overrides: s.overrides }));
   let s = Persist.startGame(st, 21);
   play(s, 25);
   Persist.saveGame(st, s);
@@ -144,6 +146,37 @@ test('見える化の保存データ(チーム戦力の記録・成長ログ・�
   Persist.saveGame(st, s);
   const r = Persist.startup(st, '?reset=1');
   assert.ok(isFresh(r.state) && isFresh(Persist.loadGame(st)), '?reset=1');
+});
+
+test('前史と評判:新規開始は前史を含めて毎回同じ。どのリセットでも作り直され、開閉の記憶も消える', () => {
+  const st = memoryStorage();
+  const a = HighSchool.newGame({ seed: 31 });
+  const b = HighSchool.newGame({ seed: 31 });
+  assert.strictEqual(JSON.stringify(a), JSON.stringify(b), '同じシードなら前史も同じ');
+  assert.ok(a.players.length > 0 && a.players.every((p) => p.grade >= 2), '開始時の在校生は2・3年生');
+  assert.ok(a.players.some((p) => p.history.some((h) => h.ev.indexOf('(開始前)') >= 0)), '前史の履歴に(開始前)');
+  assert.strictEqual(a.leadership.lv, 1, '指導力は持ち越さない');
+  assert.strictEqual(a.alumni.length, 0, '前史の卒業生は名鑑に載せない');
+  const ui = Persist.KEYS.ui;
+  let s = Persist.startGame(st, 31);
+  play(s, 30);
+  s.schoolRep = 99;   // 進行中に評判が変わっていても
+  Persist.saveGame(st, s);
+  st.setItem(ui, '{"level":"full","open":{"power":true}}');
+  s = Persist.resetSameSeed(st, s);
+  assert.strictEqual(JSON.stringify(s), JSON.stringify(a), '同じシードでやり直す:前史・評判とも新規開始と同じ');
+  assert.strictEqual(st.getItem(ui), null, '同じシードでやり直す:開閉の記憶が消える');
+  st.setItem(ui, '{"level":"full"}');
+  s = Persist.resetNewSeed(st, 32);
+  assert.strictEqual(JSON.stringify(s), JSON.stringify(HighSchool.newGame({ seed: 32 })));
+  assert.strictEqual(st.getItem(ui), null, '新しいシードで始める:開閉の記憶が消える');
+  st.setItem(ui, '{"level":"full"}');
+  Persist.wipeAll(st, 33);
+  assert.strictEqual(st.getItem(ui), null, '完全に消す:開閉の記憶が消える');
+  st.setItem(ui, '{"level":"full"}');
+  const r = Persist.startup(st, '?reset=1');
+  assert.strictEqual(st.getItem(ui), null, '?reset=1:開閉の記憶が消える');
+  assert.strictEqual(r.state.schoolRep, HighSchool.newGame({ seed: r.state.seed }).schoolRep, '?reset=1:評判は前史の結果から');
 });
 
 Tuning.applyOverrides({});
