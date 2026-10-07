@@ -575,6 +575,7 @@
     },
     reviewShowStats: true,         // 見直し画面に「項目別の現在値の1行」を出す(表示だけ)
     policyOptionHints: false,      // 方針の選択肢に、伸びやすい項目(◎○)を併記する(表示だけ)
+    policyControlEnabled: false,   // 方針の選択(入学時のプルダウン・12月の見直し画面)を遊ぶ画面に出すか。false は常におまかせ(画面の切り替えだけ)
 
     // ---- 見える化(表示と、成績用の乱数で決めるハイライトだけに使う。勝敗や成長には影響しない) ----
     visual: {
@@ -800,6 +801,7 @@
     ['policyScreen.strongWeight', 'policy', '方針の選択肢で ◎ を付ける重み', true],
     ['policyScreen.midWeight', 'policy', '方針の選択肢で ○ を付ける重み', true],
     ['reviewShowStats', 'policy', '見直し画面に、項目別の現在値の1行を出す(オン/オフ)', true],
+    ['policyControlEnabled', 'policy', '方針の選択を遊ぶ画面に出すか', true],
     ['policyOptionHints', 'policy', '方針の選択肢に、伸びやすい項目(◎○)を併記する(オン/オフ)', true],
     ['offPositionStarGap', 'lineup', '控えの選手を本職外で起用してよい総合値の差(0 = 無効。適性が本職の選手以上のときだけ)'],
     ['homeSummaryPosition', 'disp', 'ホームの月のまとめの位置(bottom = 下 / top = 上)', true, ['bottom', 'top']],
@@ -2666,7 +2668,7 @@
           state.stats.conversion.success++;
           if (pos === 'P') state.stats.conversion.fielderToPitcher++;
           const msg = p.name + 'が' + POSITION_LABEL[from] + 'から' + POSITION_LABEL[pos] + 'に転向した。'
-            + (sideChanged ? '(方針を選び直してください)' : '');
+            + (sideChanged && CONFIG.policyControlEnabled ? '(方針を選び直してください)' : '');   // 方針の選択を出さないときは、おまかせで選び直す
           addEvent(state, { player: p, importance: 3, text: '【転向】' + msg, history: { ev: 'コンバート', res: POSITION_LABEL[from] + '→' + POSITION_LABEL[pos] } });
           lines.push({ text: '【転向】' + msg, cls: 'special' });
         } else {
@@ -2711,7 +2713,7 @@
     }
     state.stats.policyReview.reviewed += reviewable.length;
     state.stats.policyReview.changed += changed;
-    if (changed) lines.push({ text: '在校生 ' + changed + '人の方針を変更した。', cls: 'summary' });
+    if (changed && CONFIG.policyControlEnabled) lines.push({ text: '在校生 ' + changed + '人の方針を変更した。', cls: 'summary' });   // 表示だけ(方針の選択を出すときのみ)
 
     if (state.policyContext === 'enrollment') {
       const S = state.stats;
@@ -2733,7 +2735,7 @@
           S.reincarnation++;
           S.reincarnationByType[p.reincarnation] = (S.reincarnationByType[p.reincarnation] || 0) + 1;
         }
-        lines.push(p.name + '(' + POSITION_LABEL[p.position] + '・総合値' + rating(p) + ')方針:' + policyLabel(p));
+        lines.push(p.name + '(' + POSITION_LABEL[p.position] + '・総合値' + rating(p) + ')' + (CONFIG.policyControlEnabled ? '方針:' + policyLabel(p) : ''));
         if (p.reincarnation && p.reincarnationRevealed) {
           addEvent(state, { player: p, importance: 3, text: '【転生】' + p.name + 'は' + reincarnationName(p.reincarnation) + 'の転生者だった!' });
         }
@@ -3294,30 +3296,47 @@
     }
   }
 
-  // 1か月だけ進める
-  function advanceMonth(state) {
+  // 「おまかせ」の方針:新入生と、選び直しが必要な在校生に、能力から自動で決めた方針(画面の「おまかせ」ボタンと同じ)
+  function autoPolicies(state) {
+    const pol = {};
+    for (const p of state.pendingRecruits) pol[p.id] = autoPolicy(p);
+    for (const p of reviewablePlayers(state)) if (p.needsPolicy) pol[p.id] = autoPolicy(p);
+    return pol;
+  }
+  // 方針の見直しの月(12月など)を、おまかせで確定して止まらずに進める(policyControlEnabled が false のとき。結果は「おまかせ」と同じ)
+  function resolveReviewAuto(state) {
+    if (state.awaiting === 'policy' && state.policyContext === 'review') { confirmPolicies(state, autoPolicies(state)); return true; }
+    return false;
+  }
+  // 1か月だけ進める。opts.autoReview:方針の見直しの月を、おまかせで確定して止まらない
+  function advanceMonth(state, opts) {
     const mev = processMonth(state);
     state.lastEvents = mev ? [mev] : [];
+    if (opts && opts.autoReview) resolveReviewAuto(state);
     return state.lastEvents;
   }
   // 次のイベント(入学・合宿・大会・年度末、または重要な通知)のある月まで進める
-  function advanceToNextEvent(state, observer) {
+  function advanceToNextEvent(state, observer, opts) {
     const out = [];
+    const auto = opts && opts.autoReview;
+    if (auto) resolveReviewAuto(state);
     while (!state.awaiting) {
       const mev = processMonth(state, observer);
       out.push(mev);
       if (mev.stop) break;
+      if (auto) resolveReviewAuto(state);
     }
+    if (auto) resolveReviewAuto(state);
     state.stats.stops++;
     state.lastEvents = out;
     return out;
   }
-  // 次の4月(新入生の引き)まで進める。途中の方針見直しは、変更なしで確定する
-  function advanceToApril(state) {
+  // 次の4月(新入生の引き)まで進める。途中の方針見直しは、変更なしで確定する(opts.autoReview のときは、おまかせで確定)
+  function advanceToApril(state, opts) {
     const out = [];
     for (;;) {
       if (state.awaiting) {
-        if (state.policyContext === 'review') confirmPolicies(state, {});
+        if (state.policyContext === 'review') confirmPolicies(state, opts && opts.autoReview ? autoPolicies(state) : {});
         else break;
       }
       out.push(processMonth(state));
@@ -3333,6 +3352,8 @@
     monthIndexOf: monthIndexOf,
     newGame: newGame,
     confirmPolicies: confirmPolicies,
+    autoPolicies: autoPolicies,
+    resolveReviewAuto: resolveReviewAuto,
     confirmEnrollment: confirmEnrollment,
     reviewablePlayers: reviewablePlayers,
     processMonth: processMonth,
@@ -4060,6 +4081,11 @@
     const r = p.finalAbilities ? p.rating : Core.rating(p);
     return '総合値 <span class="rt">' + r + '</span>' + ratingBadge(p);
   }
+  function policyUI() { return !!CONFIG.policyControlEnabled; }
+  // 方針の選択を出さないとき、見直しの月で止まっていたら、おまかせで確定して進める(設定の切り替え直後や読み込み時)
+  function ensureNoReview() {
+    if (!policyUI() && HighSchool.resolveReviewAuto(state)) save();
+  }
   function staleWarning() {
     if (!DEV) return '';   // 開発用の表示(?dev=1 のときだけ)
     if (!Generation.getBenchmark()) return '<div class="warnbox">世代の基準(benchmark.js)がありません。ラベルは表示されません。</div>';
@@ -4222,6 +4248,7 @@
   }
   // イベントの結果のカード:1行の要約 + 「詳しく」
   function eventCard(ev, key) {
+    if (ev.type === 'review' && !policyUI()) return '';
     if (ev.yearSummary) return yearSummaryCard(ev.yearSummary, key + ':ys', ev) + eventCard(Object.assign({}, ev, { yearSummary: null }), key);
     const lines = ev.lines || [];
     let html = '<div class="card"><h2>' + esc(ev.title) + '</h2>';
@@ -4434,13 +4461,13 @@
   //   1行目:名前・守備区分・ラベル・総合値・同世代の上位%・現在の方針(学年と ⚠ は小さく)
   //   その下:能力の枠(項目ごとの大きな数字のボックス)/ 方針のプルダウン(幅いっぱい)
   //   増減などの補助情報は、名前を押して開く選手詳細に置く
-  function polCard(p, isNew) {
+  function polCard(p, isNew, simple) {
     const draft = draftPolicies[p.id];
     const changed = !isNew && draft != null && draft !== p.policy;
     let html = '<div class="player' + (changed ? ' changed' : '') + '">' + (isNew ? starBtn(p) : '')
       + '<button class="pnamebtn" data-pdetail="' + p.id + '">' + esc(p.name) + '</button>'
-      + posTag(p.position) + extraTags(p) + ' <span class="small">' + ratingHtml(p) + ' / 現在:' + esc(Core.policyLabel(p)) + '</span>'
-      + ' <span class="gradetag">' + (isNew ? '新入生' : p.grade + '年') + '</span>' + (p.needsPolicy ? '<span class="needpol"> ⚠</span>' : '');
+      + posTag(p.position) + extraTags(p) + ' <span class="small">' + ratingHtml(p) + (simple ? '' : ' / 現在:' + esc(Core.policyLabel(p))) + '</span>'
+      + ' <span class="gradetag">' + (isNew ? '新入生' : p.grade + '年') + '</span>' + (p.needsPolicy && !simple ? '<span class="needpol"> ⚠</span>' : '');
     if (isNew) html += '<div class="impress">' + esc(impression(p)) + '</div>';   // 最初期と同じ順:第一印象 → 能力の枠 → 判明の演出
     if (CONFIG.reviewShowStats) html += abilBoxes(p);
     if (isNew) {
@@ -4449,6 +4476,7 @@
       }
       if (p.twoWay && p.twoWayRevealed) html += '<div class="reveal">投げても打っても本職級……! <br>【二刀流】の素質を持っている!</div>';
     }
+    if (simple) return html + '</div>';   // 方針の選択なし(プルダウン・変更前→変更後は出さない)
     if (p.needsPolicy) html += '<div class="needpol">⚠ 本職が変わったため方針がバランスに戻りました。選び直してください</div>';
     html += policySelect(p);
     if (changed) {
@@ -4490,8 +4518,23 @@
       + '<div class="row">' + chip('all', '全員') + chip('g3', '3年') + chip('g2', '2年') + chip('g1', '1年')
       + Core.POSITIONS.map((pos) => chip(pos, Core.POSITION_SHORT[pos])).join('') + chip('watched', '★') + chip('need', '要選び直し') + chip('capped', '頭打ち') + '</div>');
   }
+  // 入学画面(方針の選択を出さないとき):新入生のカード(能力の枠つき)と「入部させる」だけ
+  function renderEnrollmentSimple() {
+    const info = state.newcomerInfo || {};
+    const n = state.pendingRecruits.length;
+    let html = '<div class="card"><h2>🌸 ' + HighSchool.formatYear(state.year) + ' 4月 新入生がやってきた!</h2>'
+      + '<div class="nc">今年の入部希望者は <b>' + n + '人</b>'
+      + (info.strength != null ? '(前年夏のチームの強さ ' + info.strength + ')' : '')
+      + (info.capped ? '。部員数の上限のため人数を絞った' : '') + '</div>'
+      + (info.trend ? '<div class="small">今年の新入生の傾向:<b>' + esc(info.trend) + '</b></div>' : '')
+      + '<div class="small">表示は本職側の能力だけです。総合値 = 本職側の能力の平均 × 5。育成はおまかせ(能力に合わせて自動で決まる)。名前を押すと選手詳細。</div>';
+    if (!n) html += '<div class="small">今年は新入生がいません。</div>';
+    else html += renderCollapsible('pol-new', '<b>新入生(' + n + '人)</b>', () => state.pendingRecruits.map((p) => polCard(p, true, true)).join(''), { defaultOpen: true, cls: 'flat' });
+    return html + '</div><div class="btns"><button class="btn" id="btnPolicy">入部させる</button></div>';
+  }
   function renderPolicyScreen() {
     const isEnroll = state.policyContext === 'enrollment';
+    if (!policyUI() && isEnroll) return renderEnrollmentSimple();
     let html = '';
     if (isEnroll) {
       const info = state.newcomerInfo || {};
@@ -4539,7 +4582,7 @@
     const draft = draftPolicies[p.id];
     return '<div class="modal-bg"><div class="modal pdetail"><div><span class="pname">' + esc(p.name) + '</span>' + posTag(p.position) + extraTags(p)
       + ' <span class="small">' + (state.pendingRecruits.indexOf(p) >= 0 ? '新入生' : p.grade + '年') + '</span></div>'
-      + '<div class="small">' + ratingHtml(p) + ' / 方針:' + esc(policyLabelOf(p, draft != null ? draft : p.policy)) + '</div>'
+      + '<div class="small">' + ratingHtml(p) + ' / 方針:' + (policyUI() ? esc(policyLabelOf(p, draft != null ? draft : p.policy)) : 'おまかせ') + '</div>'
       + renderPlayerStatsCompact(p, { detail: true, policy: draft != null ? draft : p.policy })
       + '<div class="small">' + bestWorst(p) + (Core.isCappedOut(p) ? ' / 頭打ち' : '') + '</div>' + aptLine(p)
       + '<div class="btns"><button class="btn sub small" id="pdetailClose">閉じる</button></div></div></div>';
@@ -4641,10 +4684,10 @@
     const capped = Core.isCappedOut(p);
     const summary = '<span class="pname">' + esc(p.name) + '</span>' + growthLabel(p) + ' '
       + '<span class="small">' + (p.helper ? '' : p.grade + '年') + '</span>' + posTag(p.position) + extraTags(p)
-      + (capped ? '<span class="capped">頭打ち</span>' : '') + (p.needsPolicy ? ' <span class="needpol">⚠</span>' : '')
+      + (capped ? '<span class="capped">頭打ち</span>' : '') + (p.needsPolicy && policyUI() ? ' <span class="needpol">⚠</span>' : '')
       + '<div class="small">' + ratingHtml(p) + ' / ' + statBrief(p) + '</div>';
     return '<div class="player pflex">' + starBtn(p) + '<div class="grow">' + renderCollapsible('p:' + p.id, summary, () => {
-      let d = '<div class="small">方針:' + esc(Core.policyLabel(p)) + (p.needsPolicy ? ' <span class="needpol">⚠選び直し</span>' : '')
+      let d = '<div class="small">方針:' + (policyUI() ? esc(Core.policyLabel(p)) + (p.needsPolicy ? ' <span class="needpol">⚠選び直し</span>' : '') : 'おまかせ')
         + ' / 試合 ' + p.record.games + '(' + p.record.wins + '勝)'
         + (p.originalPosition !== p.position ? ' / 元:' + Core.POSITION_LABEL[p.originalPosition] : '')
         + ' / 入学時の総合値 ' + Core.initialRating(p) + (p.limitBreaks ? ' / 限界突破 ' + p.limitBreaks + '回' : '')
@@ -4755,7 +4798,7 @@
       + (DEV ? '<br>このゲームの上書き設定:' + (Object.keys(state.overrides || {}).length ? Object.keys(state.overrides).length + '件(調整タブ)' : 'なし') : '')
       + '<br>転生の型の判明:' + rv(CONFIG.reincarnationReveal) + ' / 二刀流の判明:' + rv(CONFIG.twoWayReveal)
       + '<br>重要な通知が出た月で止まる:' + (CONFIG.autoStop.enabled ? 'はい' : 'いいえ')
-      + ' / 方針を見直せる月:' + CONFIG.policyReviewMonths.join('月・') + '月</div></div>'
+      + (policyUI() ? ' / 方針を見直せる月:' + CONFIG.policyReviewMonths.join('月・') + '月' : '') + '</div></div>'
       + '<div class="card"><h2>リセット</h2>'
       + '<div class="small">どのリセットも、4月の入学画面から始まります。' + (DEV ? '調整タブで変えた値は、ここで始めるゲームから使われます。' : '') + '</div>'
       + '<div class="btns"><button class="btn sub small" id="btnResetSame">同じシードでやり直す</button></div>'
@@ -4985,6 +5028,7 @@
   }
 
   function render() {
+    if (state) ensureNoReview();
     renderHeader();
     document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
     if (tab === 'tune' && !DEV) tab = 'home';
@@ -5098,19 +5142,19 @@
       }
       render();
     } else if (id === 'btnPolicy') {
-      HighSchool.confirmPolicies(state, draftPolicies);
+      HighSchool.confirmPolicies(state, policyUI() ? draftPolicies : HighSchool.autoPolicies(state));   // 方針の選択を出さないときは、おまかせ
       clearDraft();
       // 決めた月の続き(入学の結果、冬合宿など)はボタンで進める
       detailPid = null;
       afterAdvance(true);   // 月は進んでいないので、未読はそのまま
     } else if (id === 'btnNextEvent') {
-      HighSchool.advanceToNextEvent(state);
+      HighSchool.advanceToNextEvent(state, null, { autoReview: !policyUI() });
       afterAdvance();
     } else if (id === 'btnNextMonth') {
-      HighSchool.advanceMonth(state);
+      HighSchool.advanceMonth(state, { autoReview: !policyUI() });
       afterAdvance();
     } else if (id === 'btnApril') {
-      HighSchool.advanceToApril(state);
+      HighSchool.advanceToApril(state, { autoReview: !policyUI() });
       afterAdvance();
     } else if (id === 'btnResetSame') {
       // 確認は画面の中に出す(プレビューなど、confirm() が使えない環境でも動くように)

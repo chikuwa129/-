@@ -360,6 +360,7 @@
     },
     reviewShowStats: true,         // 見直し画面に「項目別の現在値の1行」を出す(表示だけ)
     policyOptionHints: false,      // 方針の選択肢に、伸びやすい項目(◎○)を併記する(表示だけ)
+    policyControlEnabled: false,   // 方針の選択(入学時のプルダウン・12月の見直し画面)を遊ぶ画面に出すか。false は常におまかせ(画面の切り替えだけ)
 
     // ---- 見える化(表示と、成績用の乱数で決めるハイライトだけに使う。勝敗や成長には影響しない) ----
     visual: {
@@ -585,6 +586,7 @@
     ['policyScreen.strongWeight', 'policy', '方針の選択肢で ◎ を付ける重み', true],
     ['policyScreen.midWeight', 'policy', '方針の選択肢で ○ を付ける重み', true],
     ['reviewShowStats', 'policy', '見直し画面に、項目別の現在値の1行を出す(オン/オフ)', true],
+    ['policyControlEnabled', 'policy', '方針の選択を遊ぶ画面に出すか', true],
     ['policyOptionHints', 'policy', '方針の選択肢に、伸びやすい項目(◎○)を併記する(オン/オフ)', true],
     ['offPositionStarGap', 'lineup', '控えの選手を本職外で起用してよい総合値の差(0 = 無効。適性が本職の選手以上のときだけ)'],
     ['homeSummaryPosition', 'disp', 'ホームの月のまとめの位置(bottom = 下 / top = 上)', true, ['bottom', 'top']],

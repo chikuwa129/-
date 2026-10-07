@@ -1829,7 +1829,7 @@
           state.stats.conversion.success++;
           if (pos === 'P') state.stats.conversion.fielderToPitcher++;
           const msg = p.name + 'が' + POSITION_LABEL[from] + 'から' + POSITION_LABEL[pos] + 'に転向した。'
-            + (sideChanged ? '(方針を選び直してください)' : '');
+            + (sideChanged && CONFIG.policyControlEnabled ? '(方針を選び直してください)' : '');   // 方針の選択を出さないときは、おまかせで選び直す
           addEvent(state, { player: p, importance: 3, text: '【転向】' + msg, history: { ev: 'コンバート', res: POSITION_LABEL[from] + '→' + POSITION_LABEL[pos] } });
           lines.push({ text: '【転向】' + msg, cls: 'special' });
         } else {
@@ -1874,7 +1874,7 @@
     }
     state.stats.policyReview.reviewed += reviewable.length;
     state.stats.policyReview.changed += changed;
-    if (changed) lines.push({ text: '在校生 ' + changed + '人の方針を変更した。', cls: 'summary' });
+    if (changed && CONFIG.policyControlEnabled) lines.push({ text: '在校生 ' + changed + '人の方針を変更した。', cls: 'summary' });   // 表示だけ(方針の選択を出すときのみ)
 
     if (state.policyContext === 'enrollment') {
       const S = state.stats;
@@ -1896,7 +1896,7 @@
           S.reincarnation++;
           S.reincarnationByType[p.reincarnation] = (S.reincarnationByType[p.reincarnation] || 0) + 1;
         }
-        lines.push(p.name + '(' + POSITION_LABEL[p.position] + '・総合値' + rating(p) + ')方針:' + policyLabel(p));
+        lines.push(p.name + '(' + POSITION_LABEL[p.position] + '・総合値' + rating(p) + ')' + (CONFIG.policyControlEnabled ? '方針:' + policyLabel(p) : ''));
         if (p.reincarnation && p.reincarnationRevealed) {
           addEvent(state, { player: p, importance: 3, text: '【転生】' + p.name + 'は' + reincarnationName(p.reincarnation) + 'の転生者だった!' });
         }
@@ -2457,30 +2457,47 @@
     }
   }
 
-  // 1か月だけ進める
-  function advanceMonth(state) {
+  // 「おまかせ」の方針:新入生と、選び直しが必要な在校生に、能力から自動で決めた方針(画面の「おまかせ」ボタンと同じ)
+  function autoPolicies(state) {
+    const pol = {};
+    for (const p of state.pendingRecruits) pol[p.id] = autoPolicy(p);
+    for (const p of reviewablePlayers(state)) if (p.needsPolicy) pol[p.id] = autoPolicy(p);
+    return pol;
+  }
+  // 方針の見直しの月(12月など)を、おまかせで確定して止まらずに進める(policyControlEnabled が false のとき。結果は「おまかせ」と同じ)
+  function resolveReviewAuto(state) {
+    if (state.awaiting === 'policy' && state.policyContext === 'review') { confirmPolicies(state, autoPolicies(state)); return true; }
+    return false;
+  }
+  // 1か月だけ進める。opts.autoReview:方針の見直しの月を、おまかせで確定して止まらない
+  function advanceMonth(state, opts) {
     const mev = processMonth(state);
     state.lastEvents = mev ? [mev] : [];
+    if (opts && opts.autoReview) resolveReviewAuto(state);
     return state.lastEvents;
   }
   // 次のイベント(入学・合宿・大会・年度末、または重要な通知)のある月まで進める
-  function advanceToNextEvent(state, observer) {
+  function advanceToNextEvent(state, observer, opts) {
     const out = [];
+    const auto = opts && opts.autoReview;
+    if (auto) resolveReviewAuto(state);
     while (!state.awaiting) {
       const mev = processMonth(state, observer);
       out.push(mev);
       if (mev.stop) break;
+      if (auto) resolveReviewAuto(state);
     }
+    if (auto) resolveReviewAuto(state);
     state.stats.stops++;
     state.lastEvents = out;
     return out;
   }
-  // 次の4月(新入生の引き)まで進める。途中の方針見直しは、変更なしで確定する
-  function advanceToApril(state) {
+  // 次の4月(新入生の引き)まで進める。途中の方針見直しは、変更なしで確定する(opts.autoReview のときは、おまかせで確定)
+  function advanceToApril(state, opts) {
     const out = [];
     for (;;) {
       if (state.awaiting) {
-        if (state.policyContext === 'review') confirmPolicies(state, {});
+        if (state.policyContext === 'review') confirmPolicies(state, opts && opts.autoReview ? autoPolicies(state) : {});
         else break;
       }
       out.push(processMonth(state));
@@ -2496,6 +2513,8 @@
     monthIndexOf: monthIndexOf,
     newGame: newGame,
     confirmPolicies: confirmPolicies,
+    autoPolicies: autoPolicies,
+    resolveReviewAuto: resolveReviewAuto,
     confirmEnrollment: confirmEnrollment,
     reviewablePlayers: reviewablePlayers,
     processMonth: processMonth,

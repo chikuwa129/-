@@ -6,7 +6,7 @@
 'use strict';
 
 const assert = require('assert');
-const { CONFIG, HighSchool, Persist, Tuning, Generation } = require('../logic.js');
+const { CONFIG, Core, HighSchool, Persist, Tuning, Generation } = require('../logic.js');
 
 // localStorage と同じ形(getItem / setItem / removeItem / key / length)
 function memoryStorage() {
@@ -210,6 +210,36 @@ test('ホームの月のまとめの未読(●新着)は、どのリセットで
   const r = Persist.startup(st, '?reset=1');
   assert.strictEqual(r.state.summaryUnread, null, '?reset=1');
   assert.strictEqual(Persist.loadGame(st).summaryUnread, null, '?reset=1(保存)');
+});
+
+test('方針の選択を出さないとき(policyControlEnabled = false):12月で止まらず、止まるたびに「おまかせ」を選んだ場合と同じ結果', () => {
+  const omakase = (st) => {
+    const pol = {};
+    for (const p of st.pendingRecruits) pol[p.id] = Core.autoPolicy(p);
+    for (const p of HighSchool.reviewablePlayers(st)) if (p.needsPolicy) pol[p.id] = Core.autoPolicy(p);
+    return pol;
+  };
+  const key = (st) => JSON.stringify([st.rngState, st.statRngState, st.players, st.alumni, st.yearRecords, st.leadership, st.schoolRep]);
+  assert.strictEqual(CONFIG.policyControlEnabled, false, '初期値は false');
+  for (const seed of [5, 6, 7]) {
+    const a = HighSchool.newGame({ seed: seed });
+    const b = HighSchool.newGame({ seed: seed });
+    let reviewStops = 0;
+    while (a.year <= 4) {
+      if (a.awaiting) { if (a.policyContext === 'review') reviewStops++; HighSchool.confirmPolicies(a, omakase(a)); continue; }
+      HighSchool.advanceToNextEvent(a);
+    }
+    while (b.year <= 4) {
+      if (b.awaiting) {
+        assert.strictEqual(b.policyContext, 'enrollment', '止まるのは入学だけ(12月の見直しでは止まらない)');
+        HighSchool.confirmPolicies(b, HighSchool.autoPolicies(b));
+        continue;
+      }
+      HighSchool.advanceToNextEvent(b, null, { autoReview: true });
+    }
+    assert.ok(reviewStops > 0, '比べる側は12月に止まっている');
+    assert.strictEqual(key(b), key(a), 'シード' + seed + ':同じ結果');
+  }
 });
 
 Tuning.applyOverrides({});
