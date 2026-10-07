@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>野球ガチャ育成</title>
+<style>
+  :root {
+    --bg: #f4f1ea; --card: #fffdf8; --ink: #222; --sub: #777; --line: #ddd5c6;
+    --accent: #1f5f8b; --win: #1d7a3a; --lose: #b03a2e; --gold: #b07d00; --special: #8a2be2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    font-size: 15px; line-height: 1.5;
+  }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 0 12px 80px; }
+  header { position: sticky; top: 0; background: var(--bg); padding: 10px 0 6px; z-index: 5; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 18px; margin: 0; }
+  header .meta { font-size: 13px; color: var(--sub); }
+  header .meta b { color: var(--ink); }
+  nav { display: flex; gap: 6px; margin-top: 8px; }
+  nav button { flex: 1; padding: 8px 0; border: 1px solid var(--line); background: var(--card); border-radius: 6px; font-size: 14px; color: var(--ink); }
+  nav button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .cal { display: flex; flex-wrap: wrap; gap: 4px; margin: 10px 0; }
+  .cal span { font-size: 11px; padding: 2px 6px; border-radius: 10px; background: #e8e2d5; color: var(--sub); }
+  .cal span.done { color: #aaa; text-decoration: line-through; }
+  .cal span.now { background: var(--accent); color: #fff; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+  .card h2 { font-size: 16px; margin: 0 0 6px; }
+  .card h3 { font-size: 14px; margin: 8px 0 4px; }
+  .lines div { padding: 2px 0; border-bottom: 1px dotted #eee; font-size: 14px; }
+  .lines .summary { font-weight: bold; }
+  .lines .win { color: var(--win); }
+  .lines .lose { color: var(--lose); }
+  .lines .big { color: var(--win); font-weight: bold; }
+  .lines .none { color: var(--sub); }
+  .lines .special { color: var(--special); font-weight: bold; }
+  .btns { display: flex; gap: 8px; margin: 10px 0; }
+  .btn { flex: 1; padding: 14px 8px; font-size: 16px; border: none; border-radius: 8px; background: var(--accent); color: #fff; font-weight: bold; }
+  .btn.sub { background: #fff; color: var(--accent); border: 1px solid var(--accent); }
+  .btn.danger { background: #fff; color: var(--lose); border: 1px solid var(--lose); }
+  .btn:disabled { opacity: .4; }
+  .player { border-top: 1px solid var(--line); padding: 8px 0; }
+  .player:first-child { border-top: none; }
+  .pname { font-weight: bold; }
+  .tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 8px; margin-left: 4px; vertical-align: middle; border: 1px solid var(--line); color: var(--sub); }
+  .tag.p { border-color: #c77; color: #a33; }
+  .tag.f { border-color: #79c; color: #357; }
+  .tag.genius { border-color: var(--gold); color: var(--gold); }
+  .tag.reinc { border-color: var(--special); color: var(--special); }
+  .tag.ret { background: #eee; }
+  .abil { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 4px; }
+  .abil div { background: #f6f2e9; border-radius: 4px; padding: 2px 4px; text-align: center; font-size: 12px; color: var(--sub); }
+  .abil b { display: block; font-size: 16px; color: var(--ink); }
+  .v80 b { color: #c0392b; } .v60 b { color: #d35400; } .v40 b { color: #222; } .v0 b { color: #999; }
+  .small { font-size: 12px; color: var(--sub); }
+  select { width: 100%; padding: 8px; font-size: 15px; margin-top: 6px; border-radius: 6px; border: 1px solid var(--line); background: #fff; }
+  details summary { cursor: pointer; padding: 6px 0; }
+  .hist { font-size: 12px; color: #444; margin: 4px 0 0 0; padding-left: 16px; }
+  .hist li { margin: 1px 0; }
+  table.snap { border-collapse: collapse; font-size: 12px; margin-top: 4px; width: 100%; }
+  table.snap th, table.snap td { border: 1px solid var(--line); padding: 2px 4px; text-align: center; }
+  .reveal { margin-top: 6px; padding: 6px; border: 1px dashed var(--special); color: var(--special); font-weight: bold; border-radius: 6px; font-size: 14px; }
+  .impress { font-size: 13px; color: #555; margin-top: 2px; }
+  input[type=text] { padding: 8px; font-size: 15px; width: 100%; border: 1px solid var(--line); border-radius: 6px; }
+  .filters { display: flex; gap: 6px; flex-wrap: wrap; }
+  .filters button { padding: 4px 10px; border: 1px solid var(--line); background: #fff; border-radius: 14px; font-size: 13px; }
+  .filters button.on { background: var(--ink); color: #fff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 id="title">野球ガチャ育成</h1>
+    <div class="meta" id="meta"></div>
+    <nav>
+      <button data-tab="home" class="on">ホーム</button>
+      <button data-tab="roster">選手一覧</button>
+      <button data-tab="alumni">名鑑</button>
+      <button data-tab="settings">設定</button>
+    </nav>
+  </header>
+  <main id="main"></main>
+</div>
+
+<script src="config.js"></script>
+<script src="logic.js"></script>
+<script>
+(function () {
+  'use strict';
+  const { CONFIG, Core, HighSchool } = window.Logic;
+  let state = null;
+  let tab = 'home';
+  let alumniFilter = 'all';
+  const draftPolicies = {}; // 入学時に選択中の方針
+
+  // ---------- セーブ / ロード ----------
+  function save() {
+    try { localStorage.setItem(CONFIG.saveKey, JSON.stringify(state)); } catch (e) { /* 保存できなくても遊べる */ }
+  }
+  function load() {
+    try {
+      const raw = localStorage.getItem(CONFIG.saveKey);
+      if (raw) return JSON.parse(raw);
+    } catch (e) { /* 壊れたセーブは無視 */ }
+    return null;
+  }
+  function startNew(seed) {
+    state = HighSchool.newGame(seed !== '' && seed != null ? { seed: Number(seed) } : {});
+    for (const k of Object.keys(draftPolicies)) delete draftPolicies[k];
+    save();
+  }
+
+  // ---------- 表示ヘルパー ----------
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+  function vClass(v) { return v >= 80 ? 'v80' : v >= 60 ? 'v60' : v >= 40 ? 'v40' : 'v0'; }
+  function abilGrid(pos, abilities, base) {
+    return '<div class="abil">' + Core.ABILITIES[pos].map((a) => {
+      const v = abilities[a.key];
+      const diff = base ? v - base[a.key] : 0;
+      return '<div class="' + vClass(v) + '">' + a.label + '<b>' + v + '</b>'
+        + (base ? '<span class="small">' + (diff > 0 ? '+' + diff : '±0') + '</span>' : '') + '</div>';
+    }).join('') + '</div>';
+  }
+  function posTag(pos) { return '<span class="tag ' + (pos === 'pitcher' ? 'p' : 'f') + '">' + Core.POSITION_LABEL[pos] + '</span>'; }
+  function reincTag(p) {
+    return p.reincarnation && (p.reincarnationRevealed || p.finalAbilities)
+      ? '<span class="tag reinc">転生:' + esc(Core.reincarnationName(p.reincarnation)) + '</span>' : '';
+  }
+  function histList(history) {
+    return '<ul class="hist">' + history.map((h) =>
+      '<li>' + HighSchool.formatYear(h.y) + '(' + h.g + '年) ' + esc(h.ev) + (h.res ? ':' + esc(h.res) : '')
+      + (h.d && Object.keys(h.d).length ? ' <span class="small">' + esc(Core.formatDelta(h.d)) + '</span>' : '') + '</li>'
+    ).join('') + '</ul>';
+  }
+  // current を渡すと末尾に「現在」の行を付ける
+  function snapTable(pos, snaps, current) {
+    if (!snaps || !snaps.length) return '';
+    const cols = Core.ABILITIES[pos];
+    let html = '<table class="snap"><tr><th>年</th>' + cols.map((c) => '<th>' + c.label + '</th>').join('') + '<th>総合</th></tr>';
+    snaps.forEach((s, i) => {
+      const label = i === 0 ? '入学時' : HighSchool.formatYear(s.y) + '末';
+      html += '<tr><td>' + label + '</td>' + cols.map((c) => '<td>' + s.a[c.key] + '</td>').join('')
+        + '<td>' + Core.overall(s.a) + '</td></tr>';
+    });
+    if (current) {
+      html += '<tr><td>現在</td>' + cols.map((c) => '<td>' + current[c.key] + '</td>').join('')
+        + '<td>' + Core.overall(current) + '</td></tr>';
+    }
+    return html + '</table>';
+  }
+  function eventCard(ev) {
+    return '<div class="card"><h2>' + esc(ev.title) + '</h2><div class="lines">' + ev.lines.map((l) => {
+      const o = typeof l === 'string' ? { text: l, cls: '' } : l;
+      return '<div class="' + (o.cls || '') + '">' + esc(o.text) + '</div>';
+    }).join('') + '</div></div>';
+  }
+  // 入学時の第一印象(固定の文章リストから選ぶ)
+  function impression(p) {
+    const ov = Core.overall(p.abilities);
+    const mx = Core.maxAbility(p.abilities);
+    const pool = ov >= 45 ? ['即戦力の予感がする。', 'いきなり上級生に混ざっても見劣りしない。', '今年の目玉かもしれない。']
+      : mx >= 45 ? ['光るものを1つ持っている。', '尖った長所がある。', '何か一芸がありそうだ。']
+      : ov >= 28 ? ['素直そうな新入生だ。', 'まだ線が細いが伸びしろはある。', '平凡だが真面目に練習しそう。']
+      : ['正直、まだまだこれから。', '体力づくりから始めよう。', '入部動機は「なんとなく」らしい。'];
+    return pool[p.id % pool.length];
+  }
+
+  // ---------- 画面 ----------
+  function renderHeader() {
+    document.getElementById('title').textContent = CONFIG.schoolName + ' 野球部';
+    const stage = HighSchool.currentStage(state);
+    const active = state.players.filter((p) => !p.retired).length;
+    document.getElementById('meta').innerHTML = '<b>' + HighSchool.formatYear(state.year) + '</b> ・ ' + esc(stage.label)
+      + ' ・ チームの強さ <b>' + HighSchool.teamStrength(state) + '</b> ・ 部員 ' + active + '人';
+  }
+
+  function renderCalendar() {
+    return '<div class="cal">' + HighSchool.STAGES.map((s, i) =>
+      '<span class="' + (i < state.stageIndex ? 'done' : i === state.stageIndex ? 'now' : '') + '">' + esc(s.label) + '</span>'
+    ).join('') + '</div>';
+  }
+
+  function renderEnrollment() {
+    let html = '<div class="card"><h2>🌸 ' + HighSchool.formatYear(state.year) + ' 4月 新入生がやってきた!</h2>'
+      + '<div class="small">新入生ごとに育成方針を選んでください。特化:選んだ能力が伸びやすく、他はほとんど伸びない。バランス:全体が少しずつ伸びる。</div>';
+    for (const p of state.pendingRecruits) {
+      if (!draftPolicies[p.id]) draftPolicies[p.id] = 'balance';
+      html += '<div class="player"><span class="pname">' + esc(p.name) + '</span>' + posTag(p.position)
+        + ' <span class="small">総合 ' + Core.overall(p.abilities) + '</span>'
+        + '<div class="impress">' + esc(impression(p)) + '</div>'
+        + abilGrid(p.position, p.abilities);
+      if (p.reincarnation && p.reincarnationRevealed) {
+        html += '<div class="reveal">……!? この新入生、ただ者ではない。<br>【' + esc(Core.reincarnationName(p.reincarnation)) + '】の転生者だ!</div>';
+      }
+      html += '<select data-pid="' + p.id + '">' + Core.POLICIES[p.position].map((pol) =>
+        '<option value="' + pol.key + '"' + (draftPolicies[p.id] === pol.key ? ' selected' : '') + '>' + pol.label + '</option>'
+      ).join('') + '</select></div>';
+    }
+    html += '</div><div class="btns"><button class="btn" id="btnEnroll">この方針で入部させる</button></div>';
+    return html;
+  }
+
+  function renderHome() {
+    let html = renderCalendar();
+    const evs = state.lastEvents || [];
+    if (state.awaiting === 'enrollment') {
+      for (const ev of evs) html += eventCard(ev);
+      html += renderEnrollment();
+    } else {
+      html += '<div class="btns"><button class="btn" id="btnNext">次へ進む</button>'
+        + '<button class="btn sub" id="btnApril">次の4月まで</button></div>';
+      for (const ev of evs) html += eventCard(ev);
+    }
+    const recent = state.log.slice(-8).reverse();
+    html += '<div class="card"><h2>最近の出来事</h2><div class="lines">'
+      + recent.map((l) => '<div>' + HighSchool.formatYear(l.y) + ':' + esc(l.t) + '</div>').join('') + '</div></div>';
+    return html;
+  }
+
+  function playerCard(p) {
+    const tags = posTag(p.position) + reincTag(p) + (p.retired ? '<span class="tag ret">引退</span>' : '');
+    return '<div class="player"><details><summary><span class="pname">' + esc(p.name) + '</span> '
+      + '<span class="small">' + p.grade + '年</span>' + tags
+      + ' <span class="small">総合 ' + Core.overall(p.abilities) + ' / ' + esc(Core.policyLabel(p.position, p.policy)) + '</span></summary>'
+      + '<div class="small">試合 ' + p.record.games + '(' + p.record.wins + '勝)</div>'
+      + snapTable(p.position, p.snapshots, p.abilities)
+      + histList(p.history) + '</details>'
+      + abilGrid(p.position, p.abilities) + '</div>';
+  }
+
+  function renderRoster() {
+    let html = '';
+    for (const g of [3, 2, 1]) {
+      const list = state.players.filter((p) => p.grade === g)
+        .sort((a, b) => (a.position === b.position ? Core.overall(b.abilities) - Core.overall(a.abilities) : a.position === 'pitcher' ? -1 : 1));
+      html += '<div class="card"><h2>' + g + '年生(' + list.length + '人)</h2>';
+      html += list.length ? list.map(playerCard).join('') : '<div class="small">いません</div>';
+      html += '</div>';
+    }
+    html += '<div class="small">名前をタップすると、年ごとの能力と成長履歴が見られます。隠れた才能は卒業まで分かりません。</div>';
+    return html;
+  }
+
+  function renderAlumni() {
+    const filters = [['all', 'すべて'], ['genius', '天才'], ['reinc', '転生'], ['pro', 'プロ入り']];
+    let list = state.alumni.slice().reverse();
+    if (alumniFilter === 'genius') list = list.filter((a) => a.talent === 'genius');
+    if (alumniFilter === 'reinc') list = list.filter((a) => a.reincarnation);
+    if (alumniFilter === 'pro') list = list.filter((a) => a.career === CONFIG.career.paths[0].label);
+    let html = '<div class="card"><h2>名鑑(卒業生 ' + state.alumni.length + '人)</h2><div class="filters">'
+      + filters.map((f) => '<button data-af="' + f[0] + '" class="' + (alumniFilter === f[0] ? 'on' : '') + '">' + f[1] + '</button>').join('')
+      + '</div></div>';
+    if (!list.length) return html + '<div class="card small">まだ記録がありません。</div>';
+    let lastYear = null;
+    html += '<div class="card">';
+    for (const a of list) {
+      if (a.graduatedYear !== lastYear) {
+        html += '<h3>' + HighSchool.formatYear(a.graduatedYear) + ' 卒業</h3>';
+        lastYear = a.graduatedYear;
+      }
+      const talent = a.talent === 'genius'
+        ? '<span class="tag genius">' + (a.geniusBust ? '天才(開花せず)' : '天才') + '</span>' : '';
+      html += '<div class="player"><details><summary><span class="pname">' + esc(a.name) + '</span>'
+        + posTag(a.position) + talent + reincTag(a)
+        + ' <span class="small">総合 ' + a.overall + ' → ' + esc(a.career) + '</span></summary>'
+        + '<div class="small">育成方針:' + esc(Core.policyLabel(a.position, a.policy))
+        + ' / 才能:' + Core.TALENT_LABEL[a.talent] + (a.geniusBust ? '(開花せず)' : '')
+        + ' / 転生の型:' + esc(Core.reincarnationName(a.reincarnation))
+        + (a.origin === 'initial' ? ' / 就任時の部員' : '') + '</div>'
+        + '<div class="small">成績:試合 ' + a.record.games + '(' + a.record.wins + '勝)'
+        + (a.record.titles.length ? ' / ' + esc(a.record.titles.join('、')) : '') + '</div>'
+        + snapTable(a.position, a.snapshots)
+        + histList(a.history) + '</details>'
+        + abilGrid(a.position, a.finalAbilities, a.initialAbilities) + '</div>';
+    }
+    return html + '</div>';
+  }
+
+  function renderSettings() {
+    return '<div class="card"><h2>ゲーム情報</h2><div class="small">シード:' + state.seed
+      + '<br>転生の型の判明:' + (CONFIG.reincarnationReveal === 'enrollment' ? '入学時' : '最初の合宿')
+      + '(config.js の reincarnationReveal で切替)<br>セーブは自動(このブラウザの localStorage)</div></div>'
+      + '<div class="card"><h2>リセット</h2><div class="small">シードを入れると同じ展開を再現できます(空欄ならランダム)。</div>'
+      + '<input type="text" id="seedInput" inputmode="numeric" placeholder="シード(任意の数字)">'
+      + '<div class="btns"><button class="btn danger" id="btnReset">セーブを消して最初から</button></div></div>';
+  }
+
+  function render() {
+    renderHeader();
+    document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
+    const main = document.getElementById('main');
+    main.innerHTML = tab === 'home' ? renderHome() : tab === 'roster' ? renderRoster()
+      : tab === 'alumni' ? renderAlumni() : renderSettings();
+  }
+
+  // ---------- 操作 ----------
+  document.querySelector('nav').addEventListener('click', (e) => {
+    const t = e.target.dataset && e.target.dataset.tab;
+    if (t) { tab = t; render(); window.scrollTo(0, 0); }
+  });
+  document.getElementById('main').addEventListener('change', (e) => {
+    if (e.target.dataset.pid) draftPolicies[e.target.dataset.pid] = e.target.value;
+  });
+  document.getElementById('main').addEventListener('click', (e) => {
+    const id = e.target.id;
+    if (id === 'btnEnroll') {
+      HighSchool.confirmEnrollment(state, draftPolicies);
+      for (const k of Object.keys(draftPolicies)) delete draftPolicies[k];
+      save(); render(); window.scrollTo(0, 0);
+    } else if (id === 'btnNext') {
+      HighSchool.advanceToNextStop(state);
+      save(); render(); window.scrollTo(0, 0);
+    } else if (id === 'btnApril') {
+      HighSchool.advanceToApril(state);
+      save(); render(); window.scrollTo(0, 0);
+    } else if (id === 'btnReset') {
+      if (confirm('セーブデータを消して、最初からやり直しますか?')) {
+        startNew(document.getElementById('seedInput').value.trim());
+        tab = 'home'; render();
+      }
+    } else if (e.target.dataset && e.target.dataset.af) {
+      alumniFilter = e.target.dataset.af; render();
+    }
+  });
+
+  state = load();
+  if (!state || state.version !== 1) startNew();
+  render();
+})();
+</script>
+</body>
+</html>
