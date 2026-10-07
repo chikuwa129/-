@@ -11,10 +11,14 @@
 | `logic.js` | ゲームロジック(DOM 非依存)。`Core`(選手生成・成長・記録の共通部分)と `HighSchool`(高校版の進行)に分かれている |
 | `config.js` | 確率・補正値などの設定(すべて仮の値) |
 | `sim.js` | Node.js で画面なしに何十年分も自動実行する検証用スクリプト |
+| `play.html` | config.js と logic.js を埋め込んだ単一ファイル版(プレビュー用)。`build-play.js` で生成 |
+| `build-play.js` | `node build-play.js` で play.html を作り直す |
 
 ## 遊び方
 
-`index.html` をブラウザで開くだけ(ダブルクリックで可)。セーブは自動で localStorage に保存されます。
+`index.html` をブラウザで開くだけ(ダブルクリックで可。config.js・logic.js と同じフォルダに置くこと)。
+ファイル1つで開きたい場合やプレビュー画面では `play.html` を使います。config.js・logic.js・index.html を直したら `node build-play.js` で作り直してください。
+セーブは自動で localStorage に保存されます。
 
 - 4月:新入生(人数はチームの強さで3〜12人)の育成方針を選んで「この方針で入部させる」。「おまかせ」で全員の方針を自動で決められる
 - 「次へ進む」:次の止まる場面(合宿・大会・卒業)まで進む

@@ -101,6 +101,13 @@
 <script>
 (function () {
   'use strict';
+  if (!window.Logic) {
+    // config.js / logic.js を読み込めなかった(プレビューなどで単体表示された)場合
+    document.getElementById('main').innerHTML = '<div class="card"><h2>読み込みエラー</h2>'
+      + '<div class="small">config.js と logic.js を読み込めませんでした。index.html と同じフォルダに置いて開くか、'
+      + '単一ファイル版の play.html を開いてください。</div></div>';
+    return;
+  }
   const { CONFIG, Core, HighSchool } = window.Logic;
   let state = null;
   let tab = 'home';
