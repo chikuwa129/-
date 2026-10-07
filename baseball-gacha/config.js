@@ -11,7 +11,7 @@
     // 保存キーは「ゲーム名_」で始める(リセットでまとめて消せるように)。
     //   ゲームのセーブ:bbgacha_v{saveVersion}_save / 調整画面:bbgacha_tune_*
     storagePrefix: 'bbgacha_',
-    saveVersion: 8,                // セーブデータの形式。違うバージョンのセーブは初期化する
+    saveVersion: 9,                // セーブデータの形式。違うバージョンのセーブは初期化する
     logLimit: 300,                 // 出来事ログの保存件数
 
     // ---- カレンダー(4月始まり) ----
@@ -64,8 +64,8 @@
     positionDeficit: {
       P:  { min: 2, mult: 2.5 },
       C:  { min: 1, mult: 3.0 },
-      IF: { min: 4, mult: 1.5 },
-      OF: { min: 3, mult: 1.5 },
+      IF: { min: 6, mult: 1.5 },   // 1.6z:4 → 6(3年生の引退後に内野の本職が足りず、本職外起用が増えるため)
+      OF: { min: 4, mult: 1.5 },   // 1.6z:3 → 4(同上)
     },
     initialComposition: { P: [2, 3], C: [1, 2], IF: [4, 5], OF: [3, 4] },
 
@@ -266,7 +266,8 @@
     // ---- スタメン・チームの強さ ----
     lineup: { P: 1, C: 1, IF: 4, OF: 3 },
     lineupOrder: ['C', 'P', 'IF', 'OF'],
-    primaryBonus: 20,              // 編成時、本職の選手を優先するための加点(強さには影響しない)
+    offPositionStarGap: 0,         // 控えの選手の総合値が、枠の本職の選手よりこれ以上高ければ本職外で起用してよい(0 = 無効)
+    homeSummaryPosition: 'bottom', // ホームの月のまとめの位置('bottom' 下 / 'top' 上。表示だけ)
     teamStrength: {
       pitchWeight: 0.35,
       fieldWeight: 0.53,
@@ -413,6 +414,9 @@
       repNormalShare: { min: 0.55, label: 'x=1 でも通常層(80〜120)が新入生に占める割合', pct: true, tune: 'reputation.topShareMax / reputation.talentRateMaxMult' },
       repTalentMult: { min: 1.7, max: 2.0, label: 'x=1 の天才・転生の出現率(基準の何倍)', tune: 'reputation.talentRateMaxMult' },
       repCapYears:  { max: 0.20, label: '評判が x=1 に張り付いた年の割合', pct: true, tune: 'reputation.rate / reputation.baseline' },
+      lineupViolations: { max: 0, label: 'スタメン編成の不変条件の違反(件数)', tune: 'offPositionStarGap(0 で違反は起きない)/ lineupOrder' },
+      offPositionShare: { max: 0.08, label: '本職外起用の割合(スタメンの延べ人数に占める割合)', pct: true, tune: 'conversion.minimum / newcomers.*(部員数)' },
+      top3Benched: { max: 0.10, label: '総合値の上位3人のうち、その月にスタメンに入っていない割合', pct: true, tune: 'offPositionStarGap / conversion.minimum' },
       storageShare: { max: 0.5, label: '50年プレイした場合の保存容量(上限に対する割合)', pct: true, tune: 'visual.keepMonthlyYears / logLimit' },
     },
 
@@ -465,6 +469,7 @@
     { id: 'lead', label: '指導力' },
     { id: 'label', label: 'ラベルと世代の基準' },
     { id: 'strength', label: 'チームの強さ・他校の強さ' },
+    { id: 'lineup', label: 'スタメン編成' },
     { id: 'tourney', label: '大会' },
     { id: 'visual', label: '見える化' },
     { id: 'disp', label: '表示' },
@@ -581,6 +586,8 @@
     ['policyScreen.midWeight', 'policy', '方針の選択肢で ○ を付ける重み', true],
     ['reviewShowStats', 'policy', '見直し画面に、項目別の現在値の1行を出す(オン/オフ)', true],
     ['policyOptionHints', 'policy', '方針の選択肢に、伸びやすい項目(◎○)を併記する(オン/オフ)', true],
+    ['offPositionStarGap', 'lineup', '控えの選手を本職外で起用してよい総合値の差(0 = 無効。適性が本職の選手以上のときだけ)'],
+    ['homeSummaryPosition', 'disp', 'ホームの月のまとめの位置(bottom = 下 / top = 上)', true, ['bottom', 'top']],
     ['preHistory.years', 'pre', '新規開始時に内部で再現する過去の年数'],
     ['reputation.baseline', 'rep', '評判の初期値・基準(これ以下は新入生の質に影響しない)'],
     ['reputation.rate', 'rep', '評判の更新の速さ(今年の得点の割合)'],
@@ -595,7 +602,7 @@
     ['reputation.trend.0', 'rep', '「新入生の傾向」がやや良になる x', true],
     ['reputation.trend.1', 'rep', '「新入生の傾向」が良になる x', true],
     ['reputation.trend.2', 'rep', '「新入生の傾向」が非常に良になる x', true],
-  ].map((x) => ({ path: x[0], group: x[1], desc: x[2], displayOnly: !!x[3] }));
+  ].map((x) => ({ path: x[0], group: x[1], desc: x[2], displayOnly: !!x[3], options: x[4] || null }));
 
   if (typeof module === 'object' && module.exports) module.exports = CONFIG;
   else root.CONFIG = CONFIG;

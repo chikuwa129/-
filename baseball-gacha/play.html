@@ -184,6 +184,7 @@
   .ml3 div { font-size: 13px; padding: 1px 0; }
   .col.flat > .colbody { padding-left: 0; border-left: none; margin-left: 0; }
   .pnamebtn { font-size: 15px; }
+  .newmark { font-size: 11px; color: #c0392b; font-weight: bold; margin-left: 4px; white-space: nowrap; }
   .statline { font-size: 11px; color: #8a8378; line-height: 1.5; margin-top: 1px; }
   .statline span { white-space: nowrap; }
   .statline .gold { color: #b8860b; font-weight: bold; }
@@ -228,7 +229,7 @@
     // 保存キーは「ゲーム名_」で始める(リセットでまとめて消せるように)。
     //   ゲームのセーブ:bbgacha_v{saveVersion}_save / 調整画面:bbgacha_tune_*
     storagePrefix: 'bbgacha_',
-    saveVersion: 8,                // セーブデータの形式。違うバージョンのセーブは初期化する
+    saveVersion: 9,                // セーブデータの形式。違うバージョンのセーブは初期化する
     logLimit: 300,                 // 出来事ログの保存件数
 
     // ---- カレンダー(4月始まり) ----
@@ -281,8 +282,8 @@
     positionDeficit: {
       P:  { min: 2, mult: 2.5 },
       C:  { min: 1, mult: 3.0 },
-      IF: { min: 4, mult: 1.5 },
-      OF: { min: 3, mult: 1.5 },
+      IF: { min: 6, mult: 1.5 },   // 1.6z:4 → 6(3年生の引退後に内野の本職が足りず、本職外起用が増えるため)
+      OF: { min: 4, mult: 1.5 },   // 1.6z:3 → 4(同上)
     },
     initialComposition: { P: [2, 3], C: [1, 2], IF: [4, 5], OF: [3, 4] },
 
@@ -483,7 +484,8 @@
     // ---- スタメン・チームの強さ ----
     lineup: { P: 1, C: 1, IF: 4, OF: 3 },
     lineupOrder: ['C', 'P', 'IF', 'OF'],
-    primaryBonus: 20,              // 編成時、本職の選手を優先するための加点(強さには影響しない)
+    offPositionStarGap: 0,         // 控えの選手の総合値が、枠の本職の選手よりこれ以上高ければ本職外で起用してよい(0 = 無効)
+    homeSummaryPosition: 'bottom', // ホームの月のまとめの位置('bottom' 下 / 'top' 上。表示だけ)
     teamStrength: {
       pitchWeight: 0.35,
       fieldWeight: 0.53,
@@ -630,6 +632,9 @@
       repNormalShare: { min: 0.55, label: 'x=1 でも通常層(80〜120)が新入生に占める割合', pct: true, tune: 'reputation.topShareMax / reputation.talentRateMaxMult' },
       repTalentMult: { min: 1.7, max: 2.0, label: 'x=1 の天才・転生の出現率(基準の何倍)', tune: 'reputation.talentRateMaxMult' },
       repCapYears:  { max: 0.20, label: '評判が x=1 に張り付いた年の割合', pct: true, tune: 'reputation.rate / reputation.baseline' },
+      lineupViolations: { max: 0, label: 'スタメン編成の不変条件の違反(件数)', tune: 'offPositionStarGap(0 で違反は起きない)/ lineupOrder' },
+      offPositionShare: { max: 0.08, label: '本職外起用の割合(スタメンの延べ人数に占める割合)', pct: true, tune: 'conversion.minimum / newcomers.*(部員数)' },
+      top3Benched: { max: 0.10, label: '総合値の上位3人のうち、その月にスタメンに入っていない割合', pct: true, tune: 'offPositionStarGap / conversion.minimum' },
       storageShare: { max: 0.5, label: '50年プレイした場合の保存容量(上限に対する割合)', pct: true, tune: 'visual.keepMonthlyYears / logLimit' },
     },
 
@@ -682,6 +687,7 @@
     { id: 'lead', label: '指導力' },
     { id: 'label', label: 'ラベルと世代の基準' },
     { id: 'strength', label: 'チームの強さ・他校の強さ' },
+    { id: 'lineup', label: 'スタメン編成' },
     { id: 'tourney', label: '大会' },
     { id: 'visual', label: '見える化' },
     { id: 'disp', label: '表示' },
@@ -798,6 +804,8 @@
     ['policyScreen.midWeight', 'policy', '方針の選択肢で ○ を付ける重み', true],
     ['reviewShowStats', 'policy', '見直し画面に、項目別の現在値の1行を出す(オン/オフ)', true],
     ['policyOptionHints', 'policy', '方針の選択肢に、伸びやすい項目(◎○)を併記する(オン/オフ)', true],
+    ['offPositionStarGap', 'lineup', '控えの選手を本職外で起用してよい総合値の差(0 = 無効。適性が本職の選手以上のときだけ)'],
+    ['homeSummaryPosition', 'disp', 'ホームの月のまとめの位置(bottom = 下 / top = 上)', true, ['bottom', 'top']],
     ['preHistory.years', 'pre', '新規開始時に内部で再現する過去の年数'],
     ['reputation.baseline', 'rep', '評判の初期値・基準(これ以下は新入生の質に影響しない)'],
     ['reputation.rate', 'rep', '評判の更新の速さ(今年の得点の割合)'],
@@ -812,7 +820,7 @@
     ['reputation.trend.0', 'rep', '「新入生の傾向」がやや良になる x', true],
     ['reputation.trend.1', 'rep', '「新入生の傾向」が良になる x', true],
     ['reputation.trend.2', 'rep', '「新入生の傾向」が非常に良になる x', true],
-  ].map((x) => ({ path: x[0], group: x[1], desc: x[2], displayOnly: !!x[3] }));
+  ].map((x) => ({ path: x[0], group: x[1], desc: x[2], displayOnly: !!x[3], options: x[4] || null }));
 
   if (typeof module === 'object' && module.exports) module.exports = CONFIG;
   else root.CONFIG = CONFIG;
@@ -823,7 +831,7 @@
 // このファイルは tools/build-benchmark.js が生成します。直接編集しないこと
 // 世代の基準:学年-月 ごとの総合値の分布(p50 / p90 / p97 / p99 / p99.9)
 (function (root) {
-  const BENCHMARK = {"hash":"3017dc72","runs":{"seeds":20,"years":50,"burnIn":3},"coachLv":3,"rows":{"3-4":{"n":5428,"p50":259,"p90":319,"p97":455,"p99":508,"p999":571},"2-4":{"n":5459,"p50":185,"p90":240,"p97":348,"p99":393,"p999":455},"1-4":{"n":5456,"p50":105,"p90":151,"p97":220,"p99":249,"p999":299},"3-5":{"n":5428,"p50":266,"p90":324,"p97":463,"p99":517,"p999":579},"2-5":{"n":5459,"p50":191,"p90":246,"p97":357,"p99":402,"p999":464},"1-5":{"n":5456,"p50":109,"p90":156,"p97":230,"p99":259,"p999":308},"3-6":{"n":5428,"p50":275,"p90":331,"p97":478,"p99":531,"p999":591},"2-6":{"n":5459,"p50":200,"p90":256,"p97":372,"p99":417,"p999":486},"1-6":{"n":5456,"p50":118,"p90":167,"p97":246,"p99":281,"p999":330},"3-7":{"n":5428,"p50":278,"p90":333,"p97":482,"p99":536,"p999":593},"2-7":{"n":5459,"p50":205,"p90":262,"p97":382,"p99":426,"p999":490},"1-7":{"n":5456,"p50":123,"p90":172,"p97":256,"p99":294,"p999":347},"3-8":{"n":5428,"p50":281,"p90":336,"p97":484,"p99":539,"p999":595},"2-8":{"n":5459,"p50":211,"p90":269,"p97":391,"p99":436,"p999":503},"1-8":{"n":5456,"p50":130,"p90":181,"p97":268,"p99":309,"p999":365},"3-9":{"n":5428,"p50":283,"p90":338,"p97":488,"p99":542,"p999":602},"2-9":{"n":5459,"p50":217,"p90":275,"p97":399,"p99":443,"p999":513},"1-9":{"n":5456,"p50":135,"p90":188,"p97":277,"p99":320,"p999":378},"3-10":{"n":5428,"p50":284,"p90":340,"p97":490,"p99":545,"p999":608},"2-10":{"n":5459,"p50":222,"p90":282,"p97":407,"p99":452,"p999":526},"1-10":{"n":5456,"p50":143,"p90":197,"p97":287,"p99":329,"p999":387},"3-11":{"n":5428,"p50":286,"p90":341,"p97":492,"p99":549,"p999":608},"2-11":{"n":5459,"p50":229,"p90":289,"p97":415,"p99":459,"p999":531},"1-11":{"n":5456,"p50":151,"p90":205,"p97":298,"p99":342,"p999":405},"3-12":{"n":5428,"p50":286,"p90":342,"p97":493,"p99":551,"p999":609},"2-12":{"n":5459,"p50":240,"p90":301,"p97":431,"p99":480,"p999":552},"1-12":{"n":5456,"p50":166,"p90":219,"p97":316,"p99":361,"p999":423},"3-1":{"n":5428,"p50":287,"p90":342,"p97":498,"p99":551,"p999":609},"2-1":{"n":5459,"p50":244,"p90":305,"p97":435,"p99":488,"p999":557},"1-1":{"n":5456,"p50":170,"p90":224,"p97":324,"p99":367,"p999":429},"3-2":{"n":5428,"p50":288,"p90":343,"p97":498,"p99":552,"p999":609},"2-2":{"n":5459,"p50":251,"p90":312,"p97":443,"p99":496,"p999":563},"1-2":{"n":5456,"p50":177,"p90":232,"p97":332,"p99":381,"p999":442},"3-3":{"n":5428,"p50":289,"p90":344,"p97":498,"p99":553,"p999":609},"2-3":{"n":5459,"p50":256,"p90":316,"p97":451,"p99":504,"p999":567},"1-3":{"n":5456,"p50":182,"p90":237,"p97":342,"p99":389,"p999":450}}};
+  const BENCHMARK = {"hash":"b7fed6fd","runs":{"seeds":20,"years":50,"burnIn":3},"coachLv":3,"rows":{"3-4":{"n":5338,"p50":260,"p90":318,"p97":447,"p99":502,"p999":561},"2-4":{"n":5350,"p50":185,"p90":238,"p97":345,"p99":381,"p999":441},"1-4":{"n":5340,"p50":105,"p90":152,"p97":215,"p99":249,"p999":296},"3-5":{"n":5338,"p50":266,"p90":324,"p97":456,"p99":509,"p999":568},"2-5":{"n":5350,"p50":191,"p90":245,"p97":352,"p99":390,"p999":451},"1-5":{"n":5340,"p50":109,"p90":156,"p97":223,"p99":260,"p999":309},"3-6":{"n":5338,"p50":275,"p90":332,"p97":472,"p99":524,"p999":585},"2-6":{"n":5350,"p50":200,"p90":255,"p97":368,"p99":409,"p999":471},"1-6":{"n":5340,"p50":119,"p90":167,"p97":242,"p99":280,"p999":331},"3-7":{"n":5338,"p50":278,"p90":335,"p97":476,"p99":532,"p999":587},"2-7":{"n":5350,"p50":205,"p90":261,"p97":376,"p99":418,"p999":485},"1-7":{"n":5340,"p50":123,"p90":173,"p97":252,"p99":291,"p999":341},"3-8":{"n":5338,"p50":281,"p90":338,"p97":480,"p99":532,"p999":588},"2-8":{"n":5350,"p50":212,"p90":268,"p97":384,"p99":430,"p999":498},"1-8":{"n":5340,"p50":131,"p90":181,"p97":262,"p99":304,"p999":354},"3-9":{"n":5338,"p50":283,"p90":340,"p97":483,"p99":534,"p999":591},"2-9":{"n":5350,"p50":216,"p90":274,"p97":392,"p99":440,"p999":508},"1-9":{"n":5340,"p50":136,"p90":188,"p97":272,"p99":314,"p999":367},"3-10":{"n":5338,"p50":285,"p90":341,"p97":484,"p99":539,"p999":592},"2-10":{"n":5350,"p50":223,"p90":280,"p97":401,"p99":452,"p999":515},"1-10":{"n":5340,"p50":144,"p90":196,"p97":284,"p99":326,"p999":375},"3-11":{"n":5338,"p50":286,"p90":342,"p97":486,"p99":542,"p999":597},"2-11":{"n":5350,"p50":229,"p90":288,"p97":409,"p99":459,"p999":524},"1-11":{"n":5340,"p50":152,"p90":205,"p97":294,"p99":338,"p999":383},"3-12":{"n":5338,"p50":287,"p90":343,"p97":487,"p99":543,"p999":597},"2-12":{"n":5350,"p50":241,"p90":301,"p97":425,"p99":477,"p999":538},"1-12":{"n":5340,"p50":166,"p90":217,"p97":318,"p99":354,"p999":402},"3-1":{"n":5338,"p50":288,"p90":344,"p97":489,"p99":544,"p999":598},"2-1":{"n":5350,"p50":245,"p90":304,"p97":432,"p99":482,"p999":547},"1-1":{"n":5340,"p50":170,"p90":221,"p97":324,"p99":359,"p999":407},"3-2":{"n":5338,"p50":289,"p90":345,"p97":490,"p99":544,"p999":598},"2-2":{"n":5350,"p50":251,"p90":311,"p97":438,"p99":486,"p999":554},"1-2":{"n":5340,"p50":177,"p90":229,"p97":334,"p99":370,"p999":421},"3-3":{"n":5338,"p50":290,"p90":345,"p97":491,"p99":544,"p999":598},"2-3":{"n":5350,"p50":256,"p90":315,"p97":443,"p99":496,"p999":560},"1-3":{"n":5340,"p50":182,"p90":235,"p97":342,"p99":377,"p999":434}}};
   if (typeof module === 'object' && module.exports) module.exports = BENCHMARK;
   else root.BENCHMARK = BENCHMARK;
 })(typeof self !== 'undefined' ? self : this);
@@ -1515,26 +1523,63 @@
   }
 
   // ---------- スタメン編成・チームの強さ ----------
+  // 本職(守備区分)の人数が、必要人数に何人足りないか { P, C, IF, OF }
+  //   編成(本職外の起用が起きる条件)と、年度始めのコンバート(不足の判定)の両方で使う
+  function getPositionShortage(list, required) {
+    const c = countByPosition(list);
+    const out = {};
+    for (const pos of POSITIONS) out[pos] = Math.max(0, (required[pos] || 0) - c[pos]);
+    return out;
+  }
+  // スタメン編成:本職を先に決める
+  //   1) 区分ごと(捕手→投手→内野→外野)に、本職の選手を総合値の高い順に必要人数まで(判明した二刀流は投手枠で最優先)
+  //   2) 埋まらなかった枠だけ、残った選手から適性の高い順に補う(不足人数が多い区分から)
+  //   3) offPositionStarGap > 0 のときだけ、控えの選手を本職外で起用してよい(総合値の差と適性の条件つき)
   function buildLineup(players) {
     const avail = players.filter((p) => !p.retired && !p.excluded);
     const used = new Set();
+    const chosen = { P: [], C: [], IF: [], OF: [] };
+    const byRating = (a, b) => rating(b) - rating(a) || a.id - b.id;
+    for (const pos of CONFIG.lineupOrder) {
+      const prim = avail.filter((p) => p.position === pos && !used.has(p.id));
+      if (pos === 'P' && CONFIG.twoWay.alwaysStartAsPitcher) {
+        prim.sort((a, b) => (isTwoWayKnown(b) ? 1 : 0) - (isTwoWayKnown(a) ? 1 : 0) || byRating(a, b));
+      } else prim.sort(byRating);
+      for (const p of prim.slice(0, CONFIG.lineup[pos])) { chosen[pos].push(p); used.add(p.id); }
+    }
+    // 不足の補充(本職の投手が0人なら、適性の最も高い野手が登板する)
+    const short = getPositionShortage(avail, CONFIG.lineup);
+    const order = CONFIG.lineupOrder.slice().sort((a, b) => short[b] - short[a] || CONFIG.lineupOrder.indexOf(a) - CONFIG.lineupOrder.indexOf(b));
+    for (const pos of order) {
+      while (chosen[pos].length < CONFIG.lineup[pos]) {
+        const cands = avail.filter((p) => !used.has(p.id));
+        if (!cands.length) break;
+        cands.sort((a, b) => effectiveAptitude(b, pos) - effectiveAptitude(a, pos) || a.id - b.id);
+        chosen[pos].push(cands[0]);
+        used.add(cands[0].id);
+      }
+    }
+    // 例外:スター起用(初期値 0 = 無効)
+    const gap = CONFIG.offPositionStarGap;
+    if (gap > 0) {
+      const bench = avail.filter((p) => !used.has(p.id)).sort(byRating);
+      for (const b of bench) {
+        let best = null;
+        for (const pos of CONFIG.lineupOrder) {
+          if (pos === b.position) continue;
+          chosen[pos].forEach((q, i) => {
+            if (q.position !== pos) return;
+            if (rating(b) - rating(q) < gap || effectiveAptitude(b, pos) < effectiveAptitude(q, pos)) return;
+            if (!best || rating(q) < rating(best.q)) best = { pos: pos, i: i, q: q };
+          });
+        }
+        if (best) { chosen[best.pos][best.i] = b; used.add(b.id); used.delete(best.q.id); }
+      }
+    }
     const slots = [];
     for (const pos of CONFIG.lineupOrder) {
       for (let i = 0; i < CONFIG.lineup[pos]; i++) {
-        const cands = avail.filter((p) => !used.has(p.id));
-        let pool;
-        if (pos === 'P') {
-          const primary = cands.filter((p) => p.position === 'P');
-          const twoWays = CONFIG.twoWay.alwaysStartAsPitcher ? primary.filter(isTwoWayKnown) : [];
-          pool = twoWays.length ? twoWays : primary.length ? primary : cands;
-        } else {
-          const nonP = cands.filter((p) => p.position !== 'P');
-          pool = nonP.length ? nonP : cands;
-        }
-        const score = (p) => effectiveAptitude(p, pos) + (p.position === pos ? CONFIG.primaryBonus : 0);
-        pool.sort((a, b) => score(b) - score(a) || a.id - b.id);
-        const pl = pool[0] || null;
-        if (pl) used.add(pl.id);
+        const pl = chosen[pos][i] || null;
         slots.push({
           pos: pos,
           player: pl,
@@ -1545,6 +1590,29 @@
       }
     }
     return slots;
+  }
+
+  // 編成の確認:本職外の起用と、本職の控えが、不変条件を満たしているか(テストと sim.js 用)
+  //   違反1:本職外の起用が、その区分の本職が必要人数を満たしているのに起きた
+  //   違反2:本職の選手が控えなのに、その区分の枠が本職だけで埋まっていない(offPositionStarGap が 0 のとき)
+  function checkLineup(players, slots) {
+    const avail = players.filter((p) => !p.retired && !p.excluded);
+    const short = getPositionShortage(avail, CONFIG.lineup);
+    const inLineup = new Set(slots.filter((x) => x.player).map((x) => x.player.id));
+    const primFilled = { P: 0, C: 0, IF: 0, OF: 0 };
+    const oopByPos = { P: 0, C: 0, IF: 0, OF: 0 };
+    let violations = 0;
+    let oop = 0;
+    for (const x of slots) {
+      if (!x.player) continue;
+      if (x.player.position === x.pos) primFilled[x.pos]++;
+      else { oop++; oopByPos[x.pos]++; if (short[x.pos] === 0 && !(CONFIG.offPositionStarGap > 0)) violations++; }
+    }
+    if (!(CONFIG.offPositionStarGap > 0)) {
+      for (const p of avail) if (!inLineup.has(p.id) && primFilled[p.position] < CONFIG.lineup[p.position]) violations++;
+    }
+    const top3 = avail.filter((p) => !p.helper).sort((a, b) => rating(b) - rating(a) || a.id - b.id).slice(0, 3);
+    return { violations: violations, oop: oop, oopByPos: oopByPos, starters: inLineup.size, top3: top3.length, top3Out: top3.filter((p) => !inLineup.has(p.id)).length };
   }
 
   // 編成されたメンバーから強さを計算する(この関数1つで計算する)
@@ -1904,7 +1972,8 @@
   function benchmarkConfigHash() {
     const R = CONFIG.reputation;
     const src = JSON.stringify({ rating: CONFIG.rating, growth: CONFIG.growth, statCap: CONFIG.statCap, limitBreak: CONFIG.limitBreak, coach: CONFIG.baselineCoachLv,
-      rep: { baseline: R.baseline, topShareBase: R.topShareBase, topShareMax: R.topShareMax, talentRateMaxMult: R.talentRateMaxMult }, pre: CONFIG.preHistory });
+      rep: { baseline: R.baseline, topShareBase: R.topShareBase, topShareMax: R.topShareMax, talentRateMaxMult: R.talentRateMaxMult }, pre: CONFIG.preHistory,
+      lineup: { need: CONFIG.lineup, order: CONFIG.lineupOrder, starGap: CONFIG.offPositionStarGap, twoWayP: CONFIG.twoWay.alwaysStartAsPitcher } });
     let h = 0x811c9dc5;
     for (let i = 0; i < src.length; i++) {
       h ^= src.charCodeAt(i);
@@ -1981,6 +2050,8 @@
     decideCareer: decideCareer,
     makeAlumniRecord: makeAlumniRecord,
     buildLineup: buildLineup,
+    checkLineup: checkLineup,
+    getPositionShortage: getPositionShortage,
     evaluateLineup: evaluateLineup,
     calcTeamStrength: calcTeamStrength,
     getTeamPower: getTeamPower,
@@ -2095,6 +2166,16 @@
     }
     const tp = getTeamPower(state.players);
     const ref = opponentRef();
+    // スタメン編成の確認(sim.js と試し計算の目安に使う)
+    const ck = checkLineup(state.players, buildLineup(state.players));
+    const LC = state.stats.lineupCheck;
+    LC.months++;
+    LC.violations += ck.violations;
+    LC.oop += ck.oop;
+    LC.starters += ck.starters;
+    LC.top3 += ck.top3;
+    LC.top3Out += ck.top3Out;
+    if (ck.oop) { LC.oopMonths++; for (const k of POSITIONS) LC.oopByPos[k] += ck.oopByPos[k]; }
     state.powerLog.push({ s: serial, y: state.year, m: CAL[state.month].month, p: tp.power, st: tp.strength, pos: tp.byPos, oa: ref.avgPower, ot: ref.topPower });
     return serial;
   }
@@ -2268,7 +2349,8 @@
       policyReview: { reviewed: 0, changed: 0 },
       stops: 0,                // 「次のイベントまで」で止まった回数
       overCap: { n: 0, strengthDiff: 0, winDiff: 0 },
-      repByYear: [],           // 年度末の評判 { y, rep, x, score }
+      repByYear: [],
+      lineupCheck: { months: 0, violations: 0, oop: 0, starters: 0, top3: 0, top3Out: 0, oopMonths: 0, oopByPos: { P: 0, C: 0, IF: 0, OF: 0 } },   // スタメン編成の確認           // 年度末の評判 { y, rep, x, score }
       start: null,             // 開始時の2・3年生の総合値の平均 { g2, g3, rep }
       calib: [],               // 勝率予想の校正 [区間] = { n, w }
       upsets: 0,               // 番狂わせ
@@ -2430,6 +2512,7 @@
       nextId: 1,
       log: [],
       lastEvents: [],
+      summaryUnread: null,   // ホームの月のまとめが未読なら、その月の番号(開くか次の月に進むと消える)
       carryCards: [],        // 次の月のまとめに載せる結果(入学の結果など)
       monthNotices: [],
       prevSummerStrength: CONFIG.newcomers.strengthPivot,   // 前年夏のチームの強さ(新入生の人数に使う)
@@ -2558,7 +2641,7 @@
     const tried = new Set();
     let attempts = 0;
     for (const pos of CONFIG.lineupOrder) {
-      while (counts[pos] < CV.minimum[pos] && attempts < CV.maxPerYear) {
+      while (getPositionShortage(pool, CV.minimum)[pos] > 0 && attempts < CV.maxPerYear) {   // 不足の判定は編成と同じ関数
         const cands = pool.filter((p) => p.position !== pos && !p.twoWay && !tried.has(p.id)
           && counts[p.position] > CV.minimum[p.position]);
         if (!cands.length) break;
@@ -3313,7 +3396,8 @@
     overrides = overrides || {};
     for (const m of CONFIG.paramMeta) {
       const v = overrides[m.path];
-      const ok = (typeof v === 'number' && isFinite(v)) || (typeof v === 'boolean' && typeof getPath(DEFAULTS, m.path) === 'boolean');  // オン/オフの設定は真偽値
+      const ok = (typeof v === 'number' && isFinite(v)) || (typeof v === 'boolean' && typeof getPath(DEFAULTS, m.path) === 'boolean')  // オン/オフの設定は真偽値
+        || (typeof v === 'string' && m.options && m.options.indexOf(v) >= 0);                                                      // 選択肢の設定は文字列
       setPath(CONFIG, m.path, ok ? v : getPath(DEFAULTS, m.path));
     }
   }
@@ -3596,7 +3680,23 @@
       preHistoryMs: extra && extra.preMs != null ? extra.preMs : NaN,
       promisingUp: labels && labels.total ? labels.promising / labels.total : NaN,
       monsterUp: labels && labels.total ? labels.monster / labels.total : NaN,
-    }, analyzeVisual(states), analyzeStartAndRep(states), repSynthetic());
+    }, analyzeVisual(states), analyzeStartAndRep(states), repSynthetic(), analyzeLineup(states));
+  }
+  // スタメン編成の集計(不変条件の違反・本職外起用の割合・上位3人の控え)
+  function analyzeLineup(states) {
+    const t = { months: 0, violations: 0, oop: 0, starters: 0, top3: 0, top3Out: 0, oopMonths: 0, oopByPos: { P: 0, C: 0, IF: 0, OF: 0 } };
+    for (const s of states) {
+      const L = s.stats.lineupCheck;
+      if (!L) continue;
+      for (const k of Object.keys(t)) if (k !== 'oopByPos') t[k] += L[k];
+      for (const k of POSITIONS) t.oopByPos[k] += L.oopByPos[k];
+    }
+    return {
+      lineupViolations: t.months ? t.violations : NaN,
+      offPositionShare: t.starters ? t.oop / t.starters : NaN,
+      top3Benched: t.top3 ? t.top3Out / t.top3 : NaN,
+      lineupStats: t,
+    };
   }
   // 前史と評判の集計
   function analyzeStartAndRep(states) {
@@ -4168,8 +4268,16 @@
     return parts.join(' / ');
   }
   // 「次のイベントまで」などで進んだ月の表示。途中の月は1行、止まった月は最小表示(最大3行 + 詳しく)
-  function renderMonths(list) {
+  // part:'yearEnd' は年度末(3月)のまとめのカードだけ、'rest' はそれ以外(月のまとめと、大会などのカード)
+  function renderMonths(list, part) {
     if (!list.length) return '';
+    const isYE = (c) => c.type === 'yearEnd';
+    if (part === 'yearEnd') {
+      let ye = '';
+      list.forEach((m) => m.cards.forEach((c, i) => { if (isYE(c)) ye += eventCard(c, 'month:' + m.serial + ':c' + i + ':ye'); }));
+      return ye;
+    }
+    const keepCard = (c) => part !== 'rest' || !isYE(c);
     let html = '';
     const last = list[list.length - 1];
     const mid = list.slice(0, -1);
@@ -4193,7 +4301,8 @@
     }
     const imp = last.notices.filter((n) => n.importance >= 3).slice(0, 3);
     if (imp.length) rows.push('<div class="nt" style="color:var(--special)">' + imp.map((n) => esc(n.text)).join(' / ') + '</div>');
-    html += '<div class="card"><h2>' + esc(HighSchool.formatYear(last.year) + ' ' + last.label) + 'のまとめ</h2><div class="ml3">' + rows.slice(0, 3).join('') + '</div>';
+    const unread = state.summaryUnread != null && state.summaryUnread === last.serial;
+    html += '<div class="card"><h2>' + esc(HighSchool.formatYear(last.year) + ' ' + last.label) + 'のまとめ' + (unread ? ' <span class="newmark">●新着</span>' : '') + '</h2><div class="ml3">' + rows.slice(0, 3).join('') + '</div>';
     html += renderCollapsible(key, '<span class="small">' + esc(monthLine(last)) + '</span>', () => {
       let d = '';
       if (last.winDelta != null) {
@@ -4213,8 +4322,8 @@
       return d || '<div class="small">特になし</div>';
     });
     html += '</div>';
-    last.cards.forEach((c, i) => { html += eventCard(c, key + ':c' + i); });
-    mid.forEach((m, mi) => m.cards.forEach((c, i) => { html += eventCard(c, 'month:' + m.serial + ':c' + i + ':' + mi); }));
+    last.cards.forEach((c, i) => { if (keepCard(c)) html += eventCard(c, key + ':c' + i); });
+    mid.forEach((m, mi) => m.cards.forEach((c, i) => { if (keepCard(c)) html += eventCard(c, 'month:' + m.serial + ':c' + i + ':' + mi); }));
     return html;
   }
 
@@ -4583,10 +4692,15 @@
     html += '<div class="btns"><button class="btn" id="btnNextEvent">次のイベントまで</button></div>'
       + '<div class="btns"><button class="btn sub small" id="btnNextMonth">次の月へ</button>'
       + '<button class="btn sub small" id="btnApril">次の4月まで</button></div>';
-    html += renderPowerCard();
-    html += renderMonths(evs);
-    html += renderWatchCard();
+    // 並び:スタメン → チーム戦力 → 注目選手 → 月のまとめ → 最近の出来事(homeSummaryPosition が 'top' ならまとめは上)
+    //   年度末(3月)のまとめは、これまでどおりボタンの下に出す
+    const top = CONFIG.homeSummaryPosition === 'top';
+    html += renderMonths(evs, 'yearEnd');
+    if (top) html += renderMonths(evs, 'rest');
     html += '<div class="card"><h2>現在のスタメン</h2>' + lineupTable(HighSchool.lineup(state), null, true) + '</div>';
+    html += renderPowerCard();
+    html += renderWatchCard();
+    if (!top) html += renderMonths(evs, 'rest');
     const recent = state.log.slice(-10).reverse();
     html += '<div class="card">' + renderCollapsible('log', '最近の出来事', () => '<div class="lines">'
       + recent.map((l) => '<div>' + esc(whenText(l)) + ':' + esc(l.t) + '</div>').join('') + '</div>') + '</div>';
@@ -4747,7 +4861,9 @@
           const changed = pending[m.path] != null;
           return '<tr class="' + (changed ? 'mod' : '') + '"><td>' + (changed ? '● ' : '') + esc(m.desc) + (m.displayOnly ? ' ★' : '')
             + '<span class="path">' + esc(m.path) + '</span></td>'
-            + '<td class="num">' + (typeof def === 'boolean'
+            + '<td class="num">' + (m.options
+              ? '<select data-tuneopt="' + esc(m.path) + '">' + m.options.map((o) => '<option' + (o === val ? ' selected' : '') + '>' + esc(o) + '</option>').join('') + '</select>'
+              : typeof def === 'boolean'
               ? '<input type="checkbox" data-tunebool="' + esc(m.path) + '"' + (val ? ' checked' : '') + '>'
               : '<input type="number" step="any" data-tune="' + esc(m.path) + '" value="' + esc(fmtVal(val)) + '">') + '</td>'
             + '<td class="num">' + esc(fmtVal(def)) + '</td>'
@@ -4948,7 +5064,11 @@
   }
 
   // ---------- 操作 ----------
-  function afterAdvance() { save(); render(); window.scrollTo(0, 0); }
+  function afterAdvance(keepUnread) {
+    const evs = state.lastEvents || [];
+    if (!keepUnread) state.summaryUnread = evs.length && evs[evs.length - 1].serial != null ? evs[evs.length - 1].serial : null;   // 新しいまとめは未読
+    save(); render(); window.scrollTo(0, 0);
+  }
   document.querySelector('nav').addEventListener('click', (e) => {
     const t = e.target.dataset && e.target.dataset.tab;
     if (t) { tab = t; render(); window.scrollTo(0, 0); }
@@ -4956,6 +5076,14 @@
   document.getElementById('main').addEventListener('change', (e) => {
     if (e.target.id === 'autoTarget') { autoTarget = e.target.value; return; }
     if (e.target.id === 'polSort') { uiPrefs.polSort = e.target.value; saveUi(); render(); return; }
+    if (e.target.dataset.tuneopt) {
+      const path = e.target.dataset.tuneopt;
+      if (e.target.value === Tuning.defaultValue(path)) delete pending[path]; else pending[path] = e.target.value;
+      Persist.saveOverrides(storage, pending);
+      applyGameConfig();
+      render();
+      return;
+    }
     if (e.target.dataset.tunebool) {
       const path = e.target.dataset.tunebool;
       if (e.target.checked === Tuning.defaultValue(path)) delete pending[path]; else pending[path] = e.target.checked;
@@ -5009,6 +5137,7 @@
       const key = colBtn.dataset.col;
       uiPrefs.open[key] = colBtn.getAttribute('aria-expanded') !== 'true';
       saveUi();
+      if (state.summaryUnread != null && key === 'month:' + state.summaryUnread) { state.summaryUnread = null; save(); }   // まとめを開いたら既読
       render();
       return;
     }
@@ -5043,7 +5172,7 @@
       clearDraft();
       // 決めた月の続き(入学の結果、冬合宿など)はボタンで進める
       detailPid = null;
-      afterAdvance();
+      afterAdvance(true);   // 月は進んでいないので、未読はそのまま
     } else if (id === 'btnNextEvent') {
       HighSchool.advanceToNextEvent(state);
       afterAdvance();

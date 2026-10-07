@@ -226,6 +226,17 @@ log('  助っ人の加入 ' + S.helper.years + '年 / ' + S.years + '年 (' + pc
 if (S.helper.years / S.years > 0.3) warn('助っ人の加入が多すぎます。→ newcomers.base を上げる / strengthPivot を下げる');
 if (avg(mem) > CONFIG.newcomers.rosterCap * 0.95) warn('部員数がほぼ常に上限です。→ newcomers.strengthPivot を上げる');
 
+// スタメン編成(10シードの合計)
+const LS = metrics.lineupStats;
+log('');
+log('■ スタメン編成(毎月末の編成。10シードの合計)');
+log('  不変条件の違反 ' + LS.violations + '件 / 本職外起用 ' + pct(LS.oop, LS.starters) + '(のべ ' + LS.oop + '人 / スタメンのべ ' + LS.starters + '人)'
+  + ' / 上位3人の控え ' + pct(LS.top3Out, LS.top3));
+log('  (参考)本職外起用が起きた月 ' + LS.oopMonths + ' / ' + LS.months + 'か月。区分別の内訳(起用先):'
+  + ['P', 'C', 'IF', 'OF'].map((k) => Core.POSITION_LABEL[k] + ' ' + LS.oopByPos[k]).join(' / '));
+if (LS.violations > 0) warn('スタメン編成の不変条件に違反があります。→ logic.js の buildLineup を確認');
+if (LS.starters && LS.oop / LS.starters > CONFIG.targets.offPositionShare.max) warn('本職外起用が多すぎます。→ conversion.minimum を上げる / newcomers.base を上げる');
+
 // 二刀流
 log('');
 log('■ 二刀流');

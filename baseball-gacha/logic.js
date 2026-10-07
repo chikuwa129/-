@@ -683,26 +683,63 @@
   }
 
   // ---------- スタメン編成・チームの強さ ----------
+  // 本職(守備区分)の人数が、必要人数に何人足りないか { P, C, IF, OF }
+  //   編成(本職外の起用が起きる条件)と、年度始めのコンバート(不足の判定)の両方で使う
+  function getPositionShortage(list, required) {
+    const c = countByPosition(list);
+    const out = {};
+    for (const pos of POSITIONS) out[pos] = Math.max(0, (required[pos] || 0) - c[pos]);
+    return out;
+  }
+  // スタメン編成:本職を先に決める
+  //   1) 区分ごと(捕手→投手→内野→外野)に、本職の選手を総合値の高い順に必要人数まで(判明した二刀流は投手枠で最優先)
+  //   2) 埋まらなかった枠だけ、残った選手から適性の高い順に補う(不足人数が多い区分から)
+  //   3) offPositionStarGap > 0 のときだけ、控えの選手を本職外で起用してよい(総合値の差と適性の条件つき)
   function buildLineup(players) {
     const avail = players.filter((p) => !p.retired && !p.excluded);
     const used = new Set();
+    const chosen = { P: [], C: [], IF: [], OF: [] };
+    const byRating = (a, b) => rating(b) - rating(a) || a.id - b.id;
+    for (const pos of CONFIG.lineupOrder) {
+      const prim = avail.filter((p) => p.position === pos && !used.has(p.id));
+      if (pos === 'P' && CONFIG.twoWay.alwaysStartAsPitcher) {
+        prim.sort((a, b) => (isTwoWayKnown(b) ? 1 : 0) - (isTwoWayKnown(a) ? 1 : 0) || byRating(a, b));
+      } else prim.sort(byRating);
+      for (const p of prim.slice(0, CONFIG.lineup[pos])) { chosen[pos].push(p); used.add(p.id); }
+    }
+    // 不足の補充(本職の投手が0人なら、適性の最も高い野手が登板する)
+    const short = getPositionShortage(avail, CONFIG.lineup);
+    const order = CONFIG.lineupOrder.slice().sort((a, b) => short[b] - short[a] || CONFIG.lineupOrder.indexOf(a) - CONFIG.lineupOrder.indexOf(b));
+    for (const pos of order) {
+      while (chosen[pos].length < CONFIG.lineup[pos]) {
+        const cands = avail.filter((p) => !used.has(p.id));
+        if (!cands.length) break;
+        cands.sort((a, b) => effectiveAptitude(b, pos) - effectiveAptitude(a, pos) || a.id - b.id);
+        chosen[pos].push(cands[0]);
+        used.add(cands[0].id);
+      }
+    }
+    // 例外:スター起用(初期値 0 = 無効)
+    const gap = CONFIG.offPositionStarGap;
+    if (gap > 0) {
+      const bench = avail.filter((p) => !used.has(p.id)).sort(byRating);
+      for (const b of bench) {
+        let best = null;
+        for (const pos of CONFIG.lineupOrder) {
+          if (pos === b.position) continue;
+          chosen[pos].forEach((q, i) => {
+            if (q.position !== pos) return;
+            if (rating(b) - rating(q) < gap || effectiveAptitude(b, pos) < effectiveAptitude(q, pos)) return;
+            if (!best || rating(q) < rating(best.q)) best = { pos: pos, i: i, q: q };
+          });
+        }
+        if (best) { chosen[best.pos][best.i] = b; used.add(b.id); used.delete(best.q.id); }
+      }
+    }
     const slots = [];
     for (const pos of CONFIG.lineupOrder) {
       for (let i = 0; i < CONFIG.lineup[pos]; i++) {
-        const cands = avail.filter((p) => !used.has(p.id));
-        let pool;
-        if (pos === 'P') {
-          const primary = cands.filter((p) => p.position === 'P');
-          const twoWays = CONFIG.twoWay.alwaysStartAsPitcher ? primary.filter(isTwoWayKnown) : [];
-          pool = twoWays.length ? twoWays : primary.length ? primary : cands;
-        } else {
-          const nonP = cands.filter((p) => p.position !== 'P');
-          pool = nonP.length ? nonP : cands;
-        }
-        const score = (p) => effectiveAptitude(p, pos) + (p.position === pos ? CONFIG.primaryBonus : 0);
-        pool.sort((a, b) => score(b) - score(a) || a.id - b.id);
-        const pl = pool[0] || null;
-        if (pl) used.add(pl.id);
+        const pl = chosen[pos][i] || null;
         slots.push({
           pos: pos,
           player: pl,
@@ -713,6 +750,29 @@
       }
     }
     return slots;
+  }
+
+  // 編成の確認:本職外の起用と、本職の控えが、不変条件を満たしているか(テストと sim.js 用)
+  //   違反1:本職外の起用が、その区分の本職が必要人数を満たしているのに起きた
+  //   違反2:本職の選手が控えなのに、その区分の枠が本職だけで埋まっていない(offPositionStarGap が 0 のとき)
+  function checkLineup(players, slots) {
+    const avail = players.filter((p) => !p.retired && !p.excluded);
+    const short = getPositionShortage(avail, CONFIG.lineup);
+    const inLineup = new Set(slots.filter((x) => x.player).map((x) => x.player.id));
+    const primFilled = { P: 0, C: 0, IF: 0, OF: 0 };
+    const oopByPos = { P: 0, C: 0, IF: 0, OF: 0 };
+    let violations = 0;
+    let oop = 0;
+    for (const x of slots) {
+      if (!x.player) continue;
+      if (x.player.position === x.pos) primFilled[x.pos]++;
+      else { oop++; oopByPos[x.pos]++; if (short[x.pos] === 0 && !(CONFIG.offPositionStarGap > 0)) violations++; }
+    }
+    if (!(CONFIG.offPositionStarGap > 0)) {
+      for (const p of avail) if (!inLineup.has(p.id) && primFilled[p.position] < CONFIG.lineup[p.position]) violations++;
+    }
+    const top3 = avail.filter((p) => !p.helper).sort((a, b) => rating(b) - rating(a) || a.id - b.id).slice(0, 3);
+    return { violations: violations, oop: oop, oopByPos: oopByPos, starters: inLineup.size, top3: top3.length, top3Out: top3.filter((p) => !inLineup.has(p.id)).length };
   }
 
   // 編成されたメンバーから強さを計算する(この関数1つで計算する)
@@ -1072,7 +1132,8 @@
   function benchmarkConfigHash() {
     const R = CONFIG.reputation;
     const src = JSON.stringify({ rating: CONFIG.rating, growth: CONFIG.growth, statCap: CONFIG.statCap, limitBreak: CONFIG.limitBreak, coach: CONFIG.baselineCoachLv,
-      rep: { baseline: R.baseline, topShareBase: R.topShareBase, topShareMax: R.topShareMax, talentRateMaxMult: R.talentRateMaxMult }, pre: CONFIG.preHistory });
+      rep: { baseline: R.baseline, topShareBase: R.topShareBase, topShareMax: R.topShareMax, talentRateMaxMult: R.talentRateMaxMult }, pre: CONFIG.preHistory,
+      lineup: { need: CONFIG.lineup, order: CONFIG.lineupOrder, starGap: CONFIG.offPositionStarGap, twoWayP: CONFIG.twoWay.alwaysStartAsPitcher } });
     let h = 0x811c9dc5;
     for (let i = 0; i < src.length; i++) {
       h ^= src.charCodeAt(i);
@@ -1149,6 +1210,8 @@
     decideCareer: decideCareer,
     makeAlumniRecord: makeAlumniRecord,
     buildLineup: buildLineup,
+    checkLineup: checkLineup,
+    getPositionShortage: getPositionShortage,
     evaluateLineup: evaluateLineup,
     calcTeamStrength: calcTeamStrength,
     getTeamPower: getTeamPower,
@@ -1263,6 +1326,16 @@
     }
     const tp = getTeamPower(state.players);
     const ref = opponentRef();
+    // スタメン編成の確認(sim.js と試し計算の目安に使う)
+    const ck = checkLineup(state.players, buildLineup(state.players));
+    const LC = state.stats.lineupCheck;
+    LC.months++;
+    LC.violations += ck.violations;
+    LC.oop += ck.oop;
+    LC.starters += ck.starters;
+    LC.top3 += ck.top3;
+    LC.top3Out += ck.top3Out;
+    if (ck.oop) { LC.oopMonths++; for (const k of POSITIONS) LC.oopByPos[k] += ck.oopByPos[k]; }
     state.powerLog.push({ s: serial, y: state.year, m: CAL[state.month].month, p: tp.power, st: tp.strength, pos: tp.byPos, oa: ref.avgPower, ot: ref.topPower });
     return serial;
   }
@@ -1436,7 +1509,8 @@
       policyReview: { reviewed: 0, changed: 0 },
       stops: 0,                // 「次のイベントまで」で止まった回数
       overCap: { n: 0, strengthDiff: 0, winDiff: 0 },
-      repByYear: [],           // 年度末の評判 { y, rep, x, score }
+      repByYear: [],
+      lineupCheck: { months: 0, violations: 0, oop: 0, starters: 0, top3: 0, top3Out: 0, oopMonths: 0, oopByPos: { P: 0, C: 0, IF: 0, OF: 0 } },   // スタメン編成の確認           // 年度末の評判 { y, rep, x, score }
       start: null,             // 開始時の2・3年生の総合値の平均 { g2, g3, rep }
       calib: [],               // 勝率予想の校正 [区間] = { n, w }
       upsets: 0,               // 番狂わせ
@@ -1598,6 +1672,7 @@
       nextId: 1,
       log: [],
       lastEvents: [],
+      summaryUnread: null,   // ホームの月のまとめが未読なら、その月の番号(開くか次の月に進むと消える)
       carryCards: [],        // 次の月のまとめに載せる結果(入学の結果など)
       monthNotices: [],
       prevSummerStrength: CONFIG.newcomers.strengthPivot,   // 前年夏のチームの強さ(新入生の人数に使う)
@@ -1726,7 +1801,7 @@
     const tried = new Set();
     let attempts = 0;
     for (const pos of CONFIG.lineupOrder) {
-      while (counts[pos] < CV.minimum[pos] && attempts < CV.maxPerYear) {
+      while (getPositionShortage(pool, CV.minimum)[pos] > 0 && attempts < CV.maxPerYear) {   // 不足の判定は編成と同じ関数
         const cands = pool.filter((p) => p.position !== pos && !p.twoWay && !tried.has(p.id)
           && counts[p.position] > CV.minimum[p.position]);
         if (!cands.length) break;
@@ -2481,7 +2556,8 @@
     overrides = overrides || {};
     for (const m of CONFIG.paramMeta) {
       const v = overrides[m.path];
-      const ok = (typeof v === 'number' && isFinite(v)) || (typeof v === 'boolean' && typeof getPath(DEFAULTS, m.path) === 'boolean');  // オン/オフの設定は真偽値
+      const ok = (typeof v === 'number' && isFinite(v)) || (typeof v === 'boolean' && typeof getPath(DEFAULTS, m.path) === 'boolean')  // オン/オフの設定は真偽値
+        || (typeof v === 'string' && m.options && m.options.indexOf(v) >= 0);                                                      // 選択肢の設定は文字列
       setPath(CONFIG, m.path, ok ? v : getPath(DEFAULTS, m.path));
     }
   }
@@ -2764,7 +2840,23 @@
       preHistoryMs: extra && extra.preMs != null ? extra.preMs : NaN,
       promisingUp: labels && labels.total ? labels.promising / labels.total : NaN,
       monsterUp: labels && labels.total ? labels.monster / labels.total : NaN,
-    }, analyzeVisual(states), analyzeStartAndRep(states), repSynthetic());
+    }, analyzeVisual(states), analyzeStartAndRep(states), repSynthetic(), analyzeLineup(states));
+  }
+  // スタメン編成の集計(不変条件の違反・本職外起用の割合・上位3人の控え)
+  function analyzeLineup(states) {
+    const t = { months: 0, violations: 0, oop: 0, starters: 0, top3: 0, top3Out: 0, oopMonths: 0, oopByPos: { P: 0, C: 0, IF: 0, OF: 0 } };
+    for (const s of states) {
+      const L = s.stats.lineupCheck;
+      if (!L) continue;
+      for (const k of Object.keys(t)) if (k !== 'oopByPos') t[k] += L[k];
+      for (const k of POSITIONS) t.oopByPos[k] += L.oopByPos[k];
+    }
+    return {
+      lineupViolations: t.months ? t.violations : NaN,
+      offPositionShare: t.starters ? t.oop / t.starters : NaN,
+      top3Benched: t.top3 ? t.top3Out / t.top3 : NaN,
+      lineupStats: t,
+    };
   }
   // 前史と評判の集計
   function analyzeStartAndRep(states) {

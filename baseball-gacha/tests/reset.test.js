@@ -179,6 +179,32 @@ test('前史と評判:新規開始は前史を含めて毎回同じ。どのリ�
   assert.strictEqual(r.state.schoolRep, HighSchool.newGame({ seed: r.state.seed }).schoolRep, '?reset=1:評判は前史の結果から');
 });
 
+test('ホームの月のまとめの未読(●新着)は、どのリセットでも消える', () => {
+  const st = memoryStorage();
+  const unreadGame = () => {
+    const s = Persist.startGame(st, 41);
+    play(s, 8);
+    s.summaryUnread = 5;   // 画面で月を進めたときと同じ(未読のまとめがある)
+    Persist.saveGame(st, s);
+    assert.strictEqual(Persist.loadGame(st).summaryUnread, 5, '未読の状態は保存される');
+    return s;
+  };
+  assert.strictEqual(HighSchool.newGame({ seed: 41 }).summaryUnread, null, '新規開始は未読なし');
+  let s = Persist.resetSameSeed(st, unreadGame());
+  assert.strictEqual(s.summaryUnread, null, '同じシードでやり直す');
+  assert.strictEqual(Persist.loadGame(st).summaryUnread, null, '同じシードでやり直す(保存)');
+  unreadGame();
+  s = Persist.resetNewSeed(st, 42);
+  assert.strictEqual(s.summaryUnread, null, '新しいシードで始める');
+  unreadGame();
+  s = Persist.wipeAll(st, 43);
+  assert.strictEqual(s.summaryUnread, null, '完全に消す');
+  unreadGame();
+  const r = Persist.startup(st, '?reset=1');
+  assert.strictEqual(r.state.summaryUnread, null, '?reset=1');
+  assert.strictEqual(Persist.loadGame(st).summaryUnread, null, '?reset=1(保存)');
+});
+
 Tuning.applyOverrides({});
 Generation.setBenchmark(null);
 console.log('\nすべて成功(' + passed + '件)');

@@ -183,6 +183,7 @@
   .ml3 div { font-size: 13px; padding: 1px 0; }
   .col.flat > .colbody { padding-left: 0; border-left: none; margin-left: 0; }
   .pnamebtn { font-size: 15px; }
+  .newmark { font-size: 11px; color: #c0392b; font-weight: bold; margin-left: 4px; white-space: nowrap; }
   .statline { font-size: 11px; color: #8a8378; line-height: 1.5; margin-top: 1px; }
   .statline span { white-space: nowrap; }
   .statline .gold { color: #b8860b; font-weight: bold; }
@@ -610,8 +611,16 @@
     return parts.join(' / ');
   }
   // 「次のイベントまで」などで進んだ月の表示。途中の月は1行、止まった月は最小表示(最大3行 + 詳しく)
-  function renderMonths(list) {
+  // part:'yearEnd' は年度末(3月)のまとめのカードだけ、'rest' はそれ以外(月のまとめと、大会などのカード)
+  function renderMonths(list, part) {
     if (!list.length) return '';
+    const isYE = (c) => c.type === 'yearEnd';
+    if (part === 'yearEnd') {
+      let ye = '';
+      list.forEach((m) => m.cards.forEach((c, i) => { if (isYE(c)) ye += eventCard(c, 'month:' + m.serial + ':c' + i + ':ye'); }));
+      return ye;
+    }
+    const keepCard = (c) => part !== 'rest' || !isYE(c);
     let html = '';
     const last = list[list.length - 1];
     const mid = list.slice(0, -1);
@@ -635,7 +644,8 @@
     }
     const imp = last.notices.filter((n) => n.importance >= 3).slice(0, 3);
     if (imp.length) rows.push('<div class="nt" style="color:var(--special)">' + imp.map((n) => esc(n.text)).join(' / ') + '</div>');
-    html += '<div class="card"><h2>' + esc(HighSchool.formatYear(last.year) + ' ' + last.label) + 'のまとめ</h2><div class="ml3">' + rows.slice(0, 3).join('') + '</div>';
+    const unread = state.summaryUnread != null && state.summaryUnread === last.serial;
+    html += '<div class="card"><h2>' + esc(HighSchool.formatYear(last.year) + ' ' + last.label) + 'のまとめ' + (unread ? ' <span class="newmark">●新着</span>' : '') + '</h2><div class="ml3">' + rows.slice(0, 3).join('') + '</div>';
     html += renderCollapsible(key, '<span class="small">' + esc(monthLine(last)) + '</span>', () => {
       let d = '';
       if (last.winDelta != null) {
@@ -655,8 +665,8 @@
       return d || '<div class="small">特になし</div>';
     });
     html += '</div>';
-    last.cards.forEach((c, i) => { html += eventCard(c, key + ':c' + i); });
-    mid.forEach((m, mi) => m.cards.forEach((c, i) => { html += eventCard(c, 'month:' + m.serial + ':c' + i + ':' + mi); }));
+    last.cards.forEach((c, i) => { if (keepCard(c)) html += eventCard(c, key + ':c' + i); });
+    mid.forEach((m, mi) => m.cards.forEach((c, i) => { if (keepCard(c)) html += eventCard(c, 'month:' + m.serial + ':c' + i + ':' + mi); }));
     return html;
   }
 
@@ -1025,10 +1035,15 @@
     html += '<div class="btns"><button class="btn" id="btnNextEvent">次のイベントまで</button></div>'
       + '<div class="btns"><button class="btn sub small" id="btnNextMonth">次の月へ</button>'
       + '<button class="btn sub small" id="btnApril">次の4月まで</button></div>';
-    html += renderPowerCard();
-    html += renderMonths(evs);
-    html += renderWatchCard();
+    // 並び:スタメン → チーム戦力 → 注目選手 → 月のまとめ → 最近の出来事(homeSummaryPosition が 'top' ならまとめは上)
+    //   年度末(3月)のまとめは、これまでどおりボタンの下に出す
+    const top = CONFIG.homeSummaryPosition === 'top';
+    html += renderMonths(evs, 'yearEnd');
+    if (top) html += renderMonths(evs, 'rest');
     html += '<div class="card"><h2>現在のスタメン</h2>' + lineupTable(HighSchool.lineup(state), null, true) + '</div>';
+    html += renderPowerCard();
+    html += renderWatchCard();
+    if (!top) html += renderMonths(evs, 'rest');
     const recent = state.log.slice(-10).reverse();
     html += '<div class="card">' + renderCollapsible('log', '最近の出来事', () => '<div class="lines">'
       + recent.map((l) => '<div>' + esc(whenText(l)) + ':' + esc(l.t) + '</div>').join('') + '</div>') + '</div>';
@@ -1189,7 +1204,9 @@
           const changed = pending[m.path] != null;
           return '<tr class="' + (changed ? 'mod' : '') + '"><td>' + (changed ? '● ' : '') + esc(m.desc) + (m.displayOnly ? ' ★' : '')
             + '<span class="path">' + esc(m.path) + '</span></td>'
-            + '<td class="num">' + (typeof def === 'boolean'
+            + '<td class="num">' + (m.options
+              ? '<select data-tuneopt="' + esc(m.path) + '">' + m.options.map((o) => '<option' + (o === val ? ' selected' : '') + '>' + esc(o) + '</option>').join('') + '</select>'
+              : typeof def === 'boolean'
               ? '<input type="checkbox" data-tunebool="' + esc(m.path) + '"' + (val ? ' checked' : '') + '>'
               : '<input type="number" step="any" data-tune="' + esc(m.path) + '" value="' + esc(fmtVal(val)) + '">') + '</td>'
             + '<td class="num">' + esc(fmtVal(def)) + '</td>'
@@ -1390,7 +1407,11 @@
   }
 
   // ---------- 操作 ----------
-  function afterAdvance() { save(); render(); window.scrollTo(0, 0); }
+  function afterAdvance(keepUnread) {
+    const evs = state.lastEvents || [];
+    if (!keepUnread) state.summaryUnread = evs.length && evs[evs.length - 1].serial != null ? evs[evs.length - 1].serial : null;   // 新しいまとめは未読
+    save(); render(); window.scrollTo(0, 0);
+  }
   document.querySelector('nav').addEventListener('click', (e) => {
     const t = e.target.dataset && e.target.dataset.tab;
     if (t) { tab = t; render(); window.scrollTo(0, 0); }
@@ -1398,6 +1419,14 @@
   document.getElementById('main').addEventListener('change', (e) => {
     if (e.target.id === 'autoTarget') { autoTarget = e.target.value; return; }
     if (e.target.id === 'polSort') { uiPrefs.polSort = e.target.value; saveUi(); render(); return; }
+    if (e.target.dataset.tuneopt) {
+      const path = e.target.dataset.tuneopt;
+      if (e.target.value === Tuning.defaultValue(path)) delete pending[path]; else pending[path] = e.target.value;
+      Persist.saveOverrides(storage, pending);
+      applyGameConfig();
+      render();
+      return;
+    }
     if (e.target.dataset.tunebool) {
       const path = e.target.dataset.tunebool;
       if (e.target.checked === Tuning.defaultValue(path)) delete pending[path]; else pending[path] = e.target.checked;
@@ -1451,6 +1480,7 @@
       const key = colBtn.dataset.col;
       uiPrefs.open[key] = colBtn.getAttribute('aria-expanded') !== 'true';
       saveUi();
+      if (state.summaryUnread != null && key === 'month:' + state.summaryUnread) { state.summaryUnread = null; save(); }   // まとめを開いたら既読
       render();
       return;
     }
@@ -1485,7 +1515,7 @@
       clearDraft();
       // 決めた月の続き(入学の結果、冬合宿など)はボタンで進める
       detailPid = null;
-      afterAdvance();
+      afterAdvance(true);   // 月は進んでいないので、未読はそのまま
     } else if (id === 'btnNextEvent') {
       HighSchool.advanceToNextEvent(state);
       afterAdvance();
