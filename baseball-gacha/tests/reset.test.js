@@ -121,6 +121,31 @@ test('同じシードなら、毎回同じ結果(リセットを挟んでも同�
   assert.strictEqual(JSON.stringify(a), JSON.stringify(b));
 });
 
+test('見える化の保存データ(チーム戦力の記録・成長ログ・年度の記録・校正)も、どのリセットでも消える', () => {
+  const st = memoryStorage();
+  const hasVisual = (s) => s.powerLog.length > 0 && s.players.some((p) => p.mlog && p.mlog.a.length > 0)
+    && Object.keys(s.yearRecords).length > 0 && s.stats.calib.length > 0 && s.stats.highlights.games > 0;
+  const isFresh = (s) => s.powerLog.length === 0 && s.players.every((p) => !p.mlog)
+    && Object.keys(s.yearRecords).length === 0 && s.stats.calib.length === 0 && s.stats.highlights.games === 0;
+  let s = Persist.startGame(st, 21);
+  play(s, 25);
+  Persist.saveGame(st, s);
+  assert.ok(hasVisual(s), '進めたあとは記録がある');
+  s = Persist.resetSameSeed(st, s);
+  assert.ok(isFresh(s) && isFresh(Persist.loadGame(st)), '同じシードでやり直す');
+  play(s, 25);
+  s = Persist.resetNewSeed(st, 22);
+  assert.ok(isFresh(s) && isFresh(Persist.loadGame(st)), '新しいシードで始める');
+  play(s, 25);
+  Persist.saveGame(st, s);
+  s = Persist.wipeAll(st, 23);
+  assert.ok(isFresh(s) && isFresh(Persist.loadGame(st)), 'セーブを完全に消す');
+  play(s, 25);
+  Persist.saveGame(st, s);
+  const r = Persist.startup(st, '?reset=1');
+  assert.ok(isFresh(r.state) && isFresh(Persist.loadGame(st)), '?reset=1');
+});
+
 Tuning.applyOverrides({});
 Generation.setBenchmark(null);
 console.log('\nすべて成功(' + passed + '件)');

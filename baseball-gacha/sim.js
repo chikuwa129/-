@@ -62,6 +62,21 @@ const fmtReach = (arr) => arr.map((v) => (v == null ? '未到達' : v + '年')).
 log('  指導力 Lv5 到達(シードごと): ' + fmtReach(metrics.lvReach.lv5));
 log('  指導力 Lv10到達(シードごと): ' + fmtReach(metrics.lvReach.lv10));
 
+// ---------- 見える化 ----------
+log('');
+log('■ 勝率予想の校正(予想勝率の10%区間ごとの、実際の勝率。判定は ' + CONFIG.visual.calibrationMinGames + '試合以上の区間)');
+log('  ' + metrics.calibRows.map((r) => (r.bin * 10) + '-' + (r.bin * 10 + 9) + '%: '
+  + (r.n ? '予想' + Math.round(r.pred * 100) + '→実際' + Math.round(r.actual * 100) + '%(' + r.n + ')' : '-')).join(' / '));
+log('');
+log('■ チーム戦力(年ごとの平均。' + SEEDS + 'シードの平均。5年ごと)');
+log('  ' + metrics.powerByYear.filter((x) => x.y === 1 || x.y % 5 === 0).map((x) => x.y + '年目 ' + Math.round(x.p)).join(' / ')
+  + '  ※他校平均 ' + Core.opponentRef().avgPower + ' / 他校上位 ' + Core.opponentRef().topPower);
+log('  1年目に対する伸び(最後の5年の平均) ' + Sim.formatMetric(metrics.powerGrowth, { pct: true })
+  + ' / 成長の反映(対 他校平均の勝率予想、3年目4月 − 1年目4月)' + Sim.formatMetric(metrics.growthReflect, { pct: true }));
+log('  活躍選手 1試合あたり ' + Sim.formatMetric(metrics.highlightsPerGame) + '人 / 「成長の成果」が付く割合 ' + Sim.formatMetric(metrics.growthNoteShare, { pct: true })
+  + ' / 番狂わせ ' + states.reduce((a, st) => a + st.stats.upsets, 0) + '回・波乱 ' + states.reduce((a, st) => a + st.stats.shocks, 0) + '回');
+log('  保存容量の見積もり(50年プレイ時、上限 ' + CONFIG.visual.storageQuotaChars + '文字に対して) ' + Sim.formatMetric(metrics.storageShare, { pct: true }));
+
 // ---------- 新入生 ----------
 log('');
 log('■ 新入生の才能(新入生 ' + S.recruits + '人)');

@@ -11,7 +11,7 @@
     // 保存キーは「ゲーム名_」で始める(リセットでまとめて消せるように)。
     //   ゲームのセーブ:bbgacha_v{saveVersion}_save / 調整画面:bbgacha_tune_*
     storagePrefix: 'bbgacha_',
-    saveVersion: 6,                // セーブデータの形式。違うバージョンのセーブは初期化する
+    saveVersion: 7,                // セーブデータの形式。違うバージョンのセーブは初期化する
     logLimit: 300,                 // 出来事ログの保存件数
 
     // ---- カレンダー(4月始まり) ----
@@ -322,6 +322,26 @@
     },
     growthTopN: 3,
 
+    // ---- 見える化(表示と、成績用の乱数で決めるハイライトだけに使う。勝敗や成長には影響しない) ----
+    visual: {
+      opponentTournament: 'summer',  // 他校の比較に使う「相手の強さの分布」(この大会の1回戦〜決勝の相手)
+      opponentTopQuantile: 0.9,      // 「他校上位」= その分布の上位10%の値
+      upsetBelow: 0.30,              // 勝率予想がこれ未満の試合に勝つと「番狂わせ」
+      shockAbove: 0.80,              // 勝率予想がこれ以上の試合に負けると「波乱」
+      growthWinMin: 0.001,           // 月末の「今月の成長で勝率予想 +○%」を出す最小の変化(0.1%)
+      unearnedRunRate: 0.10,         // 得点のうち、打点がつかない得点(失策など)の割合
+      inningWeights: [1, 1, 1, 1, 1, 1, 1, 1, 1],  // 得点をイニングに配分する重み(1回〜9回)
+      highlightMax: 2,               // 1試合の活躍選手の上限(注目選手は別枠で必ず載せる)
+      highlightMinScore: 4,          // 活躍選手になる最低点(安打2・打点2・本塁打3・勝利投手3 など)
+      growthNoteRating: 100,         // 「成長の成果 +○」を付ける総合値の伸び(前年同月比。1年目は入学時比)
+      topGrowersN: 3,                // 月のまとめに出す、成長した上位の人数
+      lowGrowthRating: 20,           // 年間の伸びがこれ未満の選手を「伸びが小さかった」と数える(総合値)
+      keepMonthlyYears: 2,           // 卒業生の月ごとの能力の記録を残す年数(それより前は学期ごとに圧縮)
+      storageQuotaChars: 5000000,    // localStorage の上限の目安(文字数)
+      storageWarnRatio: 0.8,         // 上限のこの割合を超えたら警告し、卒業生の月ごとの記録を圧縮する
+      calibrationMinGames: 100,      // 勝率予想の校正で、判定に使う区間の最少試合数
+    },
+
     // ---- 目安(sim.js と調整画面の試し計算で、結果と比べる) ----
     //   min / max:範囲。max だけなら上限。判定は ✓ 範囲内 / △ 目安の±20%以内 / ✕ それ以外
     targets: {
@@ -343,6 +363,12 @@
       autumnTitle:  { min: 0.10, max: 0.20, label: '秋の地区優勝率', pct: true, tune: 'tournaments.autumn.oppBase' },
       promisingUp:  { min: 0.10, max: 0.25, label: 'ラベル:有望以上の割合(在校生)', pct: true, tune: 'labelTop / 世代の基準の再計算' },
       monsterUp:    { min: 0.01, max: 0.04, label: 'ラベル:怪物級以上の割合(在校生)', pct: true, tune: 'labelTop / 世代の基準の再計算' },
+      calibration:  { max: 0.05, label: '勝率予想の校正(区間ごとの最大のずれ)', pct: true, tune: '勝率の計算(Core.winProbability)を見直す' },
+      powerGrowth:  { min: 0.0, max: 0.5, label: 'チーム戦力の伸び(最後の5年の平均 / 1年目)', pct: true, tune: 'growth.* / leadership.monthlyMultMax' },
+      growthReflect: { min: 0.0, max: 0.3, label: '成長の反映(対 他校平均の勝率予想:各学年の3年目4月 − 1年目4月の平均)', pct: true, tune: 'growth.* / visual.opponentTournament' },
+      highlightsPerGame: { min: 1, max: 2.5, label: '1試合あたりの活躍選手の人数', tune: 'visual.highlightMinScore / visual.highlightMax' },
+      growthNoteShare: { min: 0.05, max: 0.25, label: '活躍選手に「成長の成果」が付く割合', pct: true, tune: 'visual.growthNoteRating' },
+      storageShare: { max: 0.5, label: '50年プレイした場合の保存容量(上限に対する割合)', pct: true, tune: 'visual.keepMonthlyYears / logLimit' },
     },
 
     // ---- 試合 ----
@@ -395,6 +421,7 @@
     { id: 'label', label: 'ラベルと世代の基準' },
     { id: 'strength', label: 'チームの強さ・他校の強さ' },
     { id: 'tourney', label: '大会' },
+    { id: 'visual', label: '見える化' },
   ];
   CONFIG.paramMeta = [
     ['rating.normal.mean', 'rating', '通常の新入生の総合値の平均'],
@@ -485,6 +512,20 @@
     ['tournaments.autumn.oppBase', 'tourney', '秋の地区大会:1回戦の相手の強さ'],
     ['tournaments.autumn.oppStep', 'tourney', '秋の地区大会:1回戦ごとの相手の強さの上昇'],
     ['tournaments.autumn.oppSd', 'tourney', '秋の地区大会:相手の強さのばらつき'],
+    ['visual.opponentTopQuantile', 'visual', '「他校上位」とする、相手の強さの分布の分位(0.9 = 上位10%)', true],
+    ['visual.upsetBelow', 'visual', '勝率予想がこれ未満で勝つと「番狂わせ」', true],
+    ['visual.shockAbove', 'visual', '勝率予想がこれ以上で負けると「波乱」', true],
+    ['visual.growthWinMin', 'visual', '月末の「成長で勝率予想 +○%」を出す最小の変化', true],
+    ['visual.unearnedRunRate', 'visual', '得点のうち、打点がつかない得点の割合'],
+    ['visual.highlightMax', 'visual', '1試合の活躍選手の上限(注目選手は別枠)'],
+    ['visual.highlightMinScore', 'visual', '活躍選手になる最低点(安打2・打点2・本塁打3・勝利投手3)'],
+    ['visual.growthNoteRating', 'visual', '「成長の成果」を付ける総合値の伸び(前年同月比)'],
+    ['visual.topGrowersN', 'visual', '月のまとめに出す、成長した上位の人数', true],
+    ['visual.lowGrowthRating', 'visual', '年間の伸びがこれ未満を「伸びが小さかった」と数える', true],
+    ['visual.keepMonthlyYears', 'visual', '卒業生の月ごとの能力の記録を残す年数'],
+    ['visual.storageQuotaChars', 'visual', 'localStorage の上限の目安(文字数)', true],
+    ['visual.storageWarnRatio', 'visual', '保存容量の警告を出す割合', true],
+    ['visual.calibrationMinGames', 'visual', '勝率予想の校正で、判定に使う区間の最少試合数', true],
   ].map((x) => ({ path: x[0], group: x[1], desc: x[2], displayOnly: !!x[3] }));
 
   if (typeof module === 'object' && module.exports) module.exports = CONFIG;

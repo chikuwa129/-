@@ -144,6 +144,25 @@
   textarea.copy { width: 100%; height: 6em; font-size: 12px; font-family: ui-monospace, monospace; }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; margin: 6px 0; }
   .row select { width: auto; margin: 0; padding: 6px; }
+  .pw { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .pw .big { font-size: 28px; font-weight: bold; }
+  .pw .dlt { font-size: 13px; }
+  .up { color: var(--win); } .down { color: var(--lose); }
+  table.posp { border-collapse: collapse; width: 100%; font-size: 12px; margin-top: 4px; }
+  table.posp td, table.posp th { border-bottom: 1px dotted #eee; padding: 2px 4px; text-align: right; }
+  table.posp td:first-child, table.posp th:first-child { text-align: left; }
+  .game { border-top: 1px dotted var(--line); padding: 4px 0; font-size: 13px; }
+  .game .hl { font-size: 12px; color: #444; padding-left: 8px; }
+  .game .hl b { color: var(--win); font-weight: normal; font-size: 11px; margin-left: 4px; }
+  .pred { font-size: 11px; color: var(--sub); }
+  table.ls { border-collapse: collapse; font-size: 11px; margin: 4px 0; }
+  table.ls td, table.ls th { border: 1px solid var(--line); padding: 1px 4px; text-align: center; min-width: 1.4em; }
+  table.ls td.t { font-weight: bold; }
+  .grow-row { font-size: 13px; padding: 3px 0; border-bottom: 1px dotted #eee; }
+  .grow-row .d { font-size: 12px; color: var(--win); }
+  .grow-row .dn { font-size: 12px; color: var(--lose); }
+  .chip { padding: 4px 10px; border: 1px solid var(--line); background: #fff; border-radius: 14px; font-size: 12px; }
+  .chip.on { background: var(--ink); color: #fff; }
 </style>
 </head>
 <body>
@@ -154,6 +173,7 @@
     <nav>
       <button data-tab="home" class="on">ホーム</button>
       <button data-tab="roster">選手一覧</button>
+      <button data-tab="growth">成長</button>
       <button data-tab="alumni">名鑑</button>
       <button data-tab="settings">設定</button>
       <button data-tab="tune">調整</button>
@@ -201,11 +221,20 @@
     }
   })();
   let modal = null;              // 確認のダイアログ { text, action }
+  const growthView = { serial: null, filter: 'all', changedOnly: false, decimal: false };  // 成長タブ
+  let storageWarn = false;       // 保存容量の警告
   let trial = { running: false, progress: 0, result: null, label: '' };   // 試し計算
   let benchJob = { running: false, progress: 0 };                          // 世代の基準の再計算
   let copyText = null;
   let pending = Persist.loadOverrides(storage);                            // 調整画面の上書き設定(次のゲームから)
-  function save() { Persist.saveGame(storage, state); }
+  function save() {
+    Persist.saveGame(storage, state);
+    const V = CONFIG.visual;
+    if (Persist.usage(storage) > V.storageQuotaChars * V.storageWarnRatio) {
+      storageWarn = true;
+      if (HighSchool.compressAlumniLogs(state, 0)) Persist.saveGame(storage, state);
+    }
+  }
   function clearDraft() { for (const k of Object.keys(draftPolicies)) delete draftPolicies[k]; }
   // 画面のメモリ上の状態をすべて初期化する(リセットの後)
   function resetUiState() {
@@ -217,6 +246,11 @@
     clearDraft();
     modal = null;
     copyText = null;
+    growthView.serial = null;
+    growthView.filter = 'all';
+    growthView.changedOnly = false;
+    growthView.decimal = false;
+    storageWarn = false;
   }
   // 進行中のゲームに使う設定(作ったときの上書き + 表示だけに使う値は今の上書き)
   function applyGameConfig() { Tuning.applyOverrides(Tuning.effectiveOverrides(state.overrides, pending)); }
@@ -316,31 +350,59 @@
   }
   // 能力の推移のグラフ(インラインSVG)。横軸は学期、縦軸は能力値、能力ごとに線を分ける
   const LINE_COLORS = ['#c0392b', '#2471a3', '#1e8449', '#b9770e', '#7d3c98', '#117a65', '#a04000', '#5d6d7e', '#cb4335'];
+  // 学期の名前(入学・1年夏・1年冬…卒業)から、月の番号を求める
+  function termSerial(p, label) {
+    const base = HighSchool.monthSerial(p.enrolledYear, 0);
+    if (label === '入学' || label === '加入') return base - 0.5;
+    if (label === '卒業') return base + 35;
+    const m = /^(\d)年(夏|冬)$/.exec(label);
+    if (!m) return null;
+    return base + (Number(m[1]) - 1) * 12 + (m[2] === '夏' ? 2 : 8);
+  }
+  // 能力の推移のグラフ(インラインSVG)。月ごとの点で描き、学期(入学・合宿・卒業)に印を付ける
   function growthChart(p, keys) {
-    const series = Core.growthSeries(p);
-    if (series.length < 2) return '';
+    const pts = [];
+    const marks = [];
+    for (const t of (p.timeline || [])) {
+      const sx = termSerial(p, t.label);
+      if (sx == null) continue;
+      marks.push({ s: sx, label: t.label.replace('年', '').replace('入学', '入').replace('卒業', '卒') });
+      if (!p.mlog || sx < p.mlog.s) pts.push({ s: sx, a: t.a });
+    }
+    if (p.mlog) p.mlog.a.forEach((arr, i) => pts.push({ s: p.mlog.s + i, a: HighSchool.unpackAbilities(arr) }));
+    if (!p.finalAbilities && !p.mlog) pts.push({ s: HighSchool.monthSerial(state.year, state.month), a: p.abilities });
+    pts.sort((a, b) => a.s - b.s);
+    if (pts.length < 2) return '';
     let top = 100;
-    for (const pt of series) for (const k of keys) top = Math.max(top, pt.a[k]);
+    for (const pt of pts) for (const k of keys) top = Math.max(top, pt.a[k]);
     top = top > 100 ? 150 : 100;
-    const W = 320, H = 150, L = 24, R = 14, T = 6, B = 30;
-    const x = (i) => L + (W - L - R) * i / (series.length - 1);
+    const s0 = pts[0].s;
+    const s1 = Math.max(pts[pts.length - 1].s, s0 + 1);
+    const W = 320, H = 150, L = 24, R = 10, T = 6, B = 24;
+    const x = (sv) => L + (W - L - R) * (sv - s0) / (s1 - s0);
     const y = (v) => T + (H - T - B) * (1 - v / top);
     let svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="能力の推移">';
     for (let v = 0; v <= top; v += top > 100 ? 25 : 20) {
       svg += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="' + (v === 100 && top > 100 ? '#e0b84d' : '#e5ddd0') + '" stroke-width="1"/>'
         + '<text x="' + (L - 3) + '" y="' + (y(v) + 3) + '" font-size="8" text-anchor="end" fill="#999">' + v + '</text>';
     }
-    series.forEach((pt, i) => {
-      svg += '<text x="' + x(i) + '" y="' + (H - B + 10 + (i % 2) * 9) + '" font-size="7.5" text-anchor="middle" fill="#888">' + esc(pt.label) + '</text>';
-    });
+    for (const m of marks) {
+      if (m.s < s0 || m.s > s1) continue;
+      svg += '<line x1="' + x(m.s).toFixed(1) + '" x2="' + x(m.s).toFixed(1) + '" y1="' + T + '" y2="' + (H - B) + '" stroke="#d8cfbf" stroke-dasharray="2,2"/>'
+        + '<text x="' + x(m.s).toFixed(1) + '" y="' + (H - B + 10) + '" font-size="7.5" text-anchor="middle" fill="#888">' + esc(m.label) + '</text>';
+    }
     keys.forEach((k, ki) => {
-      const pts = series.map((pt, i) => x(i).toFixed(1) + ',' + y(pt.a[k]).toFixed(1)).join(' ');
-      svg += '<polyline points="' + pts + '" fill="none" stroke="' + LINE_COLORS[ki % LINE_COLORS.length] + '" stroke-width="1.6"/>';
+      const c = LINE_COLORS[ki % LINE_COLORS.length];
+      svg += '<polyline points="' + pts.map((pt) => x(pt.s).toFixed(1) + ',' + y(pt.a[k]).toFixed(1)).join(' ') + '" fill="none" stroke="' + c + '" stroke-width="1.4"/>';
+      for (const m of marks) {
+        const pt = pts.find((q) => Math.abs(q.s - m.s) < 0.6);
+        if (pt) svg += '<circle cx="' + x(pt.s).toFixed(1) + '" cy="' + y(pt.a[k]).toFixed(1) + '" r="1.8" fill="' + c + '"/>';
+      }
     });
     svg += '</svg>';
     const legend = '<div class="legend">' + keys.map((k, ki) => '<i style="background:' + LINE_COLORS[ki % LINE_COLORS.length] + '"></i>'
       + Core.ABILITY_LABEL[k]).join('') + '</div>';
-    return '<div class="sublabel">能力の推移</div>' + svg + legend;
+    return '<div class="sublabel">能力の推移(月ごと。点は学期:入・夏・冬・卒)</div>' + svg + legend;
   }
   function detailsOpen(key) { return openDetails.has(key) ? ' open' : ''; }
   function renderWatchChooser() {
@@ -372,9 +434,35 @@
       return '<div class="' + (o.cls || '') + '">' + esc(o.text) + '</div>';
     }).join('') + '</div>';
   }
+  // ラインスコア・勝敗投手(試合の中身)
+  function boxHtml(b) {
+    if (!b) return '';
+    const row = (name, inn, total) => '<tr><th>' + name + '</th>' + inn.map((v) => '<td>' + v + '</td>').join('') + '<td class="t">' + total + '</td></tr>';
+    let html = '<div class="scroll"><table class="ls"><tr><th></th>' + [1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => '<th>' + i + '</th>').join('') + '<th>計</th></tr>'
+      + row('自校', b.line.my, b.my) + row('相手', b.line.opp, b.opp) + '</table></div>';
+    if (b.pitcher) html += '<div class="small">' + (b.win ? '勝利投手 ' : '敗戦投手 ') + esc(b.pitcher.name) + '(' + Math.floor(b.pitcher.outs / 3) + '回 ' + b.pitcher.runs + '失点)</div>';
+    const hitters = b.batters.filter((x) => x.h || x.rbi).map((x) => esc(x.name) + ' ' + x.ab + '-' + x.h + (x.rbi ? ' ' + x.rbi + '打点' : '') + (x.hr ? ' ' + x.hr + '本' : ''));
+    if (hitters.length) html += '<div class="small">打撃:' + hitters.join(' / ') + (b.unearned ? '(打点のつかない得点 ' + b.unearned + ')' : '') + '</div>';
+    return html;
+  }
+  function highlightsHtml(hs) {
+    return (hs || []).map((h) => '<div class="hl">☆ ' + esc(h.text) + (h.note ? '<b>' + esc(h.note) + '</b>' : '') + '</div>').join('');
+  }
+  // 1試合ぶん(勝率予想・結果・活躍選手・中身)
+  function gameHtml(g, key) {
+    const head = g.text ? esc(g.text)
+      : esc(g.title) + ' <span class="pred">勝率予想 ' + Math.round(g.pred * 100) + '%</span> → ' + (g.box ? g.box.my + '対' + g.box.opp : '') + (g.win ? ' 勝利' : ' 敗戦') + (g.tag ? ' 【' + g.tag + '】' : '');
+    return '<div class="game"><div class="' + (g.tag ? 'special' : g.win ? 'win' : 'lose') + '" style="color:' + (g.tag ? 'var(--special)' : g.win ? 'var(--win)' : 'var(--lose)') + '">' + head + '</div>'
+      + highlightsHtml(g.highlights)
+      + (g.box ? '<details data-open="' + key + '"' + detailsOpen(key) + '><summary class="small">試合の中身</summary>' + boxHtml(g.box) + '</details>' : '') + '</div>';
+  }
+  let cardSeq = 0;
   function eventCard(ev) {
-    return '<div class="card"><h2>' + esc(ev.title) + '</h2>' + linesHtml(ev.lines)
-      + (ev.lineup ? lineupTable(ev.lineup, 'この大会のスタメン') : '') + '</div>';
+    const id = 'c' + (cardSeq++);
+    if (ev.yearSummary) return eventCard(ev.yearSummary) + eventCard(Object.assign({}, ev, { yearSummary: null }));
+    let html = '<div class="card"><h2>' + esc(ev.title) + '</h2>' + linesHtml(ev.lines);
+    if (ev.games) html += ev.games.map((g, i) => gameHtml(g, id + '-' + i)).join('');
+    return html + (ev.lineup ? lineupTable(ev.lineup, 'この大会のスタメン') : '') + '</div>';
   }
   // 月のまとめの1行(練習の成長人数・練習試合など)
   function monthLine(m) {
@@ -393,6 +481,7 @@
     if (mid.length) {
       html += '<div class="card"><h2>途中の月</h2>' + mid.map((m) =>
         '<div class="mline"><span class="ml">' + esc(m.label) + '</span>' + esc(monthLine(m))
+        + (m.winDelta != null ? ' <span class="' + (m.winDelta >= 0 ? 'up' : 'down') + '">勝率予想 ' + (m.winDelta >= 0 ? '+' : '') + (m.winDelta * 100).toFixed(1) + '%</span>' : '')
         + m.watchLines.map((w) => '<span class="wt">' + esc(w) + '</span>').join('')
         + m.notices.map((n) => '<span class="nt">' + esc(n.text) + '</span>').join('')
         + (m.hidden ? '<span class="nt">ほか ' + m.hidden + '件</span>' : '') + '</div>').join('') + '</div>';
@@ -403,6 +492,20 @@
       html += '<div class="sublabel">★ 注目選手の成長</div>' + linesHtml(last.watchLines.map((t) => ({ text: t, cls: 'watch' })));
     }
     html += '<div class="mline">' + esc(monthLine(last)) + '</div>';
+    if (last.winDelta != null) {
+      const d = last.winDelta * 100;
+      html += '<div class="mline ' + (d >= 0 ? 'up' : 'down') + '">今月の成長で、対 他校平均の勝率予想 ' + (d >= 0 ? '+' : '') + d.toFixed(1) + '%</div>';
+    }
+    if (last.topGrowers && last.topGrowers.length) {
+      html += '<div class="sublabel">今月よく伸びた選手</div><div class="lines">' + last.topGrowers.map((t, i) =>
+        '<div class="small">' + (i + 1) + '位 ' + (t.watched ? '★' : '') + esc(t.name) + '(' + t.grade + '年)総合値 +' + Core.fmtNum(t.gain) + '</div>').join('') + '</div>';
+    }
+    if (last.serial != null) html += '<div class="row"><button class="minibtn" data-growth-serial="' + last.serial + '">全員の変化を見る</button></div>';
+    if (last.practice && last.practice.length) {
+      const key = 'pg-' + last.serial;
+      html += '<details data-open="' + key + '"' + detailsOpen(key) + '><summary class="small">練習試合の詳細(' + last.practice.length + '試合)</summary>'
+        + last.practice.map((g, i) => gameHtml(g, key + '-' + i)).join('') + '</details>';
+    }
     if (last.notices.length) {
       html += '<div class="sublabel">通知</div>' + linesHtml(last.notices.map((n) => ({ text: n.text, cls: n.cls }))
         .concat(last.hidden ? [{ text: 'ほか ' + last.hidden + '件', cls: 'none' }] : []));
@@ -584,8 +687,109 @@
     return html;
   }
 
+  // チーム戦力(総合値スケール)。現在値・前年同月比・1年目4月比・守備区分別・他校との比較・推移グラフ
+  function signed(v) { return (v >= 0 ? '+' : '') + v; }
+  function dltSpan(v) { return v == null ? '' : '<span class="dlt ' + (v >= 0 ? 'up' : 'down') + '">' + signed(v) + '</span>'; }
+  function renderPowerCard() {
+    const PL = state.powerLog;
+    const ref = Core.opponentRef();
+    const live = Core.getTeamPower(state.players);
+    const cur = PL.length ? PL[PL.length - 1] : null;
+    const ago = cur ? PL.find((e) => e.s === cur.s - 12) : null;
+    const first = PL.length ? PL[0] : null;
+    const p = live.power;
+    let html = '<div class="card"><h2>チーム戦力</h2><div class="pw"><span class="big">' + p + '</span>'
+      + (ago ? '<span class="dlt">前年同月比 ' + dltSpan(cur.p - ago.p) + '</span>' : '')
+      + (first && cur && cur.s !== first.s ? '<span class="dlt">1年目4月比 ' + dltSpan(cur.p - first.p) + '</span>' : '') + '</div>';
+    html += '<div class="small">他校平均より ' + dltSpan(p - ref.avgPower) + '、他校上位より ' + dltSpan(p - ref.topPower)
+      + '(他校平均 ' + ref.avgPower + ' / 他校上位 ' + ref.topPower + ')</div>'
+      + '<div class="small">勝率予想:対 他校平均 <b>' + Math.round(Core.winProbability(live.strength, ref.avg) * 100) + '%</b> / 対 他校上位 <b>'
+      + Math.round(Core.winProbability(live.strength, ref.top) * 100) + '%</b></div>';
+    html += '<table class="posp"><tr><th>守備区分</th><th>現在</th><th>前年同月比</th></tr>' + ['P', 'C', 'IF', 'OF'].map((k) =>
+      '<tr><td>' + Core.POSITION_LABEL[k] + '</td><td>' + live.byPos[k] + '</td><td>' + (ago ? dltSpan(live.byPos[k] - ago.pos[k]) : '-') + '</td></tr>').join('') + '</table>';
+    html += powerGraph(PL);
+    return html + '<div class="small">チーム戦力 = スタメンから計算するチームの強さを、総合値と同じ尺度にしたもの。毎月末に記録します。</div></div>';
+  }
+  // 月ごとのチーム戦力の折れ線(他校平均・他校上位の線と、年の区切り)
+  function powerGraph(PL) {
+    if (PL.length < 2) return '';
+    const list = PL.slice(-60); // 直近5年
+    let lo = Infinity, hi = -Infinity;
+    for (const e of list) { lo = Math.min(lo, e.p, e.oa); hi = Math.max(hi, e.p, e.ot); }
+    lo = Math.floor((lo - 10) / 20) * 20;
+    hi = Math.ceil((hi + 10) / 20) * 20;
+    const W = 320, H = 140, L = 28, R = 8, T = 6, B = 16;
+    const s0 = list[0].s, s1 = Math.max(list[list.length - 1].s, s0 + 1);
+    const x = (sv) => L + (W - L - R) * (sv - s0) / (s1 - s0);
+    const y = (v) => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+    let svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="チーム戦力の推移">';
+    for (let v = lo; v <= hi; v += 20) {
+      svg += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="#eee8dc"/>'
+        + '<text x="' + (L - 3) + '" y="' + (y(v) + 3) + '" font-size="8" text-anchor="end" fill="#999">' + v + '</text>';
+    }
+    for (const e of list) {
+      if (e.m === 4) {
+        svg += '<line x1="' + x(e.s) + '" x2="' + x(e.s) + '" y1="' + T + '" y2="' + (H - B) + '" stroke="#c9bfae" stroke-dasharray="3,2"/>'
+          + '<text x="' + (x(e.s) + 2) + '" y="' + (H - 4) + '" font-size="8" fill="#888">' + e.y + '年目</text>';
+      }
+    }
+    const line = (key, color, dash) => '<polyline points="' + list.map((e) => x(e.s).toFixed(1) + ',' + y(e[key]).toFixed(1)).join(' ')
+      + '" fill="none" stroke="' + color + '" stroke-width="' + (dash ? 1.2 : 2) + '"' + (dash ? ' stroke-dasharray="4,3"' : '') + '/>';
+    svg += line('ot', '#b03a2e', true) + line('oa', '#888', true) + line('p', '#1f5f8b', false) + '</svg>';
+    return svg + '<div class="legend"><i style="background:#1f5f8b"></i>自校<i style="background:#888"></i>他校平均<i style="background:#b03a2e"></i>他校上位</div>';
+  }
+
+  // ---------- 成長タブ(月ごとの、全在校生の能力の変化) ----------
+  function growthSerials() {
+    return state.powerLog.map((e) => e.s);
+  }
+  function renderGrowth() {
+    const serials = growthSerials();
+    if (!serials.length) return '<div class="card"><h2>成長</h2><div class="small">まだ記録がありません。1か月進めると、毎月末の能力の変化がここに出ます。</div></div>';
+    let sv = growthView.serial;
+    if (sv == null || serials.indexOf(sv) < 0) sv = serials[serials.length - 1];
+    const idx = serials.indexOf(sv);
+    const y = Math.floor(sv / 12) + 1;
+    // その月に在籍していた選手(在校生と、月ごとの記録が残っている卒業生)
+    const people = state.players.filter((p) => !p.helper).concat(state.alumni.filter((a) => a.mlog && !a.helper));
+    const rows = [];
+    for (const p of people) {
+      const md = HighSchool.monthDelta(p, sv);
+      if (!md) continue;
+      const grade = y - p.enrolledYear + 1;
+      if (growthView.filter === 'watched' && !p.watched) continue;
+      if (/^g\d$/.test(growthView.filter) && Number(growthView.filter.slice(1)) !== grade) continue;
+      const keys = p.finalAbilities ? p.mainKeys : Core.visibleKeys(p);
+      const parts = [];
+      let sum = 0;
+      for (const k of keys) {
+        const d = growthView.decimal ? Core.round1(md.d[k]) : Math.round(md.now[k]) - Math.round(md.prev[k]);
+        sum += md.d[k];
+        if (d !== 0) parts.push({ k: k, d: d });
+      }
+      if (growthView.changedOnly && !parts.length) continue;
+      rows.push({ p: p, grade: grade, parts: parts, gain: sum / keys.length * CONFIG.ratingMultiplier });
+    }
+    rows.sort((a, b) => b.gain - a.gain || a.p.id - b.p.id);
+    const chip = (key, label) => '<button class="chip' + (growthView.filter === key ? ' on' : '') + '" data-gfilter="' + key + '">' + label + '</button>';
+    let html = '<div class="card"><h2>成長(' + esc(HighSchool.serialLabel(sv)) + ' 末)</h2>'
+      + '<div class="row"><button class="minibtn" data-gstep="-1"' + (idx <= 0 ? ' disabled' : '') + '>◀ 前月</button>'
+      + '<button class="minibtn" data-gstep="1"' + (idx >= serials.length - 1 ? ' disabled' : '') + '>次月 ▶</button>'
+      + '<button class="minibtn" data-gstep="latest">最新</button></div>'
+      + '<div class="row">' + chip('all', '全員') + chip('watched', '★注目') + chip('g1', '1年') + chip('g2', '2年') + chip('g3', '3年') + '</div>'
+      + '<div class="row"><label><input type="checkbox" id="gChanged"' + (growthView.changedOnly ? ' checked' : '') + '> 変化があった選手のみ</label>'
+      + '<label><input type="checkbox" id="gDecimal"' + (growthView.decimal ? ' checked' : '') + '> 小数で表示</label></div>'
+      + '<div class="small">' + rows.filter((r) => r.parts.length).length + '人に変化 / ' + rows.length + '人を表示(前月末、または入学時との差)</div>';
+    html += rows.map((r) => '<div class="grow-row">' + (r.p.watched ? '★' : '') + '<b>' + esc(r.p.name) + '</b> <span class="small">' + r.grade + '年・'
+      + Core.POSITION_SHORT[r.p.position] + (r.p.finalAbilities ? '・卒業生' : '') + '</span> '
+      + (r.parts.length ? r.parts.map((x) => '<span class="' + (x.d > 0 ? 'd' : 'dn') + '">' + Core.ABILITY_LABEL[x.k] + ' ' + (x.d > 0 ? '+' : '') + (growthView.decimal ? x.d.toFixed(1) : x.d) + '</span>').join(' ')
+        : '<span class="small">変化なし</span>') + '</div>').join('');
+    return html + '</div>';
+  }
+
   function renderHome() {
-    let html = renderMonthBand() + staleWarning() + renderWatchChooser();
+    let html = renderMonthBand() + staleWarning() + renderWatchChooser()
+      + (storageWarn ? '<div class="warnbox">⚠ 保存容量が上限の' + Math.round(CONFIG.visual.storageWarnRatio * 100) + '%に近づいたため、卒業生の月ごとの記録を学期ごとに圧縮しました。</div>' : '');
     const evs = state.lastEvents || [];
     if (state.awaiting === 'policy') {
       html += renderMonths(evs);
@@ -595,6 +799,7 @@
         + '<div class="btns"><button class="btn sub small" id="btnNextMonth">次の月へ</button>'
         + '<button class="btn sub small" id="btnApril">次の4月まで</button></div>';
       html += renderMonths(evs);
+      html += renderPowerCard();
       html += renderWatchCard();
       html += '<div class="card"><h2>現在のスタメン</h2>' + lineupTable(HighSchool.lineup(state), null, true) + '</div>';
     }
@@ -943,7 +1148,8 @@
     renderHeader();
     document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
     const main = document.getElementById('main');
-    main.innerHTML = (tab === 'home' ? renderHome() : tab === 'roster' ? renderRoster()
+    cardSeq = 0;
+    main.innerHTML = (tab === 'home' ? renderHome() : tab === 'roster' ? renderRoster() : tab === 'growth' ? renderGrowth()
       : tab === 'alumni' ? renderAlumni() : tab === 'tune' ? renderTune() : renderSettings()) + renderModal();
   }
 
@@ -964,6 +1170,8 @@
   }, true);
   document.getElementById('main').addEventListener('change', (e) => {
     if (e.target.id === 'autoTarget') { autoTarget = e.target.value; return; }
+    if (e.target.id === 'gChanged') { growthView.changedOnly = e.target.checked; render(); return; }
+    if (e.target.id === 'gDecimal') { growthView.decimal = e.target.checked; render(); return; }
     if (e.target.dataset.tune) {
       // 調整:初期値と同じなら上書きを外す
       const path = e.target.dataset.tune;
@@ -1002,6 +1210,21 @@
       save(); render();
       return;
     }
+    if (ds.growthSerial != null) {
+      growthView.serial = Number(ds.growthSerial);
+      tab = 'growth'; render(); window.scrollTo(0, 0);
+      return;
+    }
+    if (ds.gstep != null) {
+      const serials = growthSerials();
+      let i = serials.indexOf(growthView.serial == null ? serials[serials.length - 1] : growthView.serial);
+      if (i < 0) i = serials.length - 1;
+      if (ds.gstep === 'latest') i = serials.length - 1; else i = Math.max(0, Math.min(serials.length - 1, i + Number(ds.gstep)));
+      growthView.serial = serials[i];
+      render();
+      return;
+    }
+    if (ds.gfilter) { growthView.filter = ds.gfilter; render(); return; }
     if (id === 'btnAuto') {
       // おまかせ:新入生のみ(見直しの月は選び直しが必要な選手のみ)/ 全員
       for (const p of state.pendingRecruits) draftPolicies[p.id] = Core.autoPolicy(p);
