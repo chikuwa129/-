@@ -38,6 +38,19 @@
   .lines .big { color: var(--win); font-weight: bold; }
   .lines .none { color: var(--sub); }
   .lines .special { color: var(--special); font-weight: bold; }
+  .lines .big { background: #e9f6ec; border-radius: 4px; padding-left: 4px; }
+  .lines .watch { color: #9a6a00; }
+  .lines .watchhead { color: #9a6a00; font-weight: bold; border-top: 1px solid var(--line); margin-top: 4px; }
+  .gr { font-size: 11px; color: var(--win); font-weight: bold; margin-left: 4px; white-space: nowrap; }
+  .star { border: none; background: none; font-size: 18px; line-height: 1; padding: 0 4px; color: #bbb; cursor: pointer; vertical-align: middle; }
+  .star.on { color: #e0a800; }
+  .watchrow { padding: 4px 0; border-bottom: 1px dotted #eee; font-size: 13px; }
+  .watchrow .note { display: block; font-size: 12px; color: var(--sub); }
+  .chooser { border: 2px solid #e0a800; }
+  .chooser button { margin: 3px 4px 3px 0; padding: 6px 10px; border: 1px solid var(--line); background: #fff; border-radius: 6px; font-size: 14px; }
+  svg.chart { width: 100%; height: auto; display: block; margin-top: 4px; }
+  .legend { font-size: 11px; color: var(--sub); }
+  .legend i { display: inline-block; width: 10px; height: 3px; margin: 0 3px 2px 6px; vertical-align: middle; }
   .btns { display: flex; gap: 8px; margin: 10px 0; }
   .btn { flex: 1; padding: 14px 8px; font-size: 16px; border: none; border-radius: 8px; background: var(--accent); color: #fff; font-weight: bold; }
   .btn.sub { background: #fff; color: var(--accent); border: 1px solid var(--accent); }
@@ -119,7 +132,7 @@
     // ---- 基本 ----
     schoolName: '白樺高校',        // 自校の名前(架空)
     saveKey: 'bbgacha_save',       // localStorage のキー
-    saveVersion: 3,                // セーブデータの形式。違うバージョンのセーブは初期化する
+    saveVersion: 4,                // セーブデータの形式。違うバージョンのセーブは初期化する
     logLimit: 200,                 // 出来事ログの保存件数
 
     // ---- 新入生の人数 ----
@@ -283,8 +296,27 @@
       cleanupRbiBonus: 0.08,       // 3〜5番の打点の付きやすさの上乗せ
       innings: 9,                  // 先発投手は1試合を投げ切ったとみなす
       earnedRate: 0.85,            // 失点のうち自責点とする割合
-      minAtBatsForAverage: 100,    // 名鑑の「3割打者」の判定に必要な通算打数
+      // 名鑑の「3割打者」の判定に必要な通算打数。
+      // 今は大会が年6試合ほどで通算100打数に届かないため30にしている。
+      // フェーズ2以降で甲子園などの試合が増えたら、100に戻すこと。
+      minAtBatsForAverage: 30,
     },
+
+    // ---- 注目選手と通知 ----
+    watch: {
+      max: 5,                      // 注目選手の上限(在籍中の選手のみ数える)
+    },
+    // 通知の重要度:1=小さな出来事 / 2=通常 / 3=大きな出来事
+    // minImportance 以上なら通知する。注目選手は重要度に関わらず通知する(addEvent)
+    notify: {
+      minImportance: 2,
+      // 成績の節目(注目選手のみ通知される小さな出来事)
+      hitMilestones: [1, 10, 20, 30, 50],
+      homeRunMilestones: [1, 3, 5, 10],
+      winMilestones: [1, 5, 10],
+    },
+    // 年度末の「今年の成長トップ3」の人数
+    growthTopN: 3,
 
     // ---- 試合 ----
     match: {
@@ -595,6 +627,8 @@
       snapshots: [],    // 年ごとの能力 { y, g, a }
       record: { games: 0, wins: 0, titles: [] },
       stats: { career: emptyStatLine(), byYear: {} }, // 簡易成績(通算・年度ごと)
+      watched: false,   // 注目選手の印(★)
+      lastNotice: null, // 直近の通知 { y, t }
       hidden: { clutch: 0 }, // 内部の隠れ数値(後のフェーズで使う)
       retired: false,
     };
@@ -784,6 +818,7 @@
       snapshots: p.snapshots.slice(),
       record: JSON.parse(JSON.stringify(p.record)),
       stats: JSON.parse(JSON.stringify(p.stats)),
+      watched: !!p.watched,
       enrolledYear: p.enrolledYear,
       origin: p.origin || 'recruit',
     }, extra || {});
@@ -876,6 +911,38 @@
     const loser = rng.weighted(M.loserRunsWeights);
     const winner = loser + 1 + rng.weighted(M.marginWeights);
     return { win: win, my: win ? winner : loser, opp: win ? loser : winner };
+  }
+
+  // ---------- 成長の見える化(乱数は使わない) ----------
+  // 入学時からの増減。keys を省くと見えている能力(本職側。判明した二刀流は両方)
+  function growthSinceEntry(p, keys) {
+    keys = keys || visibleKeys(p);
+    const base = p.initialAbilities;
+    const now = p.finalAbilities || p.abilities;
+    let best = null;
+    let total = 0;
+    for (const k of keys) {
+      const d = now[k] - base[k];
+      total += d;
+      if (!best || d > best.delta) best = { key: k, delta: d };
+    }
+    return { best: best && best.delta > 0 ? best : null, total: total };
+  }
+  function formatBestGrowth(g) {
+    return g && g.best ? ABILITY_LABEL[g.best.key] + ' +' + g.best.delta : '';
+  }
+  // 能力の推移(入学時から、成長の記録を順に足していく)。グラフ用
+  //   戻り値 [{ label, a }]。label は「入学」「1年夏」「1年冬」など
+  function growthSeries(p) {
+    const a = Object.assign({}, p.initialAbilities);
+    const out = [{ label: '入学', a: Object.assign({}, a) }];
+    for (const h of p.history) {
+      if (!h.d || !Object.keys(h.d).length) continue;
+      for (const k of Object.keys(h.d)) a[k] += h.d[k];
+      const short = h.ev === '夏合宿' ? '夏' : h.ev === '冬合宿' ? '冬' : h.ev === '転向ボーナス' ? '末' : h.ev;
+      out.push({ label: h.g + '年' + short, a: Object.assign({}, a) });
+    }
+    return out;
   }
 
   // ---------- 打順(強さの計算には影響しない) ----------
@@ -1056,6 +1123,9 @@
     winProbability: winProbability,
     playMatch: playMatch,
     battingOrder: battingOrder,
+    growthSinceEntry: growthSinceEntry,
+    formatBestGrowth: formatBestGrowth,
+    growthSeries: growthSeries,
     emptyStatLine: emptyStatLine,
     sumStatLines: sumStatLines,
     battingAverage: battingAverage,
@@ -1109,6 +1179,44 @@
     return c;
   }
 
+  // 通知をまとめて扱う。importance:1=小さな出来事 / 2=通常 / 3=大きな出来事
+  //   注目選手なら、重要度に関わらず通知する(文面に★を付ける)
+  //   通知したら lines(イベントの表示行)とログに追加し、true を返す
+  //   opt: { player, text, importance, lines, cls, log }
+  function addEvent(state, opt) {
+    const p = opt.player;
+    const watched = !!(p && p.watched);
+    if (!watched && (opt.importance || 1) < CONFIG.notify.minImportance) return false;
+    const text = (watched ? '★' : '') + opt.text;
+    if (opt.lines) opt.lines.push({ text: text, cls: watched && (opt.importance || 1) < CONFIG.notify.minImportance ? 'watch' : (opt.cls || '') });
+    if (opt.log !== false) pushLog(state, text);
+    if (p) p.lastNotice = { y: state.year, t: opt.text };
+    return true;
+  }
+
+  function findPlayer(state, id) {
+    return state.players.find((p) => p.id === id) || state.pendingRecruits.find((p) => p.id === id) || null;
+  }
+  function watchedPlayers(state) {
+    return state.players.concat(state.pendingRecruits).filter((p) => p.watched);
+  }
+  // 注目の付け外し。在籍中(入学前を含む)は上限あり。名鑑の選手は上限なしで付け外しできる
+  //   戻り値 { ok, needRemove: [上限のため外す候補] }
+  function setWatch(state, id, on) {
+    const p = findPlayer(state, id);
+    if (!p) {
+      const a = state.alumni.find((x) => x.id === id);
+      if (a) a.watched = !!on;
+      return { ok: !!a, needRemove: [] };
+    }
+    if (on && !p.watched) {
+      const cur = watchedPlayers(state);
+      if (cur.length >= CONFIG.watch.max) return { ok: false, needRemove: cur };
+    }
+    p.watched = !!on;
+    return { ok: true, needRemove: [] };
+  }
+
   function pushLog(state, text) {
     state.log.push({ y: state.year, t: text });
     if (state.log.length > CONFIG.logLimit) state.log.splice(0, state.log.length - CONFIG.logLimit);
@@ -1136,6 +1244,7 @@
       helper: { years: 0, total: 0, _lastYear: 0 },
       pitcherSlot: { twoWay: [], normal: [] },  // 夏の大会でのエース枠の貢献(強さへの寄与)
       batting: { ab: 0, h: 0, paByOrder: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], games: 0 }, // 簡易成績の集計(検証用)
+      camp: { events: 0, big: 0, small: 0, none: 0, points: 0 },  // 合宿の集計(検証用)
     };
   }
 
@@ -1348,6 +1457,9 @@
     const counts = { big: 0, small: 0, none: 0 };
     const targets = state.players.filter((p) => !p.retired);
     const reveals = [];
+    const notices = [];
+    const bigLines = [];
+    let unchanged = 0;
     for (const p of targets) {
       // 転生・二刀流の判明(設定が 'firstCamp' の場合)
       if (p.reincarnation && !p.reincarnationRevealed) {
@@ -1367,14 +1479,34 @@
       }
       const r = growthEvent(rng, p, state.year, label);
       counts[r.outcome]++;
-      const mark = r.outcome === 'big' ? '◎' : r.outcome === 'small' ? '○' : '-';
-      const text = mark + ' ' + p.name + '(' + p.grade + '年・' + POSITION_SHORT[p.position] + ')'
-        + OUTCOME_LABEL[r.outcome] + (Object.keys(r.delta).length ? ' ' + formatDelta(r.delta) : '');
-      lines.push({ text: text, cls: r.outcome });
+      const gained = Object.keys(r.delta).length > 0;
+      const CS = state.stats.camp;
+      CS[r.outcome]++;
+      CS.events++;
+      for (const k of Object.keys(r.delta)) CS.points += r.delta[k];
+      const who = p.name + '(' + p.grade + '年・' + POSITION_SHORT[p.position] + ')';
+      if (!gained) {
+        unchanged++;
+      } else if (r.outcome === 'big') {
+        bigLines.push({ text: '◎ ' + who + ' 大きく伸びた! ' + formatDelta(r.delta), cls: 'big' });
+      } else {
+        lines.push({ text: (r.outcome === 'small' ? '○ ' : '- ') + who + ' ' + formatDelta(r.delta), cls: r.outcome });
+      }
+      // 注目選手は小さな成長でも通知する(大きく伸びたときは誰でも通常の重要度)
+      if (p.watched) {
+        addEvent(state, {
+          player: p, lines: notices, importance: r.outcome === 'big' ? 2 : 1, cls: 'special',
+          text: p.name + ':' + label + 'で' + OUTCOME_LABEL[r.outcome] + (gained ? '(' + formatDelta(r.delta) + ')' : ''),
+        });
+      }
     }
     const summary = '大きく伸びた ' + counts.big + '人 / 少し伸びた ' + counts.small + '人 / 変わらない ' + counts.none + '人';
     pushLog(state, label + ':' + summary);
-    return { type: 'camp', title: formatYear(state.year) + ' ' + label + 'の結果', lines: [{ text: summary, cls: 'summary' }].concat(reveals, lines) };
+    const tail = unchanged ? [{ text: '変化なし:' + unchanged + '人', cls: 'none' }] : [];
+    return {
+      type: 'camp', title: formatYear(state.year) + ' ' + label + 'の結果',
+      lines: [{ text: summary, cls: 'summary' }].concat(reveals, notices, bigLines, lines, tail),
+    };
   }
 
   // 9人そろわなければ、助っ人を補う
@@ -1462,6 +1594,8 @@
       if (ace) state.stats.pitcherSlot[ace.twoWay ? 'twoWay' : 'normal'].push(ev0.pitcherSlotValue);
     }
     const order = battingOrder(slots);
+    const careerBefore = {};
+    for (const p of members_) careerBefore[p.id] = Object.assign({}, statLinesFor(p, state.year)[0]);
     const srng = new Rng(state.statRngState);
     const games = [];
     for (let r = 1; r <= T.rounds; r++) {
@@ -1499,6 +1633,21 @@
       wins++;
     }
     state.statRngState = srng.s;
+    // 成績の節目(小さな出来事なので、注目選手だけ通知される)
+    const NT = CONFIG.notify;
+    const crossed = (list, a, b) => list.filter((m) => a < m && b >= m).pop();
+    for (const p of members_) {
+      const b = careerBefore[p.id];
+      const c = p.stats.career;
+      const marks = [];
+      const h = crossed(NT.hitMilestones, b.h, c.h);
+      if (h) marks.push(h === 1 ? '初安打' : '通算' + h + '安打');
+      const hr = crossed(NT.homeRunMilestones, b.hr, c.hr);
+      if (hr) marks.push(hr === 1 ? '初本塁打' : '通算' + hr + '本塁打');
+      const w = crossed(NT.winMilestones, b.w, c.w);
+      if (w) marks.push(w === 1 ? '初勝利' : '通算' + w + '勝');
+      if (marks.length) addEvent(state, { player: p, lines: lines, importance: 1, text: p.name + 'が' + marks.join('・') + 'を記録' });
+    }
     st.roundsWon += wins;
     let resultText;
     if (champion) {
@@ -1557,6 +1706,22 @@
         if (p.convert.penalty <= 0) p.convert = null;
       }
     }
+    // 今年の成長トップ3(見えている能力の増分の合計。最後の記録=前年度末か入学時と比べる)
+    const yearGrowth = state.players.filter((p) => !p.helper && p.snapshots.length).map((p) => {
+      const last = p.snapshots[p.snapshots.length - 1].a;
+      const d = {};
+      let total = 0;
+      for (const k of visibleKeys(p)) {
+        const v = p.abilities[k] - last[k];
+        if (v > 0) { d[k] = v; total += v; }
+      }
+      return { p: p, total: total, d: d };
+    }).filter((x) => x.total > 0).sort((a, b) => b.total - a.total || a.p.id - b.p.id).slice(0, CONFIG.growthTopN);
+    const topLines = yearGrowth.map((x, i) => ({
+      text: (i + 1) + '位 ' + (x.p.watched ? '★' : '') + x.p.name + '(' + x.p.grade + '年・' + POSITION_SHORT[x.p.position] + ')'
+        + ' 合計+' + x.total + '(' + formatDelta(x.d) + ')',
+      cls: i === 0 ? 'big' : '',
+    }));
     // 助っ人は元の部活に戻る
     const helpers = state.players.filter((p) => p.helper);
     for (const p of helpers) {
@@ -1565,12 +1730,14 @@
     }
     if (helpers.length) lines.push({ text: '助っ人' + helpers.length + '人が元の部活に戻った。', cls: 'none' });
     const graduates = state.players.filter((p) => p.grade >= 3 && !p.helper);
+    const summaries = [];
     for (const p of graduates) {
       const career = decideCareer(rng, p);
       takeSnapshot(p, state.year);
       addHistory(p, state.year, '卒業', career);
       state.alumni.push(makeAlumniRecord(p, { graduatedYear: state.year, career: career }));
       lines.push(p.name + '(' + POSITION_SHORT[p.position] + '・総合' + overall(p) + ')→ ' + career);
+      if (p.watched) summaries.push.apply(summaries, watchSummary(state, p, career));
     }
     state.players = state.players.filter((p) => p.grade < 3 && !p.helper);
     for (const p of state.players) {
@@ -1581,7 +1748,32 @@
     state.stats.years++;
     state.year++;
     lines.unshift({ text: graduates.length + '人が卒業。名鑑に記録されました。', cls: 'summary' });
-    return { type: 'yearEnd', title: formatYear(state.year - 1) + ' 年度末 卒業式', lines: lines };
+    const top = topLines.length ? [{ text: '今年の成長トップ' + topLines.length, cls: 'summary' }].concat(topLines) : [];
+    return { type: 'yearEnd', title: formatYear(state.year - 1) + ' 年度末 卒業式', lines: top.concat(lines, summaries) };
+  }
+
+  // 注目選手の「3年間のまとめ」(卒業時の表示行)
+  function watchSummary(state, p, career) {
+    const keys = visibleKeys(p);
+    const g = growthSinceEntry(p, keys);
+    const big = p.history.filter((h) => h.res === OUTCOME_LABEL.big).length;
+    const major = p.history.filter((h) => ['転生判明', '二刀流判明', '副能力判明', 'コンバート', 'コンバート失敗'].indexOf(h.ev) >= 0)
+      .map((h) => h.ev + (h.res ? '(' + h.res + ')' : ''));
+    if (big) major.unshift('合宿で大きく伸びた ×' + big);
+    if (p.record.titles.length) major.push(p.record.titles.join('、'));
+    const l = p.stats.career;
+    const statText = (l.pg ? l.w + '勝' + l.l + '敗 ' : '') + (l.ab ? '打率' + (l.h / l.ab).toFixed(3).replace(/^0/, '') + ' ' + l.hr + '本' : '');
+    const ini = avgOf(p.initialAbilities, keys);
+    const fin = avgOf(p.abilities, keys);
+    const out = [
+      { text: '★3年間のまとめ:' + p.name + '(' + POSITION_LABEL[p.position] + ')→ ' + career, cls: 'watchhead' },
+      { text: '  入学時 総合' + ini + ' → 卒業時 総合' + fin + '(+' + round1(fin - ini) + ')', cls: 'watch' },
+      { text: '  一番伸びた:' + (formatBestGrowth(g) || 'なし'), cls: 'watch' },
+      { text: '  主なイベント:' + (major.length ? major.join(' / ') : '特になし'), cls: 'watch' },
+    ];
+    if (statText) out.push({ text: '  通算成績:' + statText, cls: 'watch' });
+    pushLog(state, '★' + p.name + 'が卒業(' + career + ')');
+    return out;
   }
 
   // 現在のステージを1つ実行する。止まる場面ならイベントを返し、そうでなければ null
@@ -1656,6 +1848,9 @@
     advanceToApril: advanceToApril,
     currentStage: currentStage,
     members: members,
+    addEvent: addEvent,
+    setWatch: setWatch,
+    watchedPlayers: watchedPlayers,
     countByPosition: countByPosition,
     lineup: (state) => lineupSummary(buildLineup(state.players)),
     teamStrength: (state) => calcTeamStrength(state.players),
@@ -1678,6 +1873,8 @@
   let state = null;
   let tab = 'home';
   let alumniFilter = 'all';
+  let pendingWatchId = null;    // 上限を超えて注目しようとした選手
+  const openDetails = new Set(); // 開いている選手詳細(描き直しても開いたままにする)
   const draftPolicies = {}; // 入学時に選択中の方針
 
   // ---------- セーブ / ロード ----------
@@ -1759,6 +1956,63 @@
     if (p.convert) s += '(' + Core.POSITION_LABEL[p.convert.pos] + 'は転向直後のため -' + p.convert.penalty + ')';
     return '<div class="small">' + s + '</div>';
   }
+  // 入学時から一番伸びた項目(名前の横に小さく)
+  function growthLabel(p) {
+    const t = Core.formatBestGrowth(Core.growthSinceEntry(p));
+    return t ? '<span class="gr">' + esc(t) + '</span>' : '';
+  }
+  function starBtn(p) {
+    return '<button class="star' + (p.watched ? ' on' : '') + '" data-watch="' + p.id + '" title="注目">' + (p.watched ? '★' : '☆') + '</button>';
+  }
+  // 能力の推移のグラフ(インラインSVG)。横軸は学期、縦軸は能力値、能力ごとに線を分ける
+  const LINE_COLORS = ['#c0392b', '#2471a3', '#1e8449', '#b9770e', '#7d3c98', '#117a65', '#a04000', '#5d6d7e', '#cb4335'];
+  function growthChart(p, keys) {
+    const series = Core.growthSeries(p);
+    if (series.length < 2) return '';
+    const W = 320, H = 150, L = 24, R = 14, T = 6, B = 30;
+    const x = (i) => L + (W - L - R) * i / (series.length - 1);
+    const y = (v) => T + (H - T - B) * (1 - v / 100);
+    let svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="能力の推移">';
+    for (const v of [0, 20, 40, 60, 80, 100]) {
+      svg += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="#e5ddd0" stroke-width="1"/>'
+        + '<text x="' + (L - 3) + '" y="' + (y(v) + 3) + '" font-size="8" text-anchor="end" fill="#999">' + v + '</text>';
+    }
+    series.forEach((pt, i) => {
+      svg += '<text x="' + x(i) + '" y="' + (H - B + 10 + (i % 2) * 9) + '" font-size="7.5" text-anchor="middle" fill="#888">' + esc(pt.label) + '</text>';
+    });
+    keys.forEach((k, ki) => {
+      const pts = series.map((pt, i) => x(i).toFixed(1) + ',' + y(pt.a[k]).toFixed(1)).join(' ');
+      svg += '<polyline points="' + pts + '" fill="none" stroke="' + LINE_COLORS[ki % LINE_COLORS.length] + '" stroke-width="1.6"/>';
+    });
+    svg += '</svg>';
+    const legend = '<div class="legend">' + keys.map((k, ki) => '<i style="background:' + LINE_COLORS[ki % LINE_COLORS.length] + '"></i>'
+      + Core.ABILITY_LABEL[k]).join('') + '</div>';
+    return '<div class="sublabel">能力の推移</div>' + svg + legend;
+  }
+  function detailsOpen(key) { return openDetails.has(key) ? ' open' : ''; }
+  // 上限を超えて注目しようとしたときの、外す選手の選択
+  function renderWatchChooser() {
+    if (pendingWatchId == null) return '';
+    const cur = HighSchool.watchedPlayers(state);
+    const target = state.players.concat(state.pendingRecruits).find((p) => p.id === pendingWatchId);
+    if (!target) return '';
+    return '<div class="card chooser"><h2>★ 注目選手は' + CONFIG.watch.max + '人までです</h2>'
+      + '<div class="small">' + esc(target.name) + 'を注目にするため、外す選手を選んでください。</div>'
+      + cur.map((p) => '<button data-swapwatch="' + p.id + '">★ ' + esc(p.name) + '(' + p.grade + '年・' + Core.POSITION_SHORT[p.position] + ')を外す</button>').join('')
+      + '<div><button data-swapwatch="cancel">やめる</button></div></div>';
+  }
+  // ホームの注目選手欄(0人なら出さない)
+  function renderWatchCard() {
+    const list = HighSchool.watchedPlayers(state);
+    if (!list.length) return '';
+    return '<div class="card"><h2>★ 注目選手(' + list.length + '/' + CONFIG.watch.max + ')</h2>' + list.map((p) =>
+      '<div class="watchrow">' + starBtn(p) + '<b>' + esc(p.name) + '</b> '
+      + '<span class="small">' + (state.pendingRecruits.indexOf(p) >= 0 ? '入学前' : p.grade + '年') + '・' + Core.POSITION_LABEL[p.position] + '</span>'
+      + growthLabel(p)
+      + '<span class="note">' + (p.lastNotice ? HighSchool.formatYear(p.lastNotice.y) + ':' + esc(p.lastNotice.t) : 'まだ通知はありません') + '</span></div>'
+    ).join('') + '</div>';
+  }
+
   function eventCard(ev) {
     return '<div class="card"><h2>' + esc(ev.title) + '</h2><div class="lines">' + ev.lines.map((l) => {
       const o = typeof l === 'string' ? { text: l, cls: '' } : l;
@@ -1811,7 +2065,7 @@
       const p = byId[s.id];
       const isP = s.pos === 'P';
       const ord = isP ? '先発' + (s.order ? '<small>' + s.order + '番</small>' : '') : (s.order || '-');
-      let name = esc(s.name) + (s.twoWay ? ' <span class="tag twoway">二刀流</span>' : '') + (s.helper ? ' <span class="tag helper">助っ人</span>' : '')
+      let name = esc(s.name) + (withStats && p ? growthLabel(p) : '') + (s.twoWay ? ' <span class="tag twoway">二刀流</span>' : '') + (s.helper ? ' <span class="tag helper">助っ人</span>' : '')
         + (s.outOfPosition && s.primary ? ' <span class="small">(本職:' + Core.POSITION_LABEL[s.primary] + ')</span>' : '');
       let cols;
       if (!withStats) {
@@ -1880,7 +2134,7 @@
     if (!n) html += '<div class="small">今年は新入生がいません。</div>';
     for (const p of state.pendingRecruits) {
       if (!draftPolicies[p.id]) draftPolicies[p.id] = p.policy;
-      html += '<div class="player"><span class="pname">' + esc(p.name) + '</span>' + posTag(p.position) + extraTags(p)
+      html += '<div class="player">' + starBtn(p) + '<span class="pname">' + esc(p.name) + '</span>' + posTag(p.position) + extraTags(p)
         + ' <span class="small">' + overallText(p) + '</span>'
         + '<div class="impress">' + esc(impression(p)) + '</div>'
         + mainGrids(p, p.abilities);
@@ -1902,7 +2156,7 @@
   }
 
   function renderHome() {
-    let html = renderCalendar();
+    let html = renderCalendar() + renderWatchChooser();
     const evs = state.lastEvents || [];
     if (state.awaiting === 'enrollment') {
       for (const ev of evs) html += eventCard(ev);
@@ -1911,6 +2165,7 @@
       html += '<div class="btns"><button class="btn" id="btnNext">次へ進む</button>'
         + '<button class="btn sub" id="btnApril">次の4月まで</button></div>';
       for (const ev of evs) html += eventCard(ev);
+      html += renderWatchCard();
       html += '<div class="card"><h2>現在のスタメン</h2>' + lineupTable(HighSchool.lineup(state), null, true) + '</div>';
     }
     const recent = state.log.slice(-8).reverse();
@@ -1931,8 +2186,10 @@
     } else if (!Core.isTwoWayKnown(p)) {
       detail += '<div class="sublabel">副能力:未判明(本職でない役割で出場すると分かる)</div>';
     }
-    detail += statTable(p) + histList(p.history);
-    return '<div class="player"><details><summary><span class="pname">' + esc(p.name) + '</span> '
+    detail = '<div class="small">' + starBtn(p) + (p.watched ? '注目中(タップで外す)' : '注目する') + '</div>'
+      + detail + growthChart(p, keys) + statTable(p) + histList(p.history);
+    return '<div class="player">' + starBtn(p) + '<details data-open="p' + p.id + '"' + detailsOpen('p' + p.id) + ' style="display:inline-block;width:calc(100% - 32px);vertical-align:top">'
+      + '<summary><span class="pname">' + esc(p.name) + '</span>' + growthLabel(p) + ' '
       + '<span class="small">' + (p.helper ? '' : p.grade + '年') + '</span>' + posTag(p.position) + extraTags(p)
       + ' <span class="small">' + overallText(p) + ' / ' + statBrief(p) + ' / ' + esc(Core.policyLabel(p)) + '</span></summary>'
       + detail + '</details>'
@@ -1940,6 +2197,9 @@
   }
 
   function renderRoster() {
+    return renderWatchChooser() + renderRosterBody();
+  }
+  function renderRosterBody() {
     const posOrder = { P: 0, C: 1, IF: 2, OF: 3 };
     const sortFn = (a, b) => posOrder[a.position] - posOrder[b.position]
       || Core.avgOf(b.abilities, Core.visibleKeys(b)) - Core.avgOf(a.abilities, Core.visibleKeys(a));
@@ -1970,13 +2230,14 @@
 
   function renderAlumni() {
     const minAB = CONFIG.stats.minAtBatsForAverage;
-    const filters = [['all', 'すべて'], ['genius', '天才'], ['reinc', '転生'], ['twoway', '二刀流'], ['pro', 'プロ入り'], ['three', '3割打者'], ['helper', '助っ人']];
+    const filters = [['all', 'すべて'], ['genius', '天才'], ['reinc', '転生'], ['twoway', '二刀流'], ['pro', 'プロ入り'], ['three', '3割打者'], ['watched', '注目だった選手'], ['helper', '助っ人']];
     let list = state.alumni.slice().reverse();
     if (alumniFilter === 'genius') list = list.filter((a) => a.talent === 'genius');
     if (alumniFilter === 'reinc') list = list.filter((a) => a.reincarnation);
     if (alumniFilter === 'twoway') list = list.filter((a) => a.twoWay);
     if (alumniFilter === 'pro') list = list.filter((a) => a.career === CONFIG.career.paths[0].label);
     if (alumniFilter === 'helper') list = list.filter((a) => a.helper);
+    if (alumniFilter === 'watched') list = list.filter((a) => a.watched);
     if (alumniFilter === 'three') list = list.filter((a) => careerOf(a).ab >= minAB && Core.battingAverage(careerOf(a)) >= 0.3);
     let html = '<div class="card"><h2>名鑑(' + state.alumni.length + '人)</h2><div class="filters">'
       + filters.map((f) => '<button data-af="' + f[0] + '" class="' + (alumniFilter === f[0] ? 'on' : '') + '">' + f[1] + '</button>').join('')
@@ -1993,9 +2254,15 @@
       const talent = a.talent === 'genius'
         ? '<span class="tag genius">' + (a.geniusBust ? '天才(開花せず)' : '天才') + '</span>' : '';
       const subKeys = a.twoWay ? [] : Core.ALL_KEYS.filter((k) => a.mainKeys.indexOf(k) < 0);
-      html += '<div class="player"><details><summary><span class="pname">' + esc(a.name) + '</span>'
+      const ini = Core.avgOf(a.initialAbilities, a.mainKeys);
+      const fin = Core.avgOf(a.finalAbilities, a.mainKeys);
+      const gl = Core.formatBestGrowth(Core.growthSinceEntry(a, a.mainKeys));
+      html += '<div class="player">' + starBtn(a) + '<details data-open="a' + a.id + '"' + detailsOpen('a' + a.id)
+        + ' style="display:inline-block;width:calc(100% - 32px);vertical-align:top"><summary><span class="pname">' + esc(a.name) + '</span>'
         + posTag(a.position) + talent + extraTags(a, true)
-        + ' <span class="small">総合 ' + Core.avgOf(a.finalAbilities, a.mainKeys) + ' → ' + esc(a.career) + '</span>'
+        + ' <span class="small">→ ' + esc(a.career) + '</span>'
+        + '<div class="small">総合 ' + ini + ' → ' + fin + ' <b style="color:var(--win)">(' + (fin - ini >= 0 ? '+' : '') + (Math.round((fin - ini) * 10) / 10) + ')</b>'
+        + (gl ? ' / 一番伸びた:' + esc(gl) : '') + '</div>'
         + '<div class="small">' + alumniStatLine(a) + '</div></summary>'
         + '<div class="small">育成方針:' + esc(a.policyLabel || Core.policyLabelByKey(a.policy))
         + ' / 才能:' + Core.TALENT_LABEL[a.talent] + (a.geniusBust ? '(開花せず)' : '')
@@ -2006,6 +2273,7 @@
         + '<div class="small">通算成績:' + alumniStatLine(a) + '</div>'
         + '<div class="small">チーム成績:試合 ' + a.record.games + '(' + a.record.wins + '勝)'
         + (a.record.titles.length ? ' / ' + esc(a.record.titles.join('、')) : '') + '</div>'
+        + growthChart(a, a.mainKeys)
         + statTable(a)
         + snapTable(a.mainKeys, a.snapshots)
         + (subKeys.length ? '<div class="sublabel">副能力(' + (a.subRevealed ? '在学中に判明' : '在学中は未判明') + ')</div>'
@@ -2040,11 +2308,36 @@
     const t = e.target.dataset && e.target.dataset.tab;
     if (t) { tab = t; render(); window.scrollTo(0, 0); }
   });
+  document.getElementById('main').addEventListener('toggle', (e) => {
+    const key = e.target.dataset && e.target.dataset.open;
+    if (!key) return;
+    if (e.target.open) openDetails.add(key); else openDetails.delete(key);
+  }, true);
   document.getElementById('main').addEventListener('change', (e) => {
     if (e.target.dataset.pid) draftPolicies[e.target.dataset.pid] = e.target.value;
   });
   document.getElementById('main').addEventListener('click', (e) => {
     const id = e.target.id;
+    const ds = e.target.dataset || {};
+    if (ds.watch) {
+      e.preventDefault(); // summary の中でも詳細を開閉しない
+      const pid = Number(ds.watch);
+      const all = state.players.concat(state.pendingRecruits);
+      const p = all.find((q) => q.id === pid) || state.alumni.find((q) => q.id === pid);
+      const r = HighSchool.setWatch(state, pid, !(p && p.watched));
+      if (!r.ok && r.needRemove.length) pendingWatchId = pid;
+      save(); render();
+      return;
+    }
+    if (ds.swapwatch) {
+      if (ds.swapwatch !== 'cancel') {
+        HighSchool.setWatch(state, Number(ds.swapwatch), false);
+        HighSchool.setWatch(state, pendingWatchId, true);
+      }
+      pendingWatchId = null;
+      save(); render();
+      return;
+    }
     if (id === 'btnAuto') {
       for (const p of state.pendingRecruits) draftPolicies[p.id] = Core.autoPolicy(p);
       render();

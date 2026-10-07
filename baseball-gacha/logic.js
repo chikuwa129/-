@@ -265,6 +265,8 @@
       snapshots: [],    // 年ごとの能力 { y, g, a }
       record: { games: 0, wins: 0, titles: [] },
       stats: { career: emptyStatLine(), byYear: {} }, // 簡易成績(通算・年度ごと)
+      watched: false,   // 注目選手の印(★)
+      lastNotice: null, // 直近の通知 { y, t }
       hidden: { clutch: 0 }, // 内部の隠れ数値(後のフェーズで使う)
       retired: false,
     };
@@ -454,6 +456,7 @@
       snapshots: p.snapshots.slice(),
       record: JSON.parse(JSON.stringify(p.record)),
       stats: JSON.parse(JSON.stringify(p.stats)),
+      watched: !!p.watched,
       enrolledYear: p.enrolledYear,
       origin: p.origin || 'recruit',
     }, extra || {});
@@ -546,6 +549,38 @@
     const loser = rng.weighted(M.loserRunsWeights);
     const winner = loser + 1 + rng.weighted(M.marginWeights);
     return { win: win, my: win ? winner : loser, opp: win ? loser : winner };
+  }
+
+  // ---------- 成長の見える化(乱数は使わない) ----------
+  // 入学時からの増減。keys を省くと見えている能力(本職側。判明した二刀流は両方)
+  function growthSinceEntry(p, keys) {
+    keys = keys || visibleKeys(p);
+    const base = p.initialAbilities;
+    const now = p.finalAbilities || p.abilities;
+    let best = null;
+    let total = 0;
+    for (const k of keys) {
+      const d = now[k] - base[k];
+      total += d;
+      if (!best || d > best.delta) best = { key: k, delta: d };
+    }
+    return { best: best && best.delta > 0 ? best : null, total: total };
+  }
+  function formatBestGrowth(g) {
+    return g && g.best ? ABILITY_LABEL[g.best.key] + ' +' + g.best.delta : '';
+  }
+  // 能力の推移(入学時から、成長の記録を順に足していく)。グラフ用
+  //   戻り値 [{ label, a }]。label は「入学」「1年夏」「1年冬」など
+  function growthSeries(p) {
+    const a = Object.assign({}, p.initialAbilities);
+    const out = [{ label: '入学', a: Object.assign({}, a) }];
+    for (const h of p.history) {
+      if (!h.d || !Object.keys(h.d).length) continue;
+      for (const k of Object.keys(h.d)) a[k] += h.d[k];
+      const short = h.ev === '夏合宿' ? '夏' : h.ev === '冬合宿' ? '冬' : h.ev === '転向ボーナス' ? '末' : h.ev;
+      out.push({ label: h.g + '年' + short, a: Object.assign({}, a) });
+    }
+    return out;
   }
 
   // ---------- 打順(強さの計算には影響しない) ----------
@@ -726,6 +761,9 @@
     winProbability: winProbability,
     playMatch: playMatch,
     battingOrder: battingOrder,
+    growthSinceEntry: growthSinceEntry,
+    formatBestGrowth: formatBestGrowth,
+    growthSeries: growthSeries,
     emptyStatLine: emptyStatLine,
     sumStatLines: sumStatLines,
     battingAverage: battingAverage,
@@ -779,6 +817,44 @@
     return c;
   }
 
+  // 通知をまとめて扱う。importance:1=小さな出来事 / 2=通常 / 3=大きな出来事
+  //   注目選手なら、重要度に関わらず通知する(文面に★を付ける)
+  //   通知したら lines(イベントの表示行)とログに追加し、true を返す
+  //   opt: { player, text, importance, lines, cls, log }
+  function addEvent(state, opt) {
+    const p = opt.player;
+    const watched = !!(p && p.watched);
+    if (!watched && (opt.importance || 1) < CONFIG.notify.minImportance) return false;
+    const text = (watched ? '★' : '') + opt.text;
+    if (opt.lines) opt.lines.push({ text: text, cls: watched && (opt.importance || 1) < CONFIG.notify.minImportance ? 'watch' : (opt.cls || '') });
+    if (opt.log !== false) pushLog(state, text);
+    if (p) p.lastNotice = { y: state.year, t: opt.text };
+    return true;
+  }
+
+  function findPlayer(state, id) {
+    return state.players.find((p) => p.id === id) || state.pendingRecruits.find((p) => p.id === id) || null;
+  }
+  function watchedPlayers(state) {
+    return state.players.concat(state.pendingRecruits).filter((p) => p.watched);
+  }
+  // 注目の付け外し。在籍中(入学前を含む)は上限あり。名鑑の選手は上限なしで付け外しできる
+  //   戻り値 { ok, needRemove: [上限のため外す候補] }
+  function setWatch(state, id, on) {
+    const p = findPlayer(state, id);
+    if (!p) {
+      const a = state.alumni.find((x) => x.id === id);
+      if (a) a.watched = !!on;
+      return { ok: !!a, needRemove: [] };
+    }
+    if (on && !p.watched) {
+      const cur = watchedPlayers(state);
+      if (cur.length >= CONFIG.watch.max) return { ok: false, needRemove: cur };
+    }
+    p.watched = !!on;
+    return { ok: true, needRemove: [] };
+  }
+
   function pushLog(state, text) {
     state.log.push({ y: state.year, t: text });
     if (state.log.length > CONFIG.logLimit) state.log.splice(0, state.log.length - CONFIG.logLimit);
@@ -806,6 +882,7 @@
       helper: { years: 0, total: 0, _lastYear: 0 },
       pitcherSlot: { twoWay: [], normal: [] },  // 夏の大会でのエース枠の貢献(強さへの寄与)
       batting: { ab: 0, h: 0, paByOrder: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], games: 0 }, // 簡易成績の集計(検証用)
+      camp: { events: 0, big: 0, small: 0, none: 0, points: 0 },  // 合宿の集計(検証用)
     };
   }
 
@@ -1018,6 +1095,9 @@
     const counts = { big: 0, small: 0, none: 0 };
     const targets = state.players.filter((p) => !p.retired);
     const reveals = [];
+    const notices = [];
+    const bigLines = [];
+    let unchanged = 0;
     for (const p of targets) {
       // 転生・二刀流の判明(設定が 'firstCamp' の場合)
       if (p.reincarnation && !p.reincarnationRevealed) {
@@ -1037,14 +1117,34 @@
       }
       const r = growthEvent(rng, p, state.year, label);
       counts[r.outcome]++;
-      const mark = r.outcome === 'big' ? '◎' : r.outcome === 'small' ? '○' : '-';
-      const text = mark + ' ' + p.name + '(' + p.grade + '年・' + POSITION_SHORT[p.position] + ')'
-        + OUTCOME_LABEL[r.outcome] + (Object.keys(r.delta).length ? ' ' + formatDelta(r.delta) : '');
-      lines.push({ text: text, cls: r.outcome });
+      const gained = Object.keys(r.delta).length > 0;
+      const CS = state.stats.camp;
+      CS[r.outcome]++;
+      CS.events++;
+      for (const k of Object.keys(r.delta)) CS.points += r.delta[k];
+      const who = p.name + '(' + p.grade + '年・' + POSITION_SHORT[p.position] + ')';
+      if (!gained) {
+        unchanged++;
+      } else if (r.outcome === 'big') {
+        bigLines.push({ text: '◎ ' + who + ' 大きく伸びた! ' + formatDelta(r.delta), cls: 'big' });
+      } else {
+        lines.push({ text: (r.outcome === 'small' ? '○ ' : '- ') + who + ' ' + formatDelta(r.delta), cls: r.outcome });
+      }
+      // 注目選手は小さな成長でも通知する(大きく伸びたときは誰でも通常の重要度)
+      if (p.watched) {
+        addEvent(state, {
+          player: p, lines: notices, importance: r.outcome === 'big' ? 2 : 1, cls: 'special',
+          text: p.name + ':' + label + 'で' + OUTCOME_LABEL[r.outcome] + (gained ? '(' + formatDelta(r.delta) + ')' : ''),
+        });
+      }
     }
     const summary = '大きく伸びた ' + counts.big + '人 / 少し伸びた ' + counts.small + '人 / 変わらない ' + counts.none + '人';
     pushLog(state, label + ':' + summary);
-    return { type: 'camp', title: formatYear(state.year) + ' ' + label + 'の結果', lines: [{ text: summary, cls: 'summary' }].concat(reveals, lines) };
+    const tail = unchanged ? [{ text: '変化なし:' + unchanged + '人', cls: 'none' }] : [];
+    return {
+      type: 'camp', title: formatYear(state.year) + ' ' + label + 'の結果',
+      lines: [{ text: summary, cls: 'summary' }].concat(reveals, notices, bigLines, lines, tail),
+    };
   }
 
   // 9人そろわなければ、助っ人を補う
@@ -1132,6 +1232,8 @@
       if (ace) state.stats.pitcherSlot[ace.twoWay ? 'twoWay' : 'normal'].push(ev0.pitcherSlotValue);
     }
     const order = battingOrder(slots);
+    const careerBefore = {};
+    for (const p of members_) careerBefore[p.id] = Object.assign({}, statLinesFor(p, state.year)[0]);
     const srng = new Rng(state.statRngState);
     const games = [];
     for (let r = 1; r <= T.rounds; r++) {
@@ -1169,6 +1271,21 @@
       wins++;
     }
     state.statRngState = srng.s;
+    // 成績の節目(小さな出来事なので、注目選手だけ通知される)
+    const NT = CONFIG.notify;
+    const crossed = (list, a, b) => list.filter((m) => a < m && b >= m).pop();
+    for (const p of members_) {
+      const b = careerBefore[p.id];
+      const c = p.stats.career;
+      const marks = [];
+      const h = crossed(NT.hitMilestones, b.h, c.h);
+      if (h) marks.push(h === 1 ? '初安打' : '通算' + h + '安打');
+      const hr = crossed(NT.homeRunMilestones, b.hr, c.hr);
+      if (hr) marks.push(hr === 1 ? '初本塁打' : '通算' + hr + '本塁打');
+      const w = crossed(NT.winMilestones, b.w, c.w);
+      if (w) marks.push(w === 1 ? '初勝利' : '通算' + w + '勝');
+      if (marks.length) addEvent(state, { player: p, lines: lines, importance: 1, text: p.name + 'が' + marks.join('・') + 'を記録' });
+    }
     st.roundsWon += wins;
     let resultText;
     if (champion) {
@@ -1227,6 +1344,22 @@
         if (p.convert.penalty <= 0) p.convert = null;
       }
     }
+    // 今年の成長トップ3(見えている能力の増分の合計。最後の記録=前年度末か入学時と比べる)
+    const yearGrowth = state.players.filter((p) => !p.helper && p.snapshots.length).map((p) => {
+      const last = p.snapshots[p.snapshots.length - 1].a;
+      const d = {};
+      let total = 0;
+      for (const k of visibleKeys(p)) {
+        const v = p.abilities[k] - last[k];
+        if (v > 0) { d[k] = v; total += v; }
+      }
+      return { p: p, total: total, d: d };
+    }).filter((x) => x.total > 0).sort((a, b) => b.total - a.total || a.p.id - b.p.id).slice(0, CONFIG.growthTopN);
+    const topLines = yearGrowth.map((x, i) => ({
+      text: (i + 1) + '位 ' + (x.p.watched ? '★' : '') + x.p.name + '(' + x.p.grade + '年・' + POSITION_SHORT[x.p.position] + ')'
+        + ' 合計+' + x.total + '(' + formatDelta(x.d) + ')',
+      cls: i === 0 ? 'big' : '',
+    }));
     // 助っ人は元の部活に戻る
     const helpers = state.players.filter((p) => p.helper);
     for (const p of helpers) {
@@ -1235,12 +1368,14 @@
     }
     if (helpers.length) lines.push({ text: '助っ人' + helpers.length + '人が元の部活に戻った。', cls: 'none' });
     const graduates = state.players.filter((p) => p.grade >= 3 && !p.helper);
+    const summaries = [];
     for (const p of graduates) {
       const career = decideCareer(rng, p);
       takeSnapshot(p, state.year);
       addHistory(p, state.year, '卒業', career);
       state.alumni.push(makeAlumniRecord(p, { graduatedYear: state.year, career: career }));
       lines.push(p.name + '(' + POSITION_SHORT[p.position] + '・総合' + overall(p) + ')→ ' + career);
+      if (p.watched) summaries.push.apply(summaries, watchSummary(state, p, career));
     }
     state.players = state.players.filter((p) => p.grade < 3 && !p.helper);
     for (const p of state.players) {
@@ -1251,7 +1386,32 @@
     state.stats.years++;
     state.year++;
     lines.unshift({ text: graduates.length + '人が卒業。名鑑に記録されました。', cls: 'summary' });
-    return { type: 'yearEnd', title: formatYear(state.year - 1) + ' 年度末 卒業式', lines: lines };
+    const top = topLines.length ? [{ text: '今年の成長トップ' + topLines.length, cls: 'summary' }].concat(topLines) : [];
+    return { type: 'yearEnd', title: formatYear(state.year - 1) + ' 年度末 卒業式', lines: top.concat(lines, summaries) };
+  }
+
+  // 注目選手の「3年間のまとめ」(卒業時の表示行)
+  function watchSummary(state, p, career) {
+    const keys = visibleKeys(p);
+    const g = growthSinceEntry(p, keys);
+    const big = p.history.filter((h) => h.res === OUTCOME_LABEL.big).length;
+    const major = p.history.filter((h) => ['転生判明', '二刀流判明', '副能力判明', 'コンバート', 'コンバート失敗'].indexOf(h.ev) >= 0)
+      .map((h) => h.ev + (h.res ? '(' + h.res + ')' : ''));
+    if (big) major.unshift('合宿で大きく伸びた ×' + big);
+    if (p.record.titles.length) major.push(p.record.titles.join('、'));
+    const l = p.stats.career;
+    const statText = (l.pg ? l.w + '勝' + l.l + '敗 ' : '') + (l.ab ? '打率' + (l.h / l.ab).toFixed(3).replace(/^0/, '') + ' ' + l.hr + '本' : '');
+    const ini = avgOf(p.initialAbilities, keys);
+    const fin = avgOf(p.abilities, keys);
+    const out = [
+      { text: '★3年間のまとめ:' + p.name + '(' + POSITION_LABEL[p.position] + ')→ ' + career, cls: 'watchhead' },
+      { text: '  入学時 総合' + ini + ' → 卒業時 総合' + fin + '(+' + round1(fin - ini) + ')', cls: 'watch' },
+      { text: '  一番伸びた:' + (formatBestGrowth(g) || 'なし'), cls: 'watch' },
+      { text: '  主なイベント:' + (major.length ? major.join(' / ') : '特になし'), cls: 'watch' },
+    ];
+    if (statText) out.push({ text: '  通算成績:' + statText, cls: 'watch' });
+    pushLog(state, '★' + p.name + 'が卒業(' + career + ')');
+    return out;
   }
 
   // 現在のステージを1つ実行する。止まる場面ならイベントを返し、そうでなければ null
@@ -1326,6 +1486,9 @@
     advanceToApril: advanceToApril,
     currentStage: currentStage,
     members: members,
+    addEvent: addEvent,
+    setWatch: setWatch,
+    watchedPlayers: watchedPlayers,
     countByPosition: countByPosition,
     lineup: (state) => lineupSummary(buildLineup(state.players)),
     teamStrength: (state) => calcTeamStrength(state.players),

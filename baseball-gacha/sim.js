@@ -201,6 +201,42 @@ for (const path of CONFIG.career.paths) {
   log('  ' + path.label + ': ' + n + '人 (' + pct(n, grads.length) + ')');
 }
 
+// 成長(入学時 → 卒業時。本職側。開始時からいた選手と助っ人は除く)
+{
+  const rows = grads.map((a) => {
+    let total = 0;
+    let best = -Infinity;
+    for (const k of a.mainKeys) {
+      const d = a.finalAbilities[k] - a.initialAbilities[k];
+      total += d;
+      if (d > best) best = d;
+    }
+    // 卒業時に一番高い能力が、入学時からどれだけ伸びたか
+    const topKey = a.mainKeys.reduce((x, k) => (a.finalAbilities[k] > a.finalAbilities[x] ? k : x), a.mainKeys[0]);
+    return { g: groupOf(a), total: total, best: best, top: a.finalAbilities[topKey] - a.initialAbilities[topKey] };
+  });
+  log('');
+  log('■ 入学時 → 卒業時の増分(本職側)');
+  log('  区分        人数   能力の合計   一番伸びた項目   卒業時の最高項目');
+  for (const g of ['全体'].concat(Object.keys(groups))) {
+    const list = g === '全体' ? rows : rows.filter((r) => r.g === g);
+    if (!list.length) continue;
+    log('  ' + (g + '        ').slice(0, 10) + String(list.length).padStart(5) + '   ' + ('+' + f1(avg(list.map((r) => r.total)))).padStart(8)
+      + '       ' + ('+' + f1(avg(list.map((r) => r.best)))).padStart(7) + '          ' + ('+' + f1(avg(list.map((r) => r.top)))).padStart(7));
+  }
+  const bestAvg = avg(rows.map((r) => r.best));
+  if (bestAvg < 15) warn('3年間で一番伸びた項目の平均が小さい(+' + f1(bestAvg) + '、目安+15〜25)。→ camp.points を上げる / camp.outcomeRates.normal の big を上げる / camp.otherWeight を下げる');
+  if (bestAvg > 25) warn('3年間で一番伸びた項目の平均が大きい(+' + f1(bestAvg) + '、目安+15〜25)。→ camp.points を下げる / camp.efficiency.max を下げる');
+}
+// 合宿ごと
+{
+  const C = S.camp;
+  log('');
+  log('■ 合宿ごと(のべ ' + C.events + '人回)');
+  log('  1回あたりの増分の平均 +' + (C.points / C.events).toFixed(2)
+    + '  /  大きく伸びる ' + pct(C.big, C.events) + ' / 少し伸びる ' + pct(C.small, C.events) + ' / 変化なし ' + pct(C.none, C.events));
+}
+
 // 簡易成績
 const B = S.batting;
 const teamAvg = B.ab ? B.h / B.ab : NaN;
