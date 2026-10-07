@@ -357,6 +357,8 @@
       strongWeight: 0.8,           // 方針の重みがこれ以上の項目に ◎(伸びやすい)
       midWeight: 0.3,              // これ以上の項目に ○
     },
+    reviewShowStats: true,         // 見直し画面に「項目別の現在値の1行」を出す(表示だけ)
+    policyOptionHints: false,      // 方針の選択肢に、伸びやすい項目(◎○)を併記する(表示だけ)
 
     // ---- 見える化(表示と、成績用の乱数で決めるハイライトだけに使う。勝敗や成長には影響しない) ----
     visual: {
@@ -577,6 +579,8 @@
     ['display.growthTopN', 'disp', '成長タブの初期表示の人数(変化が大きい順)', true],
     ['policyScreen.strongWeight', 'policy', '方針の選択肢で ◎ を付ける重み', true],
     ['policyScreen.midWeight', 'policy', '方針の選択肢で ○ を付ける重み', true],
+    ['reviewShowStats', 'policy', '見直し画面に、項目別の現在値の1行を出す(オン/オフ)', true],
+    ['policyOptionHints', 'policy', '方針の選択肢に、伸びやすい項目(◎○)を併記する(オン/オフ)', true],
     ['preHistory.years', 'pre', '新規開始時に内部で再現する過去の年数'],
     ['reputation.baseline', 'rep', '評判の初期値・基準(これ以下は新入生の質に影響しない)'],
     ['reputation.rate', 'rep', '評判の更新の速さ(今年の得点の割合)'],

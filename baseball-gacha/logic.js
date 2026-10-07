@@ -2481,7 +2481,8 @@
     overrides = overrides || {};
     for (const m of CONFIG.paramMeta) {
       const v = overrides[m.path];
-      setPath(CONFIG, m.path, typeof v === 'number' && isFinite(v) ? v : getPath(DEFAULTS, m.path));
+      const ok = (typeof v === 'number' && isFinite(v)) || (typeof v === 'boolean' && typeof getPath(DEFAULTS, m.path) === 'boolean');  // オン/オフの設定は真偽値
+      setPath(CONFIG, m.path, ok ? v : getPath(DEFAULTS, m.path));
     }
   }
   // 一時的に別の上書き設定で fn を実行する(試し計算用。終わったら元に戻す)
