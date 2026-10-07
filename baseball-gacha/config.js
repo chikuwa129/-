@@ -11,7 +11,7 @@
     // 保存キーは「ゲーム名_」で始める(リセットでまとめて消せるように)。
     //   ゲームのセーブ:bbgacha_v{saveVersion}_save / 調整画面:bbgacha_tune_*
     storagePrefix: 'bbgacha_',
-    saveVersion: 9,                // セーブデータの形式。違うバージョンのセーブは初期化する
+    saveVersion: 10,                // セーブデータの形式。違うバージョンのセーブは初期化する
     logLimit: 300,                 // 出来事ログの保存件数
 
     // ---- カレンダー(4月始まり) ----

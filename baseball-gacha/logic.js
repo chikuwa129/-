@@ -2028,7 +2028,7 @@
       // 試合の中身(成績用の乱数)。成績に含めるかは設定で選ぶ
       const box = withStatRng(state, (srng) => recordGameStats(srng, state.year, slots, order, res, { record: PG.includeInStats }).box);
       const tag = noteGameResult(state, pred, res.win);
-      games.push({ title: '練習試合' + (i + 1) + ' vs 強さ ' + opp, pred: pred, win: res.win, tag: tag, box: box, highlights: buildHighlights(state, box) });
+      games.push({ title: '練習試合' + (i + 1), pred: pred, win: res.win, tag: tag, box: box, highlights: buildHighlights(state, box) });
       state.stats.practiceGames.played++;
       if (res.win) state.stats.practiceGames.won++;
     }
@@ -2099,7 +2099,6 @@
     const members_ = slots.filter((s) => s.player).map((s) => s.player);
     const bench = benchOf(state, members_);
     const usedNames = new Set();
-    lines.push({ text: '自校の強さ ' + myStrength, cls: 'summary' });
     let wins = 0;
     let champion = true;
     st.played++;
@@ -2139,11 +2138,11 @@
       const roundName = r === T.rounds ? '決勝' : r + '回戦';
       const tag = noteGameResult(state, pred, res.win);
       games.push({
-        text: roundName + ' vs ' + opp + '高校(強さ ' + oppStrength + ')  勝率予想 ' + Math.round(pred * 100) + '% → '
+        text: roundName + ' 対' + opp + '高校 '
           + res.my + '対' + res.opp + 'で' + (res.win ? '勝利' : '敗戦') + (tag ? ' 【' + tag + '】' : '')
           + (evr.fatigue >= 1 ? '(投手に疲れ -' + evr.fatigue + ')' : ''),
         cls: tag ? 'special' : res.win ? 'win' : 'lose',
-        round: roundName, pred: pred, win: res.win, tag: tag,
+        round: roundName, opp: opp + '高校', pred: pred, win: res.win, tag: tag,
       });
       for (const p of members_) {
         p.record.games++;
@@ -2316,27 +2315,12 @@
     return { type: 'yearEnd', title: formatYear(state.year - 1) + ' 年度末 卒業式', lines: top.concat(lines, summaries), yearSummary: summary };
   }
 
-  // 年度末の「今年のまとめ」(表示用)。1年目は前年との比較を出さない
+  // 年度末の「今年のまとめ」(表示用)。1年目は前年との比較を出さない。チーム戦力は出さない
   function yearSummary(state, lowGrowth) {
     const y = state.year;
-    const PL = state.powerLog;
-    const thisYear = PL.filter((e) => e.y === y);
-    const lastYear = PL.filter((e) => e.y === y - 1);
-    const endNow = thisYear.length ? thisYear[thisYear.length - 1].p : null;
-    const endPrev = lastYear.length ? lastYear[lastYear.length - 1].p : null;
-    let best = null;
-    for (let i = 0; i < thisYear.length; i++) {
-      const e = thisYear[i];
-      const prev = i > 0 ? thisYear[i - 1] : lastYear[lastYear.length - 1];
-      if (!prev) continue;
-      const d = e.p - prev.p;
-      if (!best || d > best.d) best = { m: e.m, d: d };
-    }
     const rec = yearRecord(state, y);
     const prevRec = state.yearRecords[y - 1];
     const lines = [];
-    lines.push({ text: 'チーム戦力 ' + endNow + (endPrev != null && y > 1 ? '(前年比 ' + (endNow - endPrev >= 0 ? '+' : '') + (endNow - endPrev) + ')' : ''), cls: 'summary' });
-    if (best) lines.push({ text: '最も伸びた月:' + best.m + '月(' + (best.d >= 0 ? '+' : '') + best.d + ')', cls: '' });
     lines.push({ text: '年間の伸びが小さかった選手(総合値 +' + CONFIG.visual.lowGrowthRating + ' 未満):' + lowGrowth + '人', cls: '' });
     for (const k of ['summer', 'autumn']) {
       const name = CONFIG.tournaments[k].name;
@@ -2611,9 +2595,11 @@
   function writeJson(storage, key, value) {
     try { storage.setItem(key, JSON.stringify(value)); return true; } catch (e) { return false; }
   }
-  function saveGame(storage, state) { return writeJson(storage, KEYS.save, state); }
+  // チーム戦力の月ごとの記録(powerLog)は保存しない(遊ぶ画面では使わない。sim.js などの集計はメモリ上の記録を使う)
+  function saveGame(storage, state) { return writeJson(storage, KEYS.save, Object.assign({}, state, { powerLog: [] })); }
   function loadGame(storage) {
     const s = readJson(storage, KEYS.save);
+    if (s && s.version === CONFIG.saveVersion && !Array.isArray(s.powerLog)) s.powerLog = [];
     return s && s.version === CONFIG.saveVersion ? s : null;
   }
   function loadOverrides(storage) { return readJson(storage, KEYS.overrides) || {}; }

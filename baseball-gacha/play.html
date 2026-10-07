@@ -70,8 +70,8 @@
   .tag.genius { border-color: var(--gold); color: var(--gold); }
   .tag.reinc { border-color: var(--special); color: var(--special); }
   .tag.ret { background: #eee; }
-  .abil { display: grid; grid-template-columns: repeat(var(--cols, 4), 1fr); gap: 4px; margin-top: 4px; }
-  .abil div { background: #f6f2e9; border-radius: 4px; padding: 2px 4px; text-align: center; font-size: 12px; color: var(--sub); }
+  .abil { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 4px; margin-top: 4px; }
+  .abil div { min-width: 0; overflow-wrap: anywhere; background: #f6f2e9; border-radius: 4px; padding: 2px 4px; text-align: center; font-size: 12px; color: var(--sub); }
   .abil b { display: block; font-size: 16px; color: var(--ink); }
   .v80 b { color: #c0392b; } .v60 b { color: #d35400; } .v40 b { color: #222; } .v0 b { color: #999; }
   .small { font-size: 12px; color: var(--sub); }
@@ -111,6 +111,7 @@
   .lead { font-size: 12px; color: var(--sub); }
   .lead b { color: var(--ink); }
   .v100 b { color: #b8860b; text-shadow: 0 0 1px #f5d76e; }
+  .abil div.v100 { box-shadow: inset 0 0 0 1px #e0b84d; }
   .rt { font-weight: bold; }
   .rlabel { font-size: 11px; margin-left: 3px; padding: 0 5px; border-radius: 8px; background: #fff4d6; color: #8a6400; border: 1px solid #e6c56a; white-space: nowrap; }
   .rlabel.r200 { background: #fde8e8; color: #b03a2e; border-color: #e6a39b; }
@@ -155,7 +156,6 @@
   .game { border-top: 1px dotted var(--line); padding: 4px 0; font-size: 13px; }
   .game .hl { font-size: 12px; color: #444; padding-left: 8px; }
   .game .hl b { color: var(--win); font-weight: normal; font-size: 11px; margin-left: 4px; }
-  .pred { font-size: 11px; color: var(--sub); }
   table.ls { border-collapse: collapse; font-size: 11px; margin: 4px 0; }
   table.ls td, table.ls th { border: 1px solid var(--line); padding: 1px 4px; text-align: center; min-width: 1.4em; }
   table.ls td.t { font-weight: bold; }
@@ -185,9 +185,6 @@
   .col.flat > .colbody { padding-left: 0; border-left: none; margin-left: 0; }
   .pnamebtn { font-size: 15px; }
   .newmark { font-size: 11px; color: #c0392b; font-weight: bold; margin-left: 4px; white-space: nowrap; }
-  .statline { font-size: 11px; color: #8a8378; line-height: 1.5; margin-top: 1px; }
-  .statline span { white-space: nowrap; }
-  .statline .gold { color: #b8860b; font-weight: bold; }
   .gradetag { font-size: 10px; color: var(--sub); white-space: nowrap; }
   .pnamebtn { border: none; background: none; padding: 0; font-size: 15px; font-weight: bold; color: var(--accent); text-decoration: underline dotted; cursor: pointer; }
   .linkbtn { border: none; background: none; padding: 0; font-size: 12px; color: var(--accent); text-decoration: underline; cursor: pointer; }
@@ -229,7 +226,7 @@
     // 保存キーは「ゲーム名_」で始める(リセットでまとめて消せるように)。
     //   ゲームのセーブ:bbgacha_v{saveVersion}_save / 調整画面:bbgacha_tune_*
     storagePrefix: 'bbgacha_',
-    saveVersion: 9,                // セーブデータの形式。違うバージョンのセーブは初期化する
+    saveVersion: 10,                // セーブデータの形式。違うバージョンのセーブは初期化する
     logLimit: 300,                 // 出来事ログの保存件数
 
     // ---- カレンダー(4月始まり) ----
@@ -2868,7 +2865,7 @@
       // 試合の中身(成績用の乱数)。成績に含めるかは設定で選ぶ
       const box = withStatRng(state, (srng) => recordGameStats(srng, state.year, slots, order, res, { record: PG.includeInStats }).box);
       const tag = noteGameResult(state, pred, res.win);
-      games.push({ title: '練習試合' + (i + 1) + ' vs 強さ ' + opp, pred: pred, win: res.win, tag: tag, box: box, highlights: buildHighlights(state, box) });
+      games.push({ title: '練習試合' + (i + 1), pred: pred, win: res.win, tag: tag, box: box, highlights: buildHighlights(state, box) });
       state.stats.practiceGames.played++;
       if (res.win) state.stats.practiceGames.won++;
     }
@@ -2939,7 +2936,6 @@
     const members_ = slots.filter((s) => s.player).map((s) => s.player);
     const bench = benchOf(state, members_);
     const usedNames = new Set();
-    lines.push({ text: '自校の強さ ' + myStrength, cls: 'summary' });
     let wins = 0;
     let champion = true;
     st.played++;
@@ -2979,11 +2975,11 @@
       const roundName = r === T.rounds ? '決勝' : r + '回戦';
       const tag = noteGameResult(state, pred, res.win);
       games.push({
-        text: roundName + ' vs ' + opp + '高校(強さ ' + oppStrength + ')  勝率予想 ' + Math.round(pred * 100) + '% → '
+        text: roundName + ' 対' + opp + '高校 '
           + res.my + '対' + res.opp + 'で' + (res.win ? '勝利' : '敗戦') + (tag ? ' 【' + tag + '】' : '')
           + (evr.fatigue >= 1 ? '(投手に疲れ -' + evr.fatigue + ')' : ''),
         cls: tag ? 'special' : res.win ? 'win' : 'lose',
-        round: roundName, pred: pred, win: res.win, tag: tag,
+        round: roundName, opp: opp + '高校', pred: pred, win: res.win, tag: tag,
       });
       for (const p of members_) {
         p.record.games++;
@@ -3156,27 +3152,12 @@
     return { type: 'yearEnd', title: formatYear(state.year - 1) + ' 年度末 卒業式', lines: top.concat(lines, summaries), yearSummary: summary };
   }
 
-  // 年度末の「今年のまとめ」(表示用)。1年目は前年との比較を出さない
+  // 年度末の「今年のまとめ」(表示用)。1年目は前年との比較を出さない。チーム戦力は出さない
   function yearSummary(state, lowGrowth) {
     const y = state.year;
-    const PL = state.powerLog;
-    const thisYear = PL.filter((e) => e.y === y);
-    const lastYear = PL.filter((e) => e.y === y - 1);
-    const endNow = thisYear.length ? thisYear[thisYear.length - 1].p : null;
-    const endPrev = lastYear.length ? lastYear[lastYear.length - 1].p : null;
-    let best = null;
-    for (let i = 0; i < thisYear.length; i++) {
-      const e = thisYear[i];
-      const prev = i > 0 ? thisYear[i - 1] : lastYear[lastYear.length - 1];
-      if (!prev) continue;
-      const d = e.p - prev.p;
-      if (!best || d > best.d) best = { m: e.m, d: d };
-    }
     const rec = yearRecord(state, y);
     const prevRec = state.yearRecords[y - 1];
     const lines = [];
-    lines.push({ text: 'チーム戦力 ' + endNow + (endPrev != null && y > 1 ? '(前年比 ' + (endNow - endPrev >= 0 ? '+' : '') + (endNow - endPrev) + ')' : ''), cls: 'summary' });
-    if (best) lines.push({ text: '最も伸びた月:' + best.m + '月(' + (best.d >= 0 ? '+' : '') + best.d + ')', cls: '' });
     lines.push({ text: '年間の伸びが小さかった選手(総合値 +' + CONFIG.visual.lowGrowthRating + ' 未満):' + lowGrowth + '人', cls: '' });
     for (const k of ['summer', 'autumn']) {
       const name = CONFIG.tournaments[k].name;
@@ -3451,9 +3432,11 @@
   function writeJson(storage, key, value) {
     try { storage.setItem(key, JSON.stringify(value)); return true; } catch (e) { return false; }
   }
-  function saveGame(storage, state) { return writeJson(storage, KEYS.save, state); }
+  // チーム戦力の月ごとの記録(powerLog)は保存しない(遊ぶ画面では使わない。sim.js などの集計はメモリ上の記録を使う)
+  function saveGame(storage, state) { return writeJson(storage, KEYS.save, Object.assign({}, state, { powerLog: [] })); }
   function loadGame(storage) {
     const s = readJson(storage, KEYS.save);
+    if (s && s.version === CONFIG.saveVersion && !Array.isArray(s.powerLog)) s.powerLog = [];
     return s && s.version === CONFIG.saveVersion ? s : null;
   }
   function loadOverrides(storage) { return readJson(storage, KEYS.overrides) || {}; }
@@ -3885,6 +3868,8 @@
   }
   const { CONFIG, Core, HighSchool, Generation, Tuning, Persist, Sim } = window.Logic;
   let state = null;
+  // 開発用の入口:URL に ?dev=1 を付けたときだけ、調整タブと世代の基準の警告を出す(保存データには影響しない)
+  const DEV = /[?&]dev=1(&|$)/.test(window.location.search);
   let tab = 'home';
   let alumniFilter = 'all';
   let autoTarget = 'new';        // おまかせの対象:'new'(新入生のみ) / 'all'(全員)
@@ -3939,7 +3924,7 @@
   }
 
   // 共通部品:能力の詳細(項目ごとの現在値・入学時からの増減・前回の見直しからの増減・横棒・印)
-  //   options:{ detail(false は項目別の現在値の1行だけ。true で補助情報つき), policy(▲ の計算に使う方針。省くと今の方針) }。二刀流は投手系と野手系を分けて出す
+  //   options:{ detail(false は能力の枠だけ。true で補助情報つき), policy(▲ の計算に使う方針。省くと今の方針) }。二刀流は投手系と野手系を分けて出す
   function lastReviewAbilities(p) {
     if (!p.mlog) return null;
     const cur = HighSchool.monthSerial(state.year, state.month);
@@ -3955,7 +3940,7 @@
   }
   function renderPlayerStatsCompact(p, options) {
     options = options || {};
-    if (!options.detail) return renderStatsLine(p);
+    if (!options.detail) return abilBoxes(p);
     // 詳細:入学時から・前回の見直しからの増減、最高・最低・▲・壁の印、横棒、判明している副能力
     const a = p.finalAbilities || p.abilities;
     const dec = growthView.decimal;
@@ -4039,11 +4024,14 @@
   const int = (v) => Math.round(v);
   function vClass(v) { return v > 100 ? 'v100' : v >= 80 ? 'v80' : v >= 60 ? 'v60' : v >= 40 ? 'v40' : 'v0'; }
   // 能力のマス目。keys の順に並べる。base を渡すと増分も表示。100を超えた項目は金色
-  function abilGrid(keys, abilities, base) {
+  // 能力の枠(項目ごとのボックス)。useDecimal のときは「小数で表示」の設定に従う
+  function abilGrid(keys, abilities, base, useDecimal) {
+    const dec = useDecimal && growthView.decimal;
+    const show = (v) => (dec ? Core.round1(v).toFixed(1) : String(int(v)));
     return '<div class="abil" style="--cols:' + keys.length + '">' + keys.map((k) => {
       const v = abilities[k];
       const diff = base ? int(v) - int(base[k]) : 0;
-      return '<div class="' + vClass(v) + '">' + Core.ABILITY_LABEL[k] + '<b>' + int(v) + '</b>'
+      return '<div class="' + vClass(v) + '">' + Core.ABILITY_LABEL[k] + '<b>' + show(v) + '</b>'
         + (base ? '<span class="small">' + (diff > 0 ? '+' + diff : '±0') + '</span>' : '') + '</div>';
     }).join('') + '</div>';
   }
@@ -4073,6 +4061,7 @@
     return '総合値 <span class="rt">' + r + '</span>' + ratingBadge(p);
   }
   function staleWarning() {
+    if (!DEV) return '';   // 開発用の表示(?dev=1 のときだけ)
     if (!Generation.getBenchmark()) return '<div class="warnbox">世代の基準(benchmark.js)がありません。ラベルは表示されません。</div>';
     return Generation.isStale() ? '<div class="warnbox">⚠ 世代の基準が古い可能性があります(再計算してください。調整タブ)</div>' : '';
   }
@@ -4223,12 +4212,12 @@
     const n = (hs || []).filter((h) => h.note);
     return n.length ? '<div class="small">' + n.map((h) => esc(h.text.split(' ')[0]) + ':' + esc(h.note)).join(' / ') + '</div>' : '';
   }
-  // 1試合:1行(相手・スコア・勝率予想)+ 活躍選手1行。「詳しく」でラインスコア・勝敗投手・打点・成長の成果
+  // 1試合:1行(相手・スコア・勝敗)+ 活躍選手1行。「詳しく」でラインスコア・勝敗投手・打点・成長の成果
   function gameHtml(g, key) {
-    const vs = g.round ? g.round + ' 対' + (g.text.match(/vs ([^(]+)/) || ['', ''])[1] : g.title;
+    const vs = g.round ? g.round + ' 対' + (g.opp || '') : g.title;
     const head = '<span style="color:' + (g.tag ? 'var(--special)' : g.win ? 'var(--win)' : 'var(--lose)') + '">' + esc(vs) + ' '
       + (g.box ? g.box.my + '対' + g.box.opp : '') + 'で' + (g.win ? '勝利' : '敗戦') + (g.tag ? '【' + g.tag + '】' : '') + '</span>'
-      + ' <span class="pred">(勝率予想 ' + Math.round(g.pred * 100) + '%)</span>';
+      ;
     return '<div class="game">' + renderCollapsible(key, head, () => boxHtml(g.box) + growthNotes(g.highlights)) + highlightLine(g.highlights) + '</div>';
   }
   // イベントの結果のカード:1行の要約 + 「詳しく」
@@ -4240,7 +4229,7 @@
       // 結果の1行と、試合ごとの1行
       html += linesHtml(lines.filter((l) => l.cls === 'special' || /優勝|敗退|準優勝|引退/.test(l.text || l)).slice(0, 2));
       if (ev.games) html += ev.games.map((g, i) => gameHtml(g, key + ':g' + i)).join('');
-      html += renderCollapsible(key + ':more', '<span class="small">自校の強さ・通知・スタメン</span>', () => linesHtml(lines) + (ev.lineup ? lineupTable(ev.lineup, null) : ''));
+      html += renderCollapsible(key + ':more', '<span class="small">通知・スタメン</span>', () => linesHtml(lines) + (ev.lineup ? lineupTable(ev.lineup, null) : ''));
       return html + '</div>';
     }
     const first = lines[0];
@@ -4251,11 +4240,11 @@
   // 年度末のまとめ:要点の3行 + 「詳しく」
   function yearSummaryCard(ys, key, yearEnd) {
     const L = ys.lines.map((l) => l.text || l);
-    const power = L.find((t) => /^チーム戦力/.test(t)) || '';
+    const upsets = L.find((t) => /^番狂わせ/.test(t)) || '';
     const tour = L.filter((t) => /地区大会/.test(t)).map((t) => t.replace('の地区大会', '')).join(' / ');
     const top = ((yearEnd && yearEnd.lines) || []).find((l) => /^1位/.test(l.text || ''));
     let html = '<div class="card"><h2>' + esc(ys.title) + '</h2><div class="ml3">'
-      + '<div>' + esc(power) + '</div><div>' + esc(tour) + '</div>' + (top ? '<div>成長トップ:' + esc(top.text.replace(/^1位 /, '')) + '</div>' : '') + '</div>';
+      + '<div>' + esc(tour) + '</div>' + (top ? '<div>成長トップ:' + esc(top.text.replace(/^1位 /, '')) + '</div>' : '') + '<div>' + esc(upsets) + '</div></div>';
     html += renderCollapsible(key, '<span class="small">今年のまとめの詳細</span>', () => linesHtml(ys.lines));
     return html + '</div>';
   }
@@ -4287,7 +4276,6 @@
       html += '<div class="card">' + renderCollapsible('months:' + (last.serial != null ? last.serial : 'x'),
         '途中の月(' + esc(mid[0].label + (mid.length > 1 ? '〜' + mid[mid.length - 1].label : '')) + '):成長 のべ' + grown + '人' + (nImp ? ' / 通知 ' + nImp + '件' : ''), () => mid.map((m) =>
         '<div class="mline"><span class="ml">' + esc(m.label) + '</span>' + esc(monthLine(m))
-        + (m.winDelta != null ? ' <span class="' + (m.winDelta >= 0 ? 'up' : 'down') + '">勝率予想 ' + (m.winDelta >= 0 ? '+' : '') + (m.winDelta * 100).toFixed(1) + '%</span>' : '')
         + m.watchLines.map((w) => '<span class="wt">' + esc(w) + '</span>').join('')
         + m.notices.map((n) => '<span class="nt">' + esc(n.text) + '</span>').join('')
         + (m.hidden ? '<span class="nt">ほか ' + m.hidden + '件</span>' : '') + '</div>').join('')) + '</div>';
@@ -4305,10 +4293,6 @@
     html += '<div class="card"><h2>' + esc(HighSchool.formatYear(last.year) + ' ' + last.label) + 'のまとめ' + (unread ? ' <span class="newmark">●新着</span>' : '') + '</h2><div class="ml3">' + rows.slice(0, 3).join('') + '</div>';
     html += renderCollapsible(key, '<span class="small">' + esc(monthLine(last)) + '</span>', () => {
       let d = '';
-      if (last.winDelta != null) {
-        const v = last.winDelta * 100;
-        d += '<div class="mline ' + (v >= 0 ? 'up' : 'down') + '">今月の成長で、対 他校平均の勝率予想 ' + (v >= 0 ? '+' : '') + v.toFixed(1) + '%</div>';
-      }
       if (last.topGrowers && last.topGrowers.length) {
         d += '<div class="sublabel">今月よく伸びた選手</div><div class="lines">' + last.topGrowers.map((t, i) =>
           '<div class="small">' + (i + 1) + '位 ' + (t.watched ? '★' : '') + esc(t.name) + '(' + t.grade + '年)総合値 +' + Core.fmtNum(t.gain) + '</div>').join('') + '</div>';
@@ -4448,7 +4432,7 @@
   // 方針の選択画面の選手カード:常に見える1行(押すと能力の詳細)+ 方針のプルダウン
   // 見直し画面の選手カード(新入生・在校生で共通。配置は 1.6u と同じ)
   //   1行目:名前・守備区分・ラベル・総合値・同世代の上位%・現在の方針(学年と ⚠ は小さく)
-  //   2行目:項目別の現在値(小さな薄い文字の1行)/ 3行目:方針のプルダウン(幅いっぱい)
+  //   その下:能力の枠(項目ごとの大きな数字のボックス)/ 方針のプルダウン(幅いっぱい)
   //   増減などの補助情報は、名前を押して開く選手詳細に置く
   function polCard(p, isNew) {
     const draft = draftPolicies[p.id];
@@ -4457,9 +4441,9 @@
       + '<button class="pnamebtn" data-pdetail="' + p.id + '">' + esc(p.name) + '</button>'
       + posTag(p.position) + extraTags(p) + ' <span class="small">' + ratingHtml(p) + ' / 現在:' + esc(Core.policyLabel(p)) + '</span>'
       + ' <span class="gradetag">' + (isNew ? '新入生' : p.grade + '年') + '</span>' + (p.needsPolicy ? '<span class="needpol"> ⚠</span>' : '');
-    if (CONFIG.reviewShowStats) html += renderStatsLine(p);
+    if (isNew) html += '<div class="impress">' + esc(impression(p)) + '</div>';   // 最初期と同じ順:第一印象 → 能力の枠 → 判明の演出
+    if (CONFIG.reviewShowStats) html += abilBoxes(p);
     if (isNew) {
-      html += '<div class="impress">' + esc(impression(p)) + '</div>';
       if (p.reincarnation && p.reincarnationRevealed) {
         html += '<div class="reveal">……!? この新入生、ただ者ではない。<br>【' + esc(Core.reincarnationName(p.reincarnation)) + '】の転生者だ!</div>';
       }
@@ -4473,13 +4457,13 @@
     }
     return html + '</div>';
   }
-  // 項目別の現在値の1行(小さな薄い文字。100超えだけ金色。二刀流は「投 …」「打 …」の2行)
-  function renderStatsLine(p) {
+  // 能力の枠:項目ごとの大きな数字のボックス(最初期の見た目)。100超えは金色。二刀流は投手系・野手系の2段
+  function abilBoxes(p) {
     const a = p.finalAbilities || p.abilities;
-    const fmt = (v) => (growthView.decimal ? Core.round1(v).toFixed(1) : String(Math.round(v)));
-    const sides = statSides(p);
-    return sides.map((keys) => '<div class="statline">' + (sides.length > 1 ? (keys === Core.PITCH_KEYS ? '投 ' : '打 ') : '')
-      + keys.map((k) => '<span>' + Core.ABILITY_LABEL[k] + ' <span' + (a[k] > 100 ? ' class="gold"' : '') + '>' + fmt(a[k]) + '</span></span>').join('・') + '</div>').join('');
+    if (statSides(p).length > 1) {
+      return '<div class="sublabel">投手系</div>' + abilGrid(Core.PITCH_KEYS, a, null, true) + '<div class="sublabel">野手系</div>' + abilGrid(Core.BAT_KEYS, a, null, true);
+    }
+    return abilGrid(statSides(p)[0], a, null, true);
   }
   // 在校生の並べ替えと絞り込み
   function polList() {
@@ -4561,70 +4545,16 @@
       + '<div class="btns"><button class="btn sub small" id="pdetailClose">閉じる</button></div></div></div>';
   }
 
-  // チーム戦力(総合値スケール)。現在値・前年同月比・1年目4月比・守備区分別・他校との比較・推移グラフ
   function signed(v) { return (v >= 0 ? '+' : '') + v; }
-  function dltSpan(v) { return v == null ? '' : '<span class="dlt ' + (v >= 0 ? 'up' : 'down') + '">' + signed(v) + '</span>'; }
-  function renderPowerCard() {
-    const PL = state.powerLog;
-    const ref = Core.opponentRef();
-    const live = Core.getTeamPower(state.players);
-    const cur = PL.length ? PL[PL.length - 1] : null;
-    const ago = cur ? PL.find((e) => e.s === cur.s - 12) : null;
-    const first = PL.length ? PL[0] : null;
-    const p = live.power;
-    // 1行の要約:「チーム戦力 207(前年同月比 +12 / 他校平均比 −4)」
-    const summary = 'チーム戦力 <b>' + p + '</b>(' + (ago ? '前年同月比 ' + dltSpan(cur.p - ago.p) + ' / ' : '') + '他校平均比 ' + dltSpan(p - ref.avgPower) + ')';
-    return '<div class="card">' + renderCollapsible('power', summary, () => {
-      let html = '<div class="pw"><span class="big">' + p + '</span>'
-        + (ago ? '<span class="dlt">前年同月比 ' + dltSpan(cur.p - ago.p) + '</span>' : '')
-        + (first && cur && cur.s !== first.s ? '<span class="dlt">1年目4月比 ' + dltSpan(cur.p - first.p) + '</span>' : '') + '</div>';
-      html += '<div class="small">他校平均より ' + dltSpan(p - ref.avgPower) + '、他校上位より ' + dltSpan(p - ref.topPower)
-        + '(他校平均 ' + ref.avgPower + ' / 他校上位 ' + ref.topPower + ')</div>'
-        + '<div class="small">勝率予想:対 他校平均 <b>' + Math.round(Core.winProbability(live.strength, ref.avg) * 100) + '%</b> / 対 他校上位 <b>'
-        + Math.round(Core.winProbability(live.strength, ref.top) * 100) + '%</b></div>';
-      html += '<table class="posp"><tr><th>守備区分</th><th>現在</th><th>前年同月比</th></tr>' + ['P', 'C', 'IF', 'OF'].map((k) =>
-        '<tr><td>' + Core.POSITION_LABEL[k] + '</td><td>' + live.byPos[k] + '</td><td>' + (ago ? dltSpan(live.byPos[k] - ago.pos[k]) : '-') + '</td></tr>').join('') + '</table>';
-      html += powerGraph(PL);
-      // チームの詳細:学校の評判(値と推移)
-      const R = state.stats.repByYear;
-      html += '<div class="sublabel">学校の評判</div><div class="small">評判 <b>' + state.schoolRep.toFixed(1) + '</b>(基準 ' + CONFIG.reputation.baseline
-        + ')/ 新入生の傾向:' + HighSchool.recruitTrend(HighSchool.reputationX(state))
-        + (R.length ? '<br>推移:' + R.slice(-8).map((r) => r.y + '年目 ' + r.rep.toFixed(0)).join(' → ') : '<br>推移:まだ記録がありません(毎年3月に更新)') + '</div>';
-      return html + '<div class="small">チーム戦力 = スタメンから計算するチームの強さを、総合値と同じ尺度にしたもの。毎月末に記録します。</div>';
-    }) + '</div>';
-  }
-  // 月ごとのチーム戦力の折れ線(他校平均・他校上位の線と、年の区切り)
-  function powerGraph(PL) {
-    if (PL.length < 2) return '';
-    const list = PL.slice(-60); // 直近5年
-    let lo = Infinity, hi = -Infinity;
-    for (const e of list) { lo = Math.min(lo, e.p, e.oa); hi = Math.max(hi, e.p, e.ot); }
-    lo = Math.floor((lo - 10) / 20) * 20;
-    hi = Math.ceil((hi + 10) / 20) * 20;
-    const W = 320, H = 140, L = 28, R = 8, T = 6, B = 16;
-    const s0 = list[0].s, s1 = Math.max(list[list.length - 1].s, s0 + 1);
-    const x = (sv) => L + (W - L - R) * (sv - s0) / (s1 - s0);
-    const y = (v) => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
-    let svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="チーム戦力の推移">';
-    for (let v = lo; v <= hi; v += 20) {
-      svg += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="#eee8dc"/>'
-        + '<text x="' + (L - 3) + '" y="' + (y(v) + 3) + '" font-size="8" text-anchor="end" fill="#999">' + v + '</text>';
-    }
-    for (const e of list) {
-      if (e.m === 4) {
-        svg += '<line x1="' + x(e.s) + '" x2="' + x(e.s) + '" y1="' + T + '" y2="' + (H - B) + '" stroke="#c9bfae" stroke-dasharray="3,2"/>'
-          + '<text x="' + (x(e.s) + 2) + '" y="' + (H - 4) + '" font-size="8" fill="#888">' + e.y + '年目</text>';
-      }
-    }
-    const line = (key, color, dash) => '<polyline points="' + list.map((e) => x(e.s).toFixed(1) + ',' + y(e[key]).toFixed(1)).join(' ')
-      + '" fill="none" stroke="' + color + '" stroke-width="' + (dash ? 1.2 : 2) + '"' + (dash ? ' stroke-dasharray="4,3"' : '') + '/>';
-    svg += line('ot', '#b03a2e', true) + line('oa', '#888', true) + line('p', '#1f5f8b', false) + '</svg>';
-    return svg + '<div class="legend"><i style="background:#1f5f8b"></i>自校<i style="background:#888"></i>他校平均<i style="background:#b03a2e"></i>他校上位</div>';
-  }
 
   // ---------- 成長タブ(月ごとの、全在校生の能力の変化) ----------
   function growthSerials() {
-    return state.powerLog.map((e) => e.s);
+    const start = HighSchool.monthSerial(1, 0);
+    let last = -1;
+    for (const p of state.players.concat(state.alumni)) if (p.mlog && p.mlog.a.length) last = Math.max(last, p.mlog.s + p.mlog.a.length - 1);
+    const out = [];
+    for (let sv = start; sv <= last; sv++) out.push(sv);
+    return out;
   }
   function renderGrowth() {
     const serials = growthSerials();
@@ -4692,13 +4622,12 @@
     html += '<div class="btns"><button class="btn" id="btnNextEvent">次のイベントまで</button></div>'
       + '<div class="btns"><button class="btn sub small" id="btnNextMonth">次の月へ</button>'
       + '<button class="btn sub small" id="btnApril">次の4月まで</button></div>';
-    // 並び:スタメン → チーム戦力 → 注目選手 → 月のまとめ → 最近の出来事(homeSummaryPosition が 'top' ならまとめは上)
+    // 並び:スタメン → 注目選手 → 月のまとめ → 最近の出来事(homeSummaryPosition が 'top' ならまとめは上)
     //   年度末(3月)のまとめは、これまでどおりボタンの下に出す
     const top = CONFIG.homeSummaryPosition === 'top';
     html += renderMonths(evs, 'yearEnd');
     if (top) html += renderMonths(evs, 'rest');
     html += '<div class="card"><h2>現在のスタメン</h2>' + lineupTable(HighSchool.lineup(state), null, true) + '</div>';
-    html += renderPowerCard();
     html += renderWatchCard();
     if (!top) html += renderMonths(evs, 'rest');
     const recent = state.log.slice(-10).reverse();
@@ -4818,22 +4747,22 @@
   function renderSettings() {
     const rv = (v) => (v === 'enrollment' ? '入学時' : '最初の合宿');
     const lv = (v, l) => '<option value="' + v + '"' + (uiPrefs.level === v ? ' selected' : '') + '>' + l + '</option>';
-    return '<div class="card"><h2>表示の詳しさ</h2><div class="row"><select id="uiLevel">' + lv('min', '最小(要約だけ。押して詳細)') + lv('std', '標準(戦力・月・年度のまとめを開く)')
+    return '<div class="card"><h2>表示の詳しさ</h2><div class="row"><select id="uiLevel">' + lv('min', '最小(要約だけ。押して詳細)') + lv('std', '標準(月・年度のまとめを開く)')
       + lv('full', '詳細(すべて開く)') + '</select></div><div class="small">変えると、パネルごとに開閉した記憶は消えます。</div></div>'
       + '<div class="card"><h2>ゲーム情報</h2><div class="small">現在のシード:<b>' + state.seed + '</b>'
       + '<br>セーブのバージョン:<b>v' + state.version + '</b>(保存キー ' + esc(Persist.KEYS.save) + ')'
       + (storage.memory ? '<br>⚠ この画面では保存が使えないため、ページを閉じると消えます' : '')
-      + '<br>このゲームの上書き設定:' + (Object.keys(state.overrides || {}).length ? Object.keys(state.overrides).length + '件(調整タブ)' : 'なし')
+      + (DEV ? '<br>このゲームの上書き設定:' + (Object.keys(state.overrides || {}).length ? Object.keys(state.overrides).length + '件(調整タブ)' : 'なし') : '')
       + '<br>転生の型の判明:' + rv(CONFIG.reincarnationReveal) + ' / 二刀流の判明:' + rv(CONFIG.twoWayReveal)
       + '<br>重要な通知が出た月で止まる:' + (CONFIG.autoStop.enabled ? 'はい' : 'いいえ')
       + ' / 方針を見直せる月:' + CONFIG.policyReviewMonths.join('月・') + '月</div></div>'
       + '<div class="card"><h2>リセット</h2>'
-      + '<div class="small">どのリセットも、4月の入学画面から始まります。調整タブで変えた値は、ここで始めるゲームから使われます。</div>'
+      + '<div class="small">どのリセットも、4月の入学画面から始まります。' + (DEV ? '調整タブで変えた値は、ここで始めるゲームから使われます。' : '') + '</div>'
       + '<div class="btns"><button class="btn sub small" id="btnResetSame">同じシードでやり直す</button></div>'
       + '<div class="row"><input type="text" id="seedInput" inputmode="numeric" placeholder="シード(空欄ならランダム)" style="flex:1">'
       + '<button class="btn sub small" id="btnResetNew" style="flex:0 0 auto">新しいシードで始める</button></div>'
       + '<div class="btns"><button class="btn danger small" id="btnWipe">セーブを完全に消す</button></div>'
-      + '<div class="small">「セーブを完全に消す」は、このゲームの保存データ(調整タブの設定・試し計算の記録・再計算した基準を含む)をすべて消します。'
+      + '<div class="small">「セーブを完全に消す」は、このゲームの保存データ' + (DEV ? '(調整タブの設定・試し計算の記録・再計算した基準を含む)' : '') + 'をすべて消します。'
       + 'URLの末尾に ?reset=1 を付けて開いても同じです。</div></div>';
   }
 
@@ -5058,6 +4987,7 @@
   function render() {
     renderHeader();
     document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
+    if (tab === 'tune' && !DEV) tab = 'home';
     const main = document.getElementById('main');
     main.innerHTML = (tab === 'home' ? renderHome() : tab === 'roster' ? renderRoster() : tab === 'growth' ? renderGrowth()
       : tab === 'alumni' ? renderAlumni() : tab === 'tune' ? renderTune() : renderSettings()) + renderPlayerDetail() + renderModal();
@@ -5193,7 +5123,7 @@
       modal = { text: (seed == null ? 'ランダムなシード' : 'シード ' + seed) + 'で、新しく始めますか?', ok: '始める', action: () => { state = Persist.resetNewSeed(storage, seed); } };
       render();
     } else if (id === 'btnWipe') {
-      modal = { text: 'このゲームの保存データ(調整タブの設定などを含む)をすべて消して、初期状態に戻しますか?', ok: '完全に消す',
+      modal = { text: 'このゲームの保存データ' + (DEV ? '(調整タブの設定などを含む)' : '') + 'をすべて消して、初期状態に戻しますか?', ok: '完全に消す',
         action: () => { state = Persist.wipeAll(storage); pending = {}; trial = { running: false, progress: 0, result: null, label: '' }; } };
       render();
     } else if (id === 'modalOk' && modal) {
@@ -5242,10 +5172,11 @@
   state = boot.state;
   if (boot.reset) {
     pending = {};
-    try { window.history.replaceState(null, '', window.location.pathname); } catch (e) { /* 書き換えられない環境 */ }
+    try { window.history.replaceState(null, '', window.location.pathname + (DEV ? '?dev=1' : '')); } catch (e) { /* 書き換えられない環境 */ }
   }
   pending = Persist.loadOverrides(storage);
   applyGameConfig();
+  if (!DEV) { const tb = document.querySelector('nav button[data-tab="tune"]'); if (tb) tb.remove(); }
   render();
 })();
 </script>

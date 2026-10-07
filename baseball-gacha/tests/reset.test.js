@@ -102,8 +102,15 @@ test('通常の起動:保存したゲームを、そのゲームの上書き設�
   Tuning.applyOverrides({});
   const r = Persist.startup(st, '');
   assert.strictEqual(r.reset, false);
-  assert.strictEqual(JSON.stringify(r.state), JSON.stringify(s));
+  // チーム戦力の月ごとの記録(powerLog)は保存しない。それ以外は保存したとおり
+  assert.strictEqual(r.state.powerLog.length, 0, 'チーム戦力の記録は保存されない');
+  assert.ok(st.getItem(Persist.KEYS.save).indexOf('"powerLog":[]') >= 0, 'セーブの中の powerLog は空');
+  assert.strictEqual(JSON.stringify(Object.assign({}, r.state, { powerLog: null })), JSON.stringify(Object.assign({}, s, { powerLog: null })));
   assert.strictEqual(CONFIG.growth.monthly.chance, 0.4);
+  // 読み込んで続けても、続けずに進めた場合と同じ結果になる(チーム戦力の記録はゲームの結果に影響しない)
+  play(r.state, 20);
+  play(s, 20);
+  assert.strictEqual(JSON.stringify(Object.assign({}, r.state, { powerLog: null })), JSON.stringify(Object.assign({}, s, { powerLog: null })), '読み込み後も同じ展開');
 });
 
 test('表示だけに使う値(labelTop)は、進行中のゲームにもすぐ反映する', () => {
@@ -121,7 +128,7 @@ test('同じシードなら、毎回同じ結果(リセットを挟んでも同�
   assert.strictEqual(JSON.stringify(a), JSON.stringify(b));
 });
 
-test('見える化の保存データ(チーム戦力の記録・成長ログ・年度の記録・校正)も、どのリセットでも消える', () => {
+test('見える化の保存データ(成長ログ・年度の記録・校正。チーム戦力の記録はメモリ上だけ)も、どのリセットでも消える', () => {
   const st = memoryStorage();
   const hasVisual = (s) => s.powerLog.length > 0 && s.players.some((p) => p.mlog && p.mlog.a.length > 0)
     && Object.keys(s.yearRecords).length > 0 && s.stats.calib.length > 0 && s.stats.highlights.games > 0;
