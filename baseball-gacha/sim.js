@@ -201,6 +201,44 @@ for (const path of CONFIG.career.paths) {
   log('  ' + path.label + ': ' + n + '人 (' + pct(n, grads.length) + ')');
 }
 
+// 簡易成績
+const B = S.batting;
+const teamAvg = B.ab ? B.h / B.ab : NaN;
+const minAB = CONFIG.stats.minAtBatsForAverage;
+const careerOf = (a) => a.stats.career;
+const qualified = state.alumni.filter((a) => !a.helper && careerOf(a).ab >= minAB);
+const qual3 = qualified.filter((a) => Core.battingAverage(careerOf(a)) >= 0.3).length;
+// 分布は打数 distMinAB 以上で見る(大会だけでは通算100打数に届きにくいため)
+const distMinAB = 30;
+const hitters = state.alumni.filter((a) => !a.helper && careerOf(a).ab >= distMinAB);
+const avgs = hitters.map((a) => Core.battingAverage(careerOf(a)));
+const abs = state.alumni.filter((a) => !a.helper).map((a) => careerOf(a).ab);
+const fmt3 = (v) => (Number.isNaN(v) ? '-' : v.toFixed(3).replace(/^0/, ''));
+log('');
+log('■ 簡易成績(大会のみ)');
+log('  チーム全体の打率: ' + fmt3(teamAvg) + '(' + B.h + '安打 / ' + B.ab + '打数、' + B.games + '試合)');
+log('  卒業生の通算打数: 最大 ' + Math.max.apply(null, abs) + '  /  ' + minAB + '打数以上 ' + qualified.length + '人(うち3割打者 ' + qual3 + '人)');
+log('  通算' + distMinAB + '打数以上の卒業生 ' + hitters.length + '人: 打率 平均 ' + fmt3(avg(avgs))
+  + ' / 最大 ' + fmt3(Math.max.apply(null, avgs)) + ' / .300以上 ' + pct(avgs.filter((v) => v >= 0.3).length, avgs.length));
+{
+  const b = {};
+  for (const v of avgs) { const k = Math.floor(v * 20) / 20; b[k] = (b[k] || 0) + 1; }
+  const max = Math.max.apply(null, Object.values(b));
+  for (const k of Object.keys(b).map(Number).sort((x, y) => x - y)) {
+    log('    ' + fmt3(k) + '-' + fmt3(k + 0.049) + ' : ' + String(b[k]).padStart(4) + ' ' + '#'.repeat(Math.max(1, Math.round(b[k] / max * 30))));
+  }
+}
+const allBat = state.alumni.filter((a) => !a.helper && careerOf(a).pa > 0);
+const hrs = allBat.map((a) => careerOf(a).hr);
+const rbis = allBat.map((a) => careerOf(a).rbi);
+log('  通算本塁打(打席のある卒業生 ' + allBat.length + '人): 平均 ' + f1(avg(hrs)) + ' / 最大 ' + Math.max.apply(null, hrs));
+log('  通算打点: 平均 ' + f1(avg(rbis)) + ' / 最大 ' + Math.max.apply(null, rbis));
+const pitchers = state.alumni.filter((a) => !a.helper && careerOf(a).outs >= 27 * 3);
+const eras = pitchers.map((a) => Core.earnedRunAverage(careerOf(a)));
+log('  通算防御率(3試合以上登板 ' + pitchers.length + '人): 平均 ' + (eras.length ? avg(eras).toFixed(2) : '-'));
+log('  打順別の1試合あたり平均打席数: ' + [1, 2, 3, 4, 5, 6, 7, 8, 9]
+  .map((n) => n + '番 ' + (B.games ? (B.paByOrder[n] / B.games).toFixed(2) : '-')).join(' / '));
+
 // 大会
 log('');
 log('■ 大会(簡易版。スタメン編成による強さ)');
@@ -242,6 +280,10 @@ if (S.twoWay > 0 && S.recruits >= 1000 && Math.abs(S.twoWay / S.recruits - CONFI
   warn('二刀流の出現率が設定から大きくずれています。→ talent.twoWayRate');
 }
 
+if (teamAvg < 0.23) warn('チーム打率が低すぎます(' + fmt3(teamAvg) + ')。→ stats.hit.base を上げる / stats.hit.pivot を下げる');
+if (teamAvg > 0.28) warn('チーム打率が高すぎます(' + fmt3(teamAvg) + ')。→ stats.hit.base を下げる / stats.hit.perContact を下げる');
+if (qualified.length === 0) warn('通算' + minAB + '打数に届く選手がいないため、名鑑の「3割打者」は空になります。→ stats.minAtBatsForAverage を下げる(例:30〜40。フェーズ2で試合数が増えれば戻せる)');
+if (avgs.length >= 20 && avgs.filter((v) => v >= 0.3).length / avgs.length > 0.35) warn('3割打者が多すぎます。→ stats.hit.perContact を下げる');
 log('');
 log('# ---- 調整のヒント ----');
 if (!warnings.length) log('# 極端な数値は見つかりませんでした。');

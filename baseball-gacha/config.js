@@ -9,7 +9,7 @@
     // ---- 基本 ----
     schoolName: '白樺高校',        // 自校の名前(架空)
     saveKey: 'bbgacha_save',       // localStorage のキー
-    saveVersion: 2,                // セーブデータの形式。違うバージョンのセーブは初期化する
+    saveVersion: 3,                // セーブデータの形式。違うバージョンのセーブは初期化する
     logLimit: 200,                 // 出来事ログの保存件数
 
     // ---- 新入生の人数 ----
@@ -142,6 +142,39 @@
     },
     // 投手のスタミナ不足の補正:(threshold - スタミナ) × (perGame × (試合目-1) + 接戦なら close)
     stamina: { threshold: 50, perGame: 0.05, close: 0.1, closeRange: 3 },
+
+    // ---- 打順(強さの計算には影響しない。表示と打席数だけに使う) ----
+    battingOrder: {
+      // 決める順番(打順の番号)。9番(最も打撃力が低い)→3番→4番→1番→2番→残り
+      pickSequence: [9, 3, 4, 1, 2],
+      // 各打順で並べるスコアの重み(打撃力 = teamStrength.batWeights)
+      weights: {
+        1: { speed: 0.5, contact: 0.5 },
+        2: { contact: 1 },
+        3: { contact: 0.4, power: 0.4, speed: 0.2 },
+        4: { power: 1 },
+      },
+    },
+
+    // ---- 簡易成績(試合のスコアとは独立に計算。成績専用の乱数を使う) ----
+    stats: {
+      paFirst: 4.5,                // 1番の1試合あたりの打席数
+      paLast: 3.5,                 // 9番の1試合あたりの打席数
+      walkRate: 0.08,              // 四死球の確率(打数に数えない)
+      // 打数あたりの安打率 = base + (ミート - pivot) × perContact + (パワー - pivot) × perPower + (走力 - pivot) × perSpeed
+      hit: { base: 0.29, pivot: 40, perContact: 0.0035, perPower: 0.001, perSpeed: 0.001, min: 0.08, max: 0.45 },
+      // 安打のうち本塁打の割合 = base + (パワー - pivot) × perPower
+      homeRun: { base: 0.06, pivot: 40, perPower: 0.003, min: 0.0, max: 0.35 },
+      // 安打でない打数のうち三振の割合 = base - (ミート - pivot) × perContact
+      strikeout: { base: 0.25, pivot: 40, perContact: 0.004, min: 0.05, max: 0.6 },
+      rbiOnHit: 0.3,               // 本塁打以外の安打で打点が付く確率
+      rbiOnOut: 0.03,              // 凡打(三振以外)で打点が付く確率
+      homeRunRunners: [55, 30, 12, 3], // 本塁打のときの走者数 0〜3人の重み
+      cleanupRbiBonus: 0.08,       // 3〜5番の打点の付きやすさの上乗せ
+      innings: 9,                  // 先発投手は1試合を投げ切ったとみなす
+      earnedRate: 0.85,            // 失点のうち自責点とする割合
+      minAtBatsForAverage: 100,    // 名鑑の「3割打者」の判定に必要な通算打数
+    },
 
     // ---- 試合 ----
     match: {

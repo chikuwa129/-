@@ -75,10 +75,19 @@
   .filters button { padding: 4px 10px; border: 1px solid var(--line); background: #fff; border-radius: 14px; font-size: 13px; }
   .filters button.on { background: var(--ink); color: #fff; }
   .sublabel { font-size: 11px; color: var(--sub); margin-top: 6px; }
-  table.lu { border-collapse: collapse; width: 100%; font-size: 13px; }
+  .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.lu { border-collapse: collapse; width: 100%; font-size: 13px; white-space: nowrap; }
+  table.lu th { font-size: 11px; color: var(--sub); font-weight: normal; text-align: left; padding: 2px 4px; border-bottom: 1px solid var(--line); }
   table.lu td { border-bottom: 1px dotted #eee; padding: 3px 4px; }
-  table.lu td.pos { width: 3em; font-weight: bold; }
+  table.lu td.num { text-align: right; }
+  table.lu td.ord { width: 2.4em; font-weight: bold; text-align: center; }
+  table.lu td.pos { width: 1.6em; font-weight: bold; }
+  table.lu td.nm { white-space: normal; min-width: 7em; }
   table.lu tr.oop td { color: var(--lose); }
+  table.lu .ord small { display: block; font-size: 10px; font-weight: normal; color: var(--sub); }
+  table.st { border-collapse: collapse; font-size: 12px; margin-top: 4px; white-space: nowrap; }
+  table.st th, table.st td { border: 1px solid var(--line); padding: 2px 5px; text-align: right; }
+  table.st th { text-align: center; }
   .nc { font-size: 13px; margin: 4px 0; }
 </style>
 </head>
@@ -110,7 +119,7 @@
     // ---- 基本 ----
     schoolName: '白樺高校',        // 自校の名前(架空)
     saveKey: 'bbgacha_save',       // localStorage のキー
-    saveVersion: 2,                // セーブデータの形式。違うバージョンのセーブは初期化する
+    saveVersion: 3,                // セーブデータの形式。違うバージョンのセーブは初期化する
     logLimit: 200,                 // 出来事ログの保存件数
 
     // ---- 新入生の人数 ----
@@ -243,6 +252,39 @@
     },
     // 投手のスタミナ不足の補正:(threshold - スタミナ) × (perGame × (試合目-1) + 接戦なら close)
     stamina: { threshold: 50, perGame: 0.05, close: 0.1, closeRange: 3 },
+
+    // ---- 打順(強さの計算には影響しない。表示と打席数だけに使う) ----
+    battingOrder: {
+      // 決める順番(打順の番号)。9番(最も打撃力が低い)→3番→4番→1番→2番→残り
+      pickSequence: [9, 3, 4, 1, 2],
+      // 各打順で並べるスコアの重み(打撃力 = teamStrength.batWeights)
+      weights: {
+        1: { speed: 0.5, contact: 0.5 },
+        2: { contact: 1 },
+        3: { contact: 0.4, power: 0.4, speed: 0.2 },
+        4: { power: 1 },
+      },
+    },
+
+    // ---- 簡易成績(試合のスコアとは独立に計算。成績専用の乱数を使う) ----
+    stats: {
+      paFirst: 4.5,                // 1番の1試合あたりの打席数
+      paLast: 3.5,                 // 9番の1試合あたりの打席数
+      walkRate: 0.08,              // 四死球の確率(打数に数えない)
+      // 打数あたりの安打率 = base + (ミート - pivot) × perContact + (パワー - pivot) × perPower + (走力 - pivot) × perSpeed
+      hit: { base: 0.29, pivot: 40, perContact: 0.0035, perPower: 0.001, perSpeed: 0.001, min: 0.08, max: 0.45 },
+      // 安打のうち本塁打の割合 = base + (パワー - pivot) × perPower
+      homeRun: { base: 0.06, pivot: 40, perPower: 0.003, min: 0.0, max: 0.35 },
+      // 安打でない打数のうち三振の割合 = base - (ミート - pivot) × perContact
+      strikeout: { base: 0.25, pivot: 40, perContact: 0.004, min: 0.05, max: 0.6 },
+      rbiOnHit: 0.3,               // 本塁打以外の安打で打点が付く確率
+      rbiOnOut: 0.03,              // 凡打(三振以外)で打点が付く確率
+      homeRunRunners: [55, 30, 12, 3], // 本塁打のときの走者数 0〜3人の重み
+      cleanupRbiBonus: 0.08,       // 3〜5番の打点の付きやすさの上乗せ
+      innings: 9,                  // 先発投手は1試合を投げ切ったとみなす
+      earnedRate: 0.85,            // 失点のうち自責点とする割合
+      minAtBatsForAverage: 100,    // 名鑑の「3割打者」の判定に必要な通算打数
+    },
 
     // ---- 試合 ----
     match: {
@@ -552,6 +594,7 @@
       history: [],      // 出来事のメモ { y, g, ev, res, d }
       snapshots: [],    // 年ごとの能力 { y, g, a }
       record: { games: 0, wins: 0, titles: [] },
+      stats: { career: emptyStatLine(), byYear: {} }, // 簡易成績(通算・年度ごと)
       hidden: { clutch: 0 }, // 内部の隠れ数値(後のフェーズで使う)
       retired: false,
     };
@@ -740,6 +783,7 @@
       history: p.history.slice(),
       snapshots: p.snapshots.slice(),
       record: JSON.parse(JSON.stringify(p.record)),
+      stats: JSON.parse(JSON.stringify(p.stats)),
       enrolledYear: p.enrolledYear,
       origin: p.origin || 'recruit',
     }, extra || {});
@@ -834,6 +878,131 @@
     return { win: win, my: win ? winner : loser, opp: win ? loser : winner };
   }
 
+  // ---------- 打順(強さの計算には影響しない) ----------
+  function weightedScore(p, w) {
+    let s = 0;
+    let t = 0;
+    for (const k of Object.keys(w)) { s += p.abilities[k] * w[k]; t += w[k]; }
+    return s / t;
+  }
+  // スタメンから打順を決める。戻り値は { 選手id: 打順番号 }
+  //   二刀流の投手も野手系の能力で並べるので、上位に入ることがある
+  function battingOrder(slots) {
+    const BO = CONFIG.battingOrder;
+    const left = slots.filter((s) => s.player).map((s) => s.player);
+    const order = {};
+    const used = new Set();
+    const take = (num, score, lowest) => {
+      if (!left.length) return;
+      left.sort((a, b) => (lowest ? score(a) - score(b) : score(b) - score(a)) || a.id - b.id);
+      const p = left.shift();
+      order[p.id] = num;
+      used.add(num);
+    };
+    for (const num of BO.pickSequence) {
+      if (num === 9) take(9, batting, true);
+      else take(num, (p) => weightedScore(p, BO.weights[num]));
+    }
+    // 残り(5〜8番)は打撃力の高い順
+    left.sort((a, b) => batting(b) - batting(a) || a.id - b.id);
+    for (let num = 1; num <= 9 && left.length; num++) {
+      if (!used.has(num)) order[left.shift().id] = num;
+    }
+    return order;
+  }
+
+  // ---------- 簡易成績 ----------
+  function emptyStatLine() {
+    // g:出場試合 pa:打席 ab:打数 h:安打 hr:本塁打 rbi:打点 k:三振 bb:四死球
+    // pg:登板 w:勝 l:敗 er:自責点 outs:投球アウト数
+    return { g: 0, pa: 0, ab: 0, h: 0, hr: 0, rbi: 0, k: 0, bb: 0, pg: 0, w: 0, l: 0, er: 0, outs: 0 };
+  }
+  function statLinesFor(p, year) {
+    if (!p.stats) p.stats = { career: emptyStatLine(), byYear: {} };
+    if (!p.stats.byYear[year]) p.stats.byYear[year] = emptyStatLine();
+    return [p.stats.career, p.stats.byYear[year]];
+  }
+  function sumStatLines(lines) {
+    const t = emptyStatLine();
+    for (const l of lines) for (const k of Object.keys(t)) t[k] += l[k] || 0;
+    return t;
+  }
+  function battingAverage(line) { return line && line.ab > 0 ? line.h / line.ab : null; }
+  function formatAverage(line) {
+    const v = battingAverage(line);
+    if (v == null) return '---';
+    return v >= 1 ? '1.000' : '.' + String(Math.round(v * 1000)).padStart(3, '0');
+  }
+  function earnedRunAverage(line) { return line && line.outs > 0 ? line.er * 27 / line.outs : null; }
+  function formatEra(line) {
+    const v = earnedRunAverage(line);
+    return v == null ? '-.--' : v.toFixed(2);
+  }
+
+  // 打順に応じた1試合の打席数(1番ほど多い)
+  function plateAppearances(rng, orderNum) {
+    const S = CONFIG.stats;
+    const x = S.paFirst - (S.paFirst - S.paLast) * (orderNum - 1) / 8;
+    return Math.floor(x) + (rng.chance(x - Math.floor(x)) ? 1 : 0);
+  }
+
+  // 1打席の結果を、ミート・パワー・走力から抽選する
+  function plateAppearance(rng, p, orderNum) {
+    const S = CONFIG.stats;
+    const a = p.abilities;
+    const r = { pa: 1, ab: 0, h: 0, hr: 0, rbi: 0, k: 0, bb: 0 };
+    if (rng.chance(S.walkRate)) { r.bb = 1; return r; }
+    r.ab = 1;
+    const H = S.hit;
+    const hitP = clamp(H.base + (a.contact - H.pivot) * H.perContact + (a.power - H.pivot) * H.perPower
+      + (a.speed - H.pivot) * H.perSpeed, H.min, H.max);
+    const cleanup = orderNum >= 3 && orderNum <= 5 ? S.cleanupRbiBonus : 0;
+    if (rng.chance(hitP)) {
+      r.h = 1;
+      const HR = S.homeRun;
+      if (rng.chance(clamp(HR.base + (a.power - HR.pivot) * HR.perPower, HR.min, HR.max))) {
+        r.hr = 1;
+        r.rbi = 1 + rng.weighted(S.homeRunRunners);
+      } else if (rng.chance(S.rbiOnHit + cleanup)) {
+        r.rbi = 1;
+      }
+      return r;
+    }
+    const K = S.strikeout;
+    if (rng.chance(clamp(K.base - (a.contact - K.pivot) * K.perContact, K.min, K.max))) r.k = 1;
+    else if (rng.chance(S.rbiOnOut + cleanup / 2)) r.rbi = 1;
+    return r;
+  }
+
+  // 1試合ぶんの成績を記録する。result はその試合の結果 { win, my, opp }
+  //   戻り値:打順ごとの打席数(検証用)
+  function recordGameStats(rng, year, slots, order, result) {
+    const S = CONFIG.stats;
+    const paByOrder = {};
+    for (const s of slots) {
+      const p = s.player;
+      if (!p) continue;
+      const lines = statLinesFor(p, year);
+      const num = order[p.id] || 9;
+      const n = plateAppearances(rng, num);
+      paByOrder[num] = n;
+      const g = emptyStatLine();
+      g.g = 1;
+      for (let i = 0; i < n; i++) {
+        const r = plateAppearance(rng, p, num);
+        for (const k of Object.keys(r)) g[k] += r[k];
+      }
+      if (s.pos === 'P') {
+        g.pg = 1;
+        if (result.win) g.w = 1; else g.l = 1;
+        g.er = Math.round(result.opp * S.earnedRate);
+        g.outs = S.innings * 3;
+      }
+      for (const line of lines) for (const k of Object.keys(g)) line[k] += g[k];
+    }
+    return paByOrder;
+  }
+
   const Core = {
     Rng: Rng,
     PITCH_KEYS: PITCH_KEYS,
@@ -886,6 +1055,16 @@
     calcTeamStrength: calcTeamStrength,
     winProbability: winProbability,
     playMatch: playMatch,
+    battingOrder: battingOrder,
+    emptyStatLine: emptyStatLine,
+    sumStatLines: sumStatLines,
+    battingAverage: battingAverage,
+    formatAverage: formatAverage,
+    earnedRunAverage: earnedRunAverage,
+    formatEra: formatEra,
+    plateAppearances: plateAppearances,
+    plateAppearance: plateAppearance,
+    recordGameStats: recordGameStats,
   };
 
   // ===========================================================
@@ -956,6 +1135,7 @@
       subReveal: { count: 0, values: [], fielderPitched: 0, pitcherFielded: 0 },
       helper: { years: 0, total: 0, _lastYear: 0 },
       pitcherSlot: { twoWay: [], normal: [] },  // 夏の大会でのエース枠の貢献(強さへの寄与)
+      batting: { ab: 0, h: 0, paByOrder: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], games: 0 }, // 簡易成績の集計(検証用)
     };
   }
 
@@ -977,6 +1157,7 @@
       version: CONFIG.saveVersion,
       seed: seed,
       rngState: seed,
+      statRngState: (seed ^ 0x5bd1e995) >>> 0, // 成績専用の乱数(試合展開の乱数とは別系統)
       year: 1,
       stageIndex: 0,
       awaiting: null,        // 'enrollment' のとき、方針選択待ち
@@ -1280,6 +1461,8 @@
       const ace = slots.find((s) => s.pos === 'P').player;
       if (ace) state.stats.pitcherSlot[ace.twoWay ? 'twoWay' : 'normal'].push(ev0.pitcherSlotValue);
     }
+    const order = battingOrder(slots);
+    const srng = new Rng(state.statRngState);
     const games = [];
     for (let r = 1; r <= T.rounds; r++) {
       let opp = rng.pick(CONFIG.opponentNames);
@@ -1301,9 +1484,21 @@
         p.record.games++;
         if (res.win) p.record.wins++;
       }
+      // 簡易成績(成績専用の乱数を使うので、試合展開には影響しない)
+      const before = members_.map((p) => statLinesFor(p, state.year)[1]).map((l) => [l.ab, l.h]);
+      const paByOrder = recordGameStats(srng, state.year, slots, order, res);
+      const B = state.stats.batting;
+      members_.forEach((p, i) => {
+        const l = statLinesFor(p, state.year)[1];
+        B.ab += l.ab - before[i][0];
+        B.h += l.h - before[i][1];
+      });
+      for (const num of Object.keys(paByOrder)) B.paByOrder[num] += paByOrder[num];
+      B.games++;
       if (!res.win) { champion = false; break; }
       wins++;
     }
+    state.statRngState = srng.s;
     st.roundsWon += wins;
     let resultText;
     if (champion) {
@@ -1317,14 +1512,18 @@
     pushLog(state, resultText);
     return {
       type: 'tournament', title: formatYear(state.year) + ' ' + T.name,
-      lines: lines.concat(games), champion: champion, lineup: lineupSummary(slots),
+      lines: lines.concat(games), champion: champion, lineup: lineupSummary(slots, order),
     };
   }
 
   // 画面表示用のスタメン(保存できる形)
-  function lineupSummary(slots) {
+  // order を渡さなければ、ここで打順を決める。打順の順に並べて返す
+  function lineupSummary(slots, order) {
+    order = order || battingOrder(slots);
     return slots.map((s) => ({
       pos: s.pos,
+      order: s.player ? order[s.player.id] || null : null,
+      grade: s.player ? s.player.grade : null,
       id: s.player ? s.player.id : null,
       name: s.player ? s.player.name : '(欠員)',
       apt: s.apt,
@@ -1332,7 +1531,7 @@
       outOfPosition: s.outOfPosition,
       helper: s.player ? !!s.player.helper : false,
       twoWay: s.player ? isTwoWayKnown(s.player) : false,
-    }));
+    })).sort((a, b) => (a.order || 99) - (b.order || 99));
   }
 
   function retireThirdYears(state) {
@@ -1566,13 +1765,75 @@
       return '<div class="' + (o.cls || '') + '">' + esc(o.text) + '</div>';
     }).join('') + '</div>' + (ev.lineup ? lineupTable(ev.lineup, 'この大会のスタメン') : '') + '</div>';
   }
-  function lineupTable(lu, title) {
-    return '<details' + (title ? '' : ' open') + '><summary class="small">' + esc(title || 'スタメン') + '</summary><table class="lu">'
-      + lu.map((s) => '<tr class="' + (s.outOfPosition ? 'oop' : '') + '"><td class="pos">' + Core.POSITION_SHORT[s.pos] + '</td><td>'
-        + esc(s.name) + (s.twoWay ? ' <span class="tag twoway">二刀流</span>' : '') + (s.helper ? ' <span class="tag helper">助っ人</span>' : '')
-        + (s.outOfPosition && s.primary ? ' <span class="small">(本職:' + Core.POSITION_LABEL[s.primary] + ')</span>' : '')
-        + '</td><td class="small">適性 ' + (s.apt == null ? '-' : s.apt) + '</td></tr>').join('')
-      + '</table></details>';
+  // ---------- 成績の表示 ----------
+  function careerOf(p) { return (p && p.stats && p.stats.career) || Core.emptyStatLine(); }
+  function batText(l) { return Core.formatAverage(l) + ' ' + l.hr + '本 ' + l.rbi + '点'; }
+  function pitchText(l) { return l.w + '勝' + l.l + '敗 防' + Core.formatEra(l); }
+  // 一覧の見出しに出す成績(投手は防御率、野手は打率。二刀流は両方)
+  function statBrief(p) {
+    const l = careerOf(p);
+    const parts = [];
+    if (p.position === 'P' || l.pg > 0) parts.push('防' + Core.formatEra(l));
+    if (p.position !== 'P' || Core.isTwoWayKnown(p) || p.twoWay && p.finalAbilities) parts.push('打率' + Core.formatAverage(l));
+    return parts.join(' ');
+  }
+  // 年度ごとの成績表(通算の行付き)
+  function statTable(p) {
+    const st = p.stats;
+    if (!st || !st.career.g) return '<div class="sublabel">成績:まだ試合に出ていません</div>';
+    const years = Object.keys(st.byYear).map(Number).sort((a, b) => a - b);
+    const rows = years.map((y) => [HighSchool.formatYear(y), st.byYear[y]]).concat([['通算', st.career]]);
+    let html = '';
+    if (st.career.pa > 0) {
+      html += '<div class="sublabel">打撃成績</div><div class="scroll"><table class="st"><tr><th>年度</th><th>試合</th><th>打席</th><th>打数</th>'
+        + '<th>安打</th><th>本塁打</th><th>打点</th><th>三振</th><th>打率</th></tr>'
+        + rows.filter((r) => r[1].pa > 0).map((r) => '<tr><td>' + r[0] + '</td><td>' + r[1].g + '</td><td>' + r[1].pa + '</td><td>' + r[1].ab
+          + '</td><td>' + r[1].h + '</td><td>' + r[1].hr + '</td><td>' + r[1].rbi + '</td><td>' + r[1].k
+          + '</td><td>' + Core.formatAverage(r[1]) + '</td></tr>').join('') + '</table></div>';
+    }
+    if (st.career.pg > 0) {
+      html += '<div class="sublabel">投手成績</div><div class="scroll"><table class="st"><tr><th>年度</th><th>登板</th><th>勝</th><th>敗</th>'
+        + '<th>投球回</th><th>自責点</th><th>防御率</th></tr>'
+        + rows.filter((r) => r[1].pg > 0).map((r) => '<tr><td>' + r[0] + '</td><td>' + r[1].pg + '</td><td>' + r[1].w + '</td><td>' + r[1].l
+          + '</td><td>' + Math.floor(r[1].outs / 3) + (r[1].outs % 3 ? ' ' + (r[1].outs % 3) + '/3' : '') + '</td><td>' + r[1].er
+          + '</td><td>' + Core.formatEra(r[1]) + '</td></tr>').join('') + '</table></div>';
+    }
+    return html;
+  }
+
+  // スタメン表。withStats のときは、在籍中の選手の通算成績を表示する
+  function lineupTable(lu, title, withStats) {
+    const byId = {};
+    for (const p of state.players) byId[p.id] = p;
+    const head = '<tr><th>打順</th><th>守</th><th>名前</th><th>学年</th>'
+      + (withStats ? '<th>打率</th><th>本</th><th>点</th>' : '<th>適性</th>') + '</tr>';
+    const rows = lu.map((s) => {
+      const p = byId[s.id];
+      const isP = s.pos === 'P';
+      const ord = isP ? '先発' + (s.order ? '<small>' + s.order + '番</small>' : '') : (s.order || '-');
+      let name = esc(s.name) + (s.twoWay ? ' <span class="tag twoway">二刀流</span>' : '') + (s.helper ? ' <span class="tag helper">助っ人</span>' : '')
+        + (s.outOfPosition && s.primary ? ' <span class="small">(本職:' + Core.POSITION_LABEL[s.primary] + ')</span>' : '');
+      let cols;
+      if (!withStats) {
+        cols = '<td class="num small">' + (s.apt == null ? '-' : s.apt) + '</td>';
+      } else {
+        const l = careerOf(p);
+        if (isP) {
+          // 投手は勝敗と防御率。二刀流は打撃成績も添える
+          if (s.twoWay) name += '<div class="small">' + batText(l) + '</div>';
+          cols = '<td class="num" colspan="3">' + pitchText(l) + '</td>';
+        } else {
+          cols = '<td class="num">' + Core.formatAverage(l) + '</td><td class="num">' + l.hr + '</td><td class="num">' + l.rbi + '</td>';
+        }
+      }
+      const grade = s.helper ? '助' : (s.grade ? s.grade + '年' : '-');
+      return '<tr class="' + (s.outOfPosition ? 'oop' : '') + '"><td class="ord">' + ord + '</td><td class="pos">' + Core.POSITION_SHORT[s.pos]
+        + '</td><td class="nm">' + name + '</td><td>' + grade + '</td>' + cols + '</tr>';
+    }).join('');
+    const table = '<div class="scroll"><table class="lu">' + head + rows + '</table></div>'
+      + (withStats ? '<div class="small">成績は通算(大会のみ)。赤字は本職外の起用。</div>' : '');
+    if (!title) return table;
+    return '<details><summary class="small">' + esc(title) + '</summary>' + table + '</details>';
   }
   // 入学時の第一印象(固定の文章リストから選ぶ)
   function impression(p) {
@@ -1650,7 +1911,7 @@
       html += '<div class="btns"><button class="btn" id="btnNext">次へ進む</button>'
         + '<button class="btn sub" id="btnApril">次の4月まで</button></div>';
       for (const ev of evs) html += eventCard(ev);
-      html += '<div class="card"><h2>現在のスタメン</h2>' + lineupTable(HighSchool.lineup(state)) + '</div>';
+      html += '<div class="card"><h2>現在のスタメン</h2>' + lineupTable(HighSchool.lineup(state), null, true) + '</div>';
     }
     const recent = state.log.slice(-8).reverse();
     html += '<div class="card"><h2>最近の出来事</h2><div class="lines">'
@@ -1670,10 +1931,10 @@
     } else if (!Core.isTwoWayKnown(p)) {
       detail += '<div class="sublabel">副能力:未判明(本職でない役割で出場すると分かる)</div>';
     }
-    detail += histList(p.history);
+    detail += statTable(p) + histList(p.history);
     return '<div class="player"><details><summary><span class="pname">' + esc(p.name) + '</span> '
       + '<span class="small">' + (p.helper ? '' : p.grade + '年') + '</span>' + posTag(p.position) + extraTags(p)
-      + ' <span class="small">' + overallText(p) + ' / ' + esc(Core.policyLabel(p)) + '</span></summary>'
+      + ' <span class="small">' + overallText(p) + ' / ' + statBrief(p) + ' / ' + esc(Core.policyLabel(p)) + '</span></summary>'
       + detail + '</details>'
       + mainGrids(p, p.abilities) + '</div>';
   }
@@ -1685,7 +1946,7 @@
     const counts = HighSchool.countByPosition(HighSchool.members(state).filter((p) => !p.retired));
     let html = '<div class="card"><h2>部員の構成</h2><div class="small">'
       + Core.POSITIONS.map((pos) => Core.POSITION_LABEL[pos] + ' ' + counts[pos] + '人').join(' / ')
-      + '(引退した3年生を除く)</div>' + lineupTable(HighSchool.lineup(state), 'スタメン(自動編成)') + '</div>';
+      + '(引退した3年生を除く)</div>' + lineupTable(HighSchool.lineup(state), 'スタメン(自動編成)', true) + '</div>';
     for (const g of [3, 2, 1]) {
       const list = state.players.filter((p) => p.grade === g && !p.helper).sort(sortFn);
       html += '<div class="card"><h2>' + g + '年生(' + list.length + '人)</h2>';
@@ -1698,17 +1959,29 @@
     return html;
   }
 
+  // 名鑑の通算成績(投手は勝敗と防御率、野手は打率・本塁打・打点。両方あれば両方)
+  function alumniStatLine(a) {
+    const l = careerOf(a);
+    const parts = [];
+    if (l.pg > 0) parts.push(pitchText(l));
+    if (l.pa > 0 && (a.position !== 'P' || a.twoWay || l.pg === 0)) parts.push('打率 ' + batText(l));
+    return parts.length ? parts.join(' / ') : '出場なし';
+  }
+
   function renderAlumni() {
-    const filters = [['all', 'すべて'], ['genius', '天才'], ['reinc', '転生'], ['twoway', '二刀流'], ['pro', 'プロ入り'], ['helper', '助っ人']];
+    const minAB = CONFIG.stats.minAtBatsForAverage;
+    const filters = [['all', 'すべて'], ['genius', '天才'], ['reinc', '転生'], ['twoway', '二刀流'], ['pro', 'プロ入り'], ['three', '3割打者'], ['helper', '助っ人']];
     let list = state.alumni.slice().reverse();
     if (alumniFilter === 'genius') list = list.filter((a) => a.talent === 'genius');
     if (alumniFilter === 'reinc') list = list.filter((a) => a.reincarnation);
     if (alumniFilter === 'twoway') list = list.filter((a) => a.twoWay);
     if (alumniFilter === 'pro') list = list.filter((a) => a.career === CONFIG.career.paths[0].label);
     if (alumniFilter === 'helper') list = list.filter((a) => a.helper);
+    if (alumniFilter === 'three') list = list.filter((a) => careerOf(a).ab >= minAB && Core.battingAverage(careerOf(a)) >= 0.3);
     let html = '<div class="card"><h2>名鑑(' + state.alumni.length + '人)</h2><div class="filters">'
       + filters.map((f) => '<button data-af="' + f[0] + '" class="' + (alumniFilter === f[0] ? 'on' : '') + '">' + f[1] + '</button>').join('')
       + '</div></div>';
+    if (alumniFilter === 'three') html += '<div class="card small">3割打者:通算打率 .300以上、通算' + minAB + '打数以上</div>';
     if (!list.length) return html + '<div class="card small">該当する記録がありません。</div>';
     let lastYear = null;
     html += '<div class="card">';
@@ -1722,15 +1995,18 @@
       const subKeys = a.twoWay ? [] : Core.ALL_KEYS.filter((k) => a.mainKeys.indexOf(k) < 0);
       html += '<div class="player"><details><summary><span class="pname">' + esc(a.name) + '</span>'
         + posTag(a.position) + talent + extraTags(a, true)
-        + ' <span class="small">総合 ' + Core.avgOf(a.finalAbilities, a.mainKeys) + ' → ' + esc(a.career) + '</span></summary>'
+        + ' <span class="small">総合 ' + Core.avgOf(a.finalAbilities, a.mainKeys) + ' → ' + esc(a.career) + '</span>'
+        + '<div class="small">' + alumniStatLine(a) + '</div></summary>'
         + '<div class="small">育成方針:' + esc(a.policyLabel || Core.policyLabelByKey(a.policy))
         + ' / 才能:' + Core.TALENT_LABEL[a.talent] + (a.geniusBust ? '(開花せず)' : '')
         + ' / 転生の型:' + esc(Core.reincarnationName(a.reincarnation))
         + (a.twoWay ? ' / 二刀流' : '')
         + (a.originalPosition && a.originalPosition !== a.position ? ' / 入学時:' + Core.POSITION_LABEL[a.originalPosition] : '')
         + (a.origin === 'initial' ? ' / 就任時の部員' : '') + (a.helper ? ' / 助っ人' : '') + '</div>'
-        + '<div class="small">成績:試合 ' + a.record.games + '(' + a.record.wins + '勝)'
+        + '<div class="small">通算成績:' + alumniStatLine(a) + '</div>'
+        + '<div class="small">チーム成績:試合 ' + a.record.games + '(' + a.record.wins + '勝)'
         + (a.record.titles.length ? ' / ' + esc(a.record.titles.join('、')) : '') + '</div>'
+        + statTable(a)
         + snapTable(a.mainKeys, a.snapshots)
         + (subKeys.length ? '<div class="sublabel">副能力(' + (a.subRevealed ? '在学中に判明' : '在学中は未判明') + ')</div>'
           + abilGrid(subKeys, a.finalAbilities, a.initialAbilities) : '')

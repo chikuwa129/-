@@ -264,6 +264,7 @@
       history: [],      // 出来事のメモ { y, g, ev, res, d }
       snapshots: [],    // 年ごとの能力 { y, g, a }
       record: { games: 0, wins: 0, titles: [] },
+      stats: { career: emptyStatLine(), byYear: {} }, // 簡易成績(通算・年度ごと)
       hidden: { clutch: 0 }, // 内部の隠れ数値(後のフェーズで使う)
       retired: false,
     };
@@ -452,6 +453,7 @@
       history: p.history.slice(),
       snapshots: p.snapshots.slice(),
       record: JSON.parse(JSON.stringify(p.record)),
+      stats: JSON.parse(JSON.stringify(p.stats)),
       enrolledYear: p.enrolledYear,
       origin: p.origin || 'recruit',
     }, extra || {});
@@ -546,6 +548,131 @@
     return { win: win, my: win ? winner : loser, opp: win ? loser : winner };
   }
 
+  // ---------- 打順(強さの計算には影響しない) ----------
+  function weightedScore(p, w) {
+    let s = 0;
+    let t = 0;
+    for (const k of Object.keys(w)) { s += p.abilities[k] * w[k]; t += w[k]; }
+    return s / t;
+  }
+  // スタメンから打順を決める。戻り値は { 選手id: 打順番号 }
+  //   二刀流の投手も野手系の能力で並べるので、上位に入ることがある
+  function battingOrder(slots) {
+    const BO = CONFIG.battingOrder;
+    const left = slots.filter((s) => s.player).map((s) => s.player);
+    const order = {};
+    const used = new Set();
+    const take = (num, score, lowest) => {
+      if (!left.length) return;
+      left.sort((a, b) => (lowest ? score(a) - score(b) : score(b) - score(a)) || a.id - b.id);
+      const p = left.shift();
+      order[p.id] = num;
+      used.add(num);
+    };
+    for (const num of BO.pickSequence) {
+      if (num === 9) take(9, batting, true);
+      else take(num, (p) => weightedScore(p, BO.weights[num]));
+    }
+    // 残り(5〜8番)は打撃力の高い順
+    left.sort((a, b) => batting(b) - batting(a) || a.id - b.id);
+    for (let num = 1; num <= 9 && left.length; num++) {
+      if (!used.has(num)) order[left.shift().id] = num;
+    }
+    return order;
+  }
+
+  // ---------- 簡易成績 ----------
+  function emptyStatLine() {
+    // g:出場試合 pa:打席 ab:打数 h:安打 hr:本塁打 rbi:打点 k:三振 bb:四死球
+    // pg:登板 w:勝 l:敗 er:自責点 outs:投球アウト数
+    return { g: 0, pa: 0, ab: 0, h: 0, hr: 0, rbi: 0, k: 0, bb: 0, pg: 0, w: 0, l: 0, er: 0, outs: 0 };
+  }
+  function statLinesFor(p, year) {
+    if (!p.stats) p.stats = { career: emptyStatLine(), byYear: {} };
+    if (!p.stats.byYear[year]) p.stats.byYear[year] = emptyStatLine();
+    return [p.stats.career, p.stats.byYear[year]];
+  }
+  function sumStatLines(lines) {
+    const t = emptyStatLine();
+    for (const l of lines) for (const k of Object.keys(t)) t[k] += l[k] || 0;
+    return t;
+  }
+  function battingAverage(line) { return line && line.ab > 0 ? line.h / line.ab : null; }
+  function formatAverage(line) {
+    const v = battingAverage(line);
+    if (v == null) return '---';
+    return v >= 1 ? '1.000' : '.' + String(Math.round(v * 1000)).padStart(3, '0');
+  }
+  function earnedRunAverage(line) { return line && line.outs > 0 ? line.er * 27 / line.outs : null; }
+  function formatEra(line) {
+    const v = earnedRunAverage(line);
+    return v == null ? '-.--' : v.toFixed(2);
+  }
+
+  // 打順に応じた1試合の打席数(1番ほど多い)
+  function plateAppearances(rng, orderNum) {
+    const S = CONFIG.stats;
+    const x = S.paFirst - (S.paFirst - S.paLast) * (orderNum - 1) / 8;
+    return Math.floor(x) + (rng.chance(x - Math.floor(x)) ? 1 : 0);
+  }
+
+  // 1打席の結果を、ミート・パワー・走力から抽選する
+  function plateAppearance(rng, p, orderNum) {
+    const S = CONFIG.stats;
+    const a = p.abilities;
+    const r = { pa: 1, ab: 0, h: 0, hr: 0, rbi: 0, k: 0, bb: 0 };
+    if (rng.chance(S.walkRate)) { r.bb = 1; return r; }
+    r.ab = 1;
+    const H = S.hit;
+    const hitP = clamp(H.base + (a.contact - H.pivot) * H.perContact + (a.power - H.pivot) * H.perPower
+      + (a.speed - H.pivot) * H.perSpeed, H.min, H.max);
+    const cleanup = orderNum >= 3 && orderNum <= 5 ? S.cleanupRbiBonus : 0;
+    if (rng.chance(hitP)) {
+      r.h = 1;
+      const HR = S.homeRun;
+      if (rng.chance(clamp(HR.base + (a.power - HR.pivot) * HR.perPower, HR.min, HR.max))) {
+        r.hr = 1;
+        r.rbi = 1 + rng.weighted(S.homeRunRunners);
+      } else if (rng.chance(S.rbiOnHit + cleanup)) {
+        r.rbi = 1;
+      }
+      return r;
+    }
+    const K = S.strikeout;
+    if (rng.chance(clamp(K.base - (a.contact - K.pivot) * K.perContact, K.min, K.max))) r.k = 1;
+    else if (rng.chance(S.rbiOnOut + cleanup / 2)) r.rbi = 1;
+    return r;
+  }
+
+  // 1試合ぶんの成績を記録する。result はその試合の結果 { win, my, opp }
+  //   戻り値:打順ごとの打席数(検証用)
+  function recordGameStats(rng, year, slots, order, result) {
+    const S = CONFIG.stats;
+    const paByOrder = {};
+    for (const s of slots) {
+      const p = s.player;
+      if (!p) continue;
+      const lines = statLinesFor(p, year);
+      const num = order[p.id] || 9;
+      const n = plateAppearances(rng, num);
+      paByOrder[num] = n;
+      const g = emptyStatLine();
+      g.g = 1;
+      for (let i = 0; i < n; i++) {
+        const r = plateAppearance(rng, p, num);
+        for (const k of Object.keys(r)) g[k] += r[k];
+      }
+      if (s.pos === 'P') {
+        g.pg = 1;
+        if (result.win) g.w = 1; else g.l = 1;
+        g.er = Math.round(result.opp * S.earnedRate);
+        g.outs = S.innings * 3;
+      }
+      for (const line of lines) for (const k of Object.keys(g)) line[k] += g[k];
+    }
+    return paByOrder;
+  }
+
   const Core = {
     Rng: Rng,
     PITCH_KEYS: PITCH_KEYS,
@@ -598,6 +725,16 @@
     calcTeamStrength: calcTeamStrength,
     winProbability: winProbability,
     playMatch: playMatch,
+    battingOrder: battingOrder,
+    emptyStatLine: emptyStatLine,
+    sumStatLines: sumStatLines,
+    battingAverage: battingAverage,
+    formatAverage: formatAverage,
+    earnedRunAverage: earnedRunAverage,
+    formatEra: formatEra,
+    plateAppearances: plateAppearances,
+    plateAppearance: plateAppearance,
+    recordGameStats: recordGameStats,
   };
 
   // ===========================================================
@@ -668,6 +805,7 @@
       subReveal: { count: 0, values: [], fielderPitched: 0, pitcherFielded: 0 },
       helper: { years: 0, total: 0, _lastYear: 0 },
       pitcherSlot: { twoWay: [], normal: [] },  // 夏の大会でのエース枠の貢献(強さへの寄与)
+      batting: { ab: 0, h: 0, paByOrder: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], games: 0 }, // 簡易成績の集計(検証用)
     };
   }
 
@@ -689,6 +827,7 @@
       version: CONFIG.saveVersion,
       seed: seed,
       rngState: seed,
+      statRngState: (seed ^ 0x5bd1e995) >>> 0, // 成績専用の乱数(試合展開の乱数とは別系統)
       year: 1,
       stageIndex: 0,
       awaiting: null,        // 'enrollment' のとき、方針選択待ち
@@ -992,6 +1131,8 @@
       const ace = slots.find((s) => s.pos === 'P').player;
       if (ace) state.stats.pitcherSlot[ace.twoWay ? 'twoWay' : 'normal'].push(ev0.pitcherSlotValue);
     }
+    const order = battingOrder(slots);
+    const srng = new Rng(state.statRngState);
     const games = [];
     for (let r = 1; r <= T.rounds; r++) {
       let opp = rng.pick(CONFIG.opponentNames);
@@ -1013,9 +1154,21 @@
         p.record.games++;
         if (res.win) p.record.wins++;
       }
+      // 簡易成績(成績専用の乱数を使うので、試合展開には影響しない)
+      const before = members_.map((p) => statLinesFor(p, state.year)[1]).map((l) => [l.ab, l.h]);
+      const paByOrder = recordGameStats(srng, state.year, slots, order, res);
+      const B = state.stats.batting;
+      members_.forEach((p, i) => {
+        const l = statLinesFor(p, state.year)[1];
+        B.ab += l.ab - before[i][0];
+        B.h += l.h - before[i][1];
+      });
+      for (const num of Object.keys(paByOrder)) B.paByOrder[num] += paByOrder[num];
+      B.games++;
       if (!res.win) { champion = false; break; }
       wins++;
     }
+    state.statRngState = srng.s;
     st.roundsWon += wins;
     let resultText;
     if (champion) {
@@ -1029,14 +1182,18 @@
     pushLog(state, resultText);
     return {
       type: 'tournament', title: formatYear(state.year) + ' ' + T.name,
-      lines: lines.concat(games), champion: champion, lineup: lineupSummary(slots),
+      lines: lines.concat(games), champion: champion, lineup: lineupSummary(slots, order),
     };
   }
 
   // 画面表示用のスタメン(保存できる形)
-  function lineupSummary(slots) {
+  // order を渡さなければ、ここで打順を決める。打順の順に並べて返す
+  function lineupSummary(slots, order) {
+    order = order || battingOrder(slots);
     return slots.map((s) => ({
       pos: s.pos,
+      order: s.player ? order[s.player.id] || null : null,
+      grade: s.player ? s.player.grade : null,
       id: s.player ? s.player.id : null,
       name: s.player ? s.player.name : '(欠員)',
       apt: s.apt,
@@ -1044,7 +1201,7 @@
       outOfPosition: s.outOfPosition,
       helper: s.player ? !!s.player.helper : false,
       twoWay: s.player ? isTwoWayKnown(s.player) : false,
-    }));
+    })).sort((a, b) => (a.order || 99) - (b.order || 99));
   }
 
   function retireThirdYears(state) {
