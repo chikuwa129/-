@@ -8,87 +8,155 @@
   const CONFIG = {
     // ---- 基本 ----
     schoolName: '白樺高校',        // 自校の名前(架空)
-    newcomersPerYear: 5,           // 毎年の新入生の人数
-    initialPlayersPerGrade: 5,     // ゲーム開始時にいる2年生・3年生の人数(学年ごと)
-    pitcherRate: 0.35,             // 新入生が投手になる確率(転生の型で決まる場合を除く)
-    saveKey: 'bbgacha_save_v1',    // localStorage のキー
+    saveKey: 'bbgacha_save',       // localStorage のキー
+    saveVersion: 2,                // セーブデータの形式。違うバージョンのセーブは初期化する
     logLimit: 200,                 // 出来事ログの保存件数
 
-    // ---- 隠れた才能 / 転生 ----
+    // ---- 新入生の人数 ----
+    // 人数 = base + (前年夏のチームの強さ - strengthPivot) * perStrength + 乱数(±noise)
+    newcomers: {
+      base: 5,
+      strengthPivot: 34,
+      perStrength: 0.4,
+      noise: 1,
+      min: 3,
+      max: 12,
+      rosterCap: 30,               // 部員の総数の上限(超える分は新入生を減らす)
+    },
+
+    // ---- 守備区分 ----
+    // 新入生の守備区分の出現率(転生・二刀流で決まる場合を除く)
+    positionRates: { P: 0.22, C: 0.12, IF: 0.36, OF: 0.30 },
+    // 本職が不足しているとき(人数 < min)だけ、その区分の出現率に mult を掛ける
+    positionDeficit: {
+      P:  { min: 2, mult: 2.5 },
+      C:  { min: 1, mult: 3.0 },
+      IF: { min: 4, mult: 1.5 },
+      OF: { min: 3, mult: 1.5 },
+    },
+    // 開始時の部員(2年・3年合計)の守備区分の人数 [最小, 最大]
+    initialComposition: { P: [2, 3], C: [1, 2], IF: [4, 5], OF: [3, 4] },
+
+    // ---- 隠れた才能 / 転生 / 二刀流 ----
     talent: {
       geniusRate: 0.05,            // 天才の出現率
       reincarnationRate: 0.015,    // 転生の出現率(天才とは独立に抽選)
+      twoWayRate: 0.003,           // 二刀流の出現率(天才・転生とは独立に抽選)
       geniusBustRate: 0.2,         // 天才なのに才能が開花しない確率(伸び方は通常と同じになる)
     },
-    // 転生の型が判明するタイミング
-    //   'enrollment' : 入学時の演出で判明する
-    //   'firstCamp'  : 入学後、最初の合宿で判明する
+    // 判明するタイミング:'enrollment'(入学時の演出) / 'firstCamp'(入学後、最初の合宿)
     reincarnationReveal: 'enrollment',
+    twoWayReveal: 'enrollment',
 
     // ---- 初期能力 ----
-    initialAbility: { mean: 30, sd: 8, min: 5, max: 65 },
-
-    // 転生の型:position の能力に bonus を加算。allBonus は全能力に加算
-    reincarnationTypes: {
-      gouwan:   { name: '剛腕型', position: 'pitcher', allBonus: 6, bonus: { velocity: 28, stamina: 14 } },
-      gikou:    { name: '技巧型', position: 'pitcher', allBonus: 6, bonus: { control: 25, breaking: 22 } },
-      kouda:    { name: '巧打型', position: 'fielder', allBonus: 6, bonus: { contact: 28, defense: 10 } },
-      kyouda:   { name: '強打型', position: 'fielder', allBonus: 6, bonus: { power: 28, contact: 10 } },
-      shunsoku: { name: '俊足型', position: 'fielder', allBonus: 6, bonus: { speed: 28, defense: 14 } },
+    initialAbility: { mean: 30, sd: 8, min: 5, max: 65 },   // 本職側
+    // 本職でない側(副能力):本職側の平均 × [coefMin, coefMax] + 乱数(sd)
+    subAbility: { coefMin: 0.25, coefMax: 0.4, sd: 4, min: 1 },
+    // 守備区分ごとの初期ボーナス(本職らしさ)
+    positionBonus: {
+      P: {},
+      C: { arm: 6, defense: 6 },
+      IF: { defense: 6, arm: 3 },
+      OF: { speed: 6, arm: 3 },
+    },
+    // 二刀流:もう一方の側を、本職側と同じ生成 × subRatio で持つ
+    twoWay: {
+      subRatio: 0.8,
+      bothShare: 0.7,              // 方針「両方」のとき、各側に回る成長ポイントの割合
+      careerBonus: 6,              // 進路判定でのボーナス
+      alwaysStartAsPitcher: true,  // 判明した二刀流は、適性に関係なくスタメンの投手の枠に優先して入る
     },
 
-    // ---- 合宿での成長 ----
+    // 転生の型:position の本職として生まれる。bonus を加算、allBonus は本職側の全能力に加算
+    reincarnationTypes: {
+      gouwan:   { name: '剛腕型', position: 'P',  allBonus: 6, bonus: { velocity: 28, stamina: 14 } },
+      gikou:    { name: '技巧型', position: 'P',  allBonus: 6, bonus: { control: 25, breaking: 22 } },
+      kyouken:  { name: '強肩型', position: 'C',  allBonus: 6, bonus: { arm: 28, defense: 14 } },
+      kouda:    { name: '巧打型', position: 'IF', allBonus: 6, bonus: { contact: 28, defense: 10 } },
+      kyouda:   { name: '強打型', position: 'OF', allBonus: 6, bonus: { power: 28, contact: 10 } },
+      shunsoku: { name: '俊足型', position: 'OF', allBonus: 6, bonus: { speed: 28, arm: 10 } },
+    },
+
+    // ---- 合宿での成長(本職側のみ伸びる) ----
     camp: {
-      // 「大きく伸びる / 少し伸びる / 変わらない」の抽選確率
       outcomeRates: {
         normal: { big: 0.15, small: 0.50, none: 0.35 },
-        genius: { big: 0.45, small: 0.40, none: 0.15 }, // 開花した天才のみ。不発の天才は normal を使う
+        genius: { big: 0.45, small: 0.40, none: 0.15 }, // 開花した天才のみ
       },
-      // 結果ごとの成長ポイント(範囲内で一様乱数)
       points: {
         big:   [14, 22],
         small: [6, 11],
         none:  [0, 1],
       },
-      geniusPointMult: 1.6,        // 開花した天才の成長ポイント倍率
-      balancePointMult: 1.0,       // バランス方針の成長ポイント倍率
-      // 育成方針の重み(成長ポイント1点ずつ、この重みで振り分ける)
+      geniusPointMult: 1.6,
+      balancePointMult: 1.0,
       focusWeight: 1.0,            // 特化:選んだ能力
-      otherWeight: 0.06,           // 特化:それ以外の能力(ほとんど伸びない)
+      otherWeight: 0.06,           // 特化:それ以外
       balanceWeight: 1.0,          // バランス:全能力
-      // 「元々高い能力ほど伸ばす効率が良い」補正
-      //   効率 = 1 + (現在値 - pivot) / 100 * slope  を [min, max] に収める
       efficiency: { pivot: 45, slope: 0.8, min: 0.6, max: 1.4 },
-      // 上限付近の伸び鈍化:現在値が start 以上なら効率に mult を掛ける
       softCap: { start: 88, mult: 0.5 },
     },
+    // 副能力の側で出場した年は、年度末に副能力が少し伸びる(転向ボーナス。能力ごとの範囲)
+    subRoleGrowth: [1, 4],
 
-    // ---- チームの強さ ----
-    teamStrength: {
-      lineupSize: 8,               // 主力野手の人数(投手を除く)
-      fielderWeight: 0.6,          // 野手の比重
-      pitcherWeight: 0.4,          // 投手の比重
-      aceShare: 0.7,               // 投手のうちエースの比重(残りは2番手)
-      missingValue: 15,            // 人数が足りないときの穴埋め値
+    // ---- 適性(能力から計算。全選手同じ式) ----
+    aptitudeWeights: {
+      P:  { velocity: 0.3, control: 0.3, stamina: 0.2, breaking: 0.2 },
+      C:  { arm: 0.5, defense: 0.5 },
+      IF: { defense: 0.6, arm: 0.4 },
+      OF: { speed: 0.5, arm: 0.5 },
     },
+    // 適性が threshold 未満の区分で出場すると、(threshold - 適性) × rate を減点
+    lowAptitude: { threshold: 30, rate: 0.5 },
+
+    // ---- コンバート(年度の始め) ----
+    conversion: {
+      minimum: { P: 2, C: 1, IF: 4, OF: 3 },   // これ未満なら不足
+      maxPerYear: 3,               // 1年の提案回数の上限
+      successBase: 0.55,           // 成功率 = successBase + (適性 - 30) × perAptitude
+      perAptitude: 0.01,
+      successMin: 0.2,
+      successMax: 0.95,
+      penaltyStart: 12,            // 転向直後の、その区分の適性への減点
+      recoverPerYear: 6,           // 毎年度末に減点が戻る量
+    },
+
+    // ---- 副能力の判明 ----
+    subReveal: { goodThreshold: 22 },          // 判明した側の平均がこれ以上なら「意外にも」の文面
+
+    // ---- 助っ人 ----
+    helper: { mean: 18, sd: 5, min: 5, max: 35 },
+
+    // ---- スタメン・チームの強さ ----
+    lineup: { P: 1, C: 1, IF: 4, OF: 3 },
+    lineupOrder: ['C', 'P', 'IF', 'OF'],
+    primaryBonus: 8,               // 編成時、本職の選手を優先するための加点(強さには影響しない)
+    teamStrength: {
+      pitchWeight: 0.35,           // 投手(投手系の適性)
+      fieldWeight: 0.53,           // 野手8人の平均
+      pitcherBatWeight: 0.12,      // 投手の打撃(軽く反映。二刀流ならここが大きくなる)
+      fielderBat: 0.6,             // 野手の値 = 打撃 × fielderBat + 守備適性 × fielderDef
+      fielderDef: 0.4,
+      batWeights: { contact: 0.4, power: 0.4, speed: 0.2 },
+      missingValue: 10,
+    },
+    // 投手のスタミナ不足の補正:(threshold - スタミナ) × (perGame × (試合目-1) + 接戦なら close)
+    stamina: { threshold: 50, perGame: 0.05, close: 0.1, closeRange: 3 },
 
     // ---- 試合 ----
     match: {
-      scale: 6,                    // 強さの差がこの値で勝率がおよそ 73% になる(ロジスティック)
+      scale: 6,
       minWinRate: 0.03,
       maxWinRate: 0.97,
-      // 敗者の得点の重み(添字 = 得点)
       loserRunsWeights: [18, 22, 18, 14, 10, 7, 5, 3, 2, 1],
-      // 点差の重み(添字 + 1 = 点差)
       marginWeights: [30, 22, 16, 11, 8, 5, 4, 2, 1, 1],
     },
 
-    // ---- 大会(フェーズ1の簡易版。フェーズ2で本格的なトーナメントに置き換える) ----
+    // ---- 大会(簡易版。フェーズ2で本格的なトーナメントに置き換える) ----
     tournaments: {
-      summer: { name: '夏の地区大会', rounds: 5, oppBase: 28, oppStep: 2.5, oppSd: 6 },
-      autumn: { name: '秋の地区大会', rounds: 4, oppBase: 25, oppStep: 2.5, oppSd: 6 },
+      summer: { name: '夏の地区大会', rounds: 5, oppBase: 25, oppStep: 2.5, oppSd: 6 },
+      autumn: { name: '秋の地区大会', rounds: 4, oppBase: 24, oppStep: 2.5, oppSd: 6 },
     },
-    // フェーズ1で対戦相手の名前に使う架空の学校名
     opponentNames: [
       '青葉台', '桜ヶ丘', '北斗学園', '南陵', '東雲', '西園寺学院', '若葉', '朝霧',
       '大河原', '星見台', '緑川', '白鷺', '黒潮', '紅陵', '翠嵐', '藤ノ森',
@@ -96,7 +164,6 @@
     ],
 
     // ---- 卒業後の進路 ----
-    // score = 総合 * overallWeight + 最高能力 * maxWeight + 乱数(sd)
     career: {
       overallWeight: 0.6,
       maxWeight: 0.4,
@@ -108,6 +175,7 @@
         { min: 42, label: '大学で野球を続ける' },
         { min: -999, label: '野球は高校で区切り' },
       ],
+      helperLabel: '元の部活に戻った',
     },
   };
 

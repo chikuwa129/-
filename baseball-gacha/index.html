@@ -46,12 +46,17 @@
   .player:first-child { border-top: none; }
   .pname { font-weight: bold; }
   .tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 8px; margin-left: 4px; vertical-align: middle; border: 1px solid var(--line); color: var(--sub); }
-  .tag.p { border-color: #c77; color: #a33; }
-  .tag.f { border-color: #79c; color: #357; }
+  .tag.P { border-color: #c77; color: #a33; }
+  .tag.C { border-color: #7a7; color: #363; }
+  .tag.IF { border-color: #79c; color: #357; }
+  .tag.OF { border-color: #c9a040; color: #8a6400; }
+  .tag.twoway { border-color: #d4006a; color: #d4006a; }
+  .tag.helper { background: #fde; }
+  .tag.conv { border-style: dashed; }
   .tag.genius { border-color: var(--gold); color: var(--gold); }
   .tag.reinc { border-color: var(--special); color: var(--special); }
   .tag.ret { background: #eee; }
-  .abil { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 4px; }
+  .abil { display: grid; grid-template-columns: repeat(var(--cols, 4), 1fr); gap: 4px; margin-top: 4px; }
   .abil div { background: #f6f2e9; border-radius: 4px; padding: 2px 4px; text-align: center; font-size: 12px; color: var(--sub); }
   .abil b { display: block; font-size: 16px; color: var(--ink); }
   .v80 b { color: #c0392b; } .v60 b { color: #d35400; } .v40 b { color: #222; } .v0 b { color: #999; }
@@ -68,6 +73,12 @@
   .filters { display: flex; gap: 6px; flex-wrap: wrap; }
   .filters button { padding: 4px 10px; border: 1px solid var(--line); background: #fff; border-radius: 14px; font-size: 13px; }
   .filters button.on { background: var(--ink); color: #fff; }
+  .sublabel { font-size: 11px; color: var(--sub); margin-top: 6px; }
+  table.lu { border-collapse: collapse; width: 100%; font-size: 13px; }
+  table.lu td { border-bottom: 1px dotted #eee; padding: 3px 4px; }
+  table.lu td.pos { width: 3em; font-weight: bold; }
+  table.lu tr.oop td { color: var(--lose); }
+  .nc { font-size: 13px; margin: 4px 0; }
 </style>
 </head>
 <body>
@@ -107,9 +118,10 @@
     } catch (e) { /* 壊れたセーブは無視 */ }
     return null;
   }
+  function clearDraft() { for (const k of Object.keys(draftPolicies)) delete draftPolicies[k]; }
   function startNew(seed) {
     state = HighSchool.newGame(seed !== '' && seed != null ? { seed: Number(seed) } : {});
-    for (const k of Object.keys(draftPolicies)) delete draftPolicies[k];
+    clearDraft();
     save();
   }
 
@@ -118,18 +130,34 @@
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
   function vClass(v) { return v >= 80 ? 'v80' : v >= 60 ? 'v60' : v >= 40 ? 'v40' : 'v0'; }
-  function abilGrid(pos, abilities, base) {
-    return '<div class="abil">' + Core.ABILITIES[pos].map((a) => {
-      const v = abilities[a.key];
-      const diff = base ? v - base[a.key] : 0;
-      return '<div class="' + vClass(v) + '">' + a.label + '<b>' + v + '</b>'
+  // 能力のマス目。keys の順に並べる。base を渡すと増分も表示
+  function abilGrid(keys, abilities, base) {
+    return '<div class="abil" style="--cols:' + keys.length + '">' + keys.map((k) => {
+      const v = abilities[k];
+      const diff = base ? v - base[k] : 0;
+      return '<div class="' + vClass(v) + '">' + Core.ABILITY_LABEL[k] + '<b>' + v + '</b>'
         + (base ? '<span class="small">' + (diff > 0 ? '+' + diff : '±0') + '</span>' : '') + '</div>';
     }).join('') + '</div>';
   }
-  function posTag(pos) { return '<span class="tag ' + (pos === 'pitcher' ? 'p' : 'f') + '">' + Core.POSITION_LABEL[pos] + '</span>'; }
-  function reincTag(p) {
-    return p.reincarnation && (p.reincarnationRevealed || p.finalAbilities)
-      ? '<span class="tag reinc">転生:' + esc(Core.reincarnationName(p.reincarnation)) + '</span>' : '';
+  // 本職側の能力(判明した二刀流は投打2段)
+  function mainGrids(p, abilities, base) {
+    if (Core.isTwoWayKnown(p) || (p.finalAbilities && p.twoWay)) {
+      return '<div class="sublabel">投手系</div>' + abilGrid(Core.PITCH_KEYS, abilities, base)
+        + '<div class="sublabel">野手系</div>' + abilGrid(Core.BAT_KEYS, abilities, base);
+    }
+    return abilGrid(Core.sideKeys(Core.sideOf(p.position)), abilities, base);
+  }
+  function posTag(pos) { return '<span class="tag ' + pos + '">' + Core.POSITION_LABEL[pos] + '</span>'; }
+  function extraTags(p, isAlumni) {
+    let t = '';
+    if (p.twoWay && (p.twoWayRevealed || isAlumni)) t += '<span class="tag twoway">二刀流</span>';
+    if (p.reincarnation && (p.reincarnationRevealed || isAlumni)) {
+      t += '<span class="tag reinc">転生:' + esc(Core.reincarnationName(p.reincarnation)) + '</span>';
+    }
+    if (p.helper) t += '<span class="tag helper">助っ人</span>';
+    if (p.convert) t += '<span class="tag conv">転向中</span>';
+    if (p.retired) t += '<span class="tag ret">引退</span>';
+    return t;
   }
   function histList(history) {
     return '<ul class="hist">' + history.map((h) =>
@@ -137,46 +165,66 @@
       + (h.d && Object.keys(h.d).length ? ' <span class="small">' + esc(Core.formatDelta(h.d)) + '</span>' : '') + '</li>'
     ).join('') + '</ul>';
   }
-  // current を渡すと末尾に「現在」の行を付ける
-  function snapTable(pos, snaps, current) {
+  // 年ごとの能力表。current を渡すと末尾に「現在」の行を付ける
+  function snapTable(keys, snaps, current) {
     if (!snaps || !snaps.length) return '';
-    const cols = Core.ABILITIES[pos];
-    let html = '<table class="snap"><tr><th>年</th>' + cols.map((c) => '<th>' + c.label + '</th>').join('') + '<th>総合</th></tr>';
+    let html = '<table class="snap"><tr><th>年</th>' + keys.map((k) => '<th>' + Core.ABILITY_LABEL[k] + '</th>').join('') + '</tr>';
     snaps.forEach((s, i) => {
       const label = i === 0 ? '入学時' : HighSchool.formatYear(s.y) + '末';
-      html += '<tr><td>' + label + '</td>' + cols.map((c) => '<td>' + s.a[c.key] + '</td>').join('')
-        + '<td>' + Core.overall(s.a) + '</td></tr>';
+      html += '<tr><td>' + label + '</td>' + keys.map((k) => '<td>' + s.a[k] + '</td>').join('') + '</tr>';
     });
-    if (current) {
-      html += '<tr><td>現在</td>' + cols.map((c) => '<td>' + current[c.key] + '</td>').join('')
-        + '<td>' + Core.overall(current) + '</td></tr>';
-    }
+    if (current) html += '<tr><td>現在</td>' + keys.map((k) => '<td>' + current[k] + '</td>').join('') + '</tr>';
     return html + '</table>';
+  }
+  // 適性(見えている能力から計算できる区分だけ表示)
+  function aptLine(p) {
+    const known = Core.isSubKnown(p);
+    const side = Core.mainSide(p);
+    const parts = Core.POSITIONS.filter((pos) => known || Core.sideOf(pos) === side)
+      .map((pos) => Core.POSITION_SHORT[pos] + ' ' + Core.aptitude(p, pos));
+    let s = '適性:' + parts.join(' / ');
+    if (p.convert) s += '(' + Core.POSITION_LABEL[p.convert.pos] + 'は転向直後のため -' + p.convert.penalty + ')';
+    return '<div class="small">' + s + '</div>';
   }
   function eventCard(ev) {
     return '<div class="card"><h2>' + esc(ev.title) + '</h2><div class="lines">' + ev.lines.map((l) => {
       const o = typeof l === 'string' ? { text: l, cls: '' } : l;
       return '<div class="' + (o.cls || '') + '">' + esc(o.text) + '</div>';
-    }).join('') + '</div></div>';
+    }).join('') + '</div>' + (ev.lineup ? lineupTable(ev.lineup, 'この大会のスタメン') : '') + '</div>';
+  }
+  function lineupTable(lu, title) {
+    return '<details' + (title ? '' : ' open') + '><summary class="small">' + esc(title || 'スタメン') + '</summary><table class="lu">'
+      + lu.map((s) => '<tr class="' + (s.outOfPosition ? 'oop' : '') + '"><td class="pos">' + Core.POSITION_SHORT[s.pos] + '</td><td>'
+        + esc(s.name) + (s.twoWay ? ' <span class="tag twoway">二刀流</span>' : '') + (s.helper ? ' <span class="tag helper">助っ人</span>' : '')
+        + (s.outOfPosition && s.primary ? ' <span class="small">(本職:' + Core.POSITION_LABEL[s.primary] + ')</span>' : '')
+        + '</td><td class="small">適性 ' + (s.apt == null ? '-' : s.apt) + '</td></tr>').join('')
+      + '</table></details>';
   }
   // 入学時の第一印象(固定の文章リストから選ぶ)
   function impression(p) {
-    const ov = Core.overall(p.abilities);
-    const mx = Core.maxAbility(p.abilities);
+    const keys = Core.visibleKeys(p);
+    const ov = Core.avgOf(p.abilities, keys);
+    const mx = Core.maxAbility(p.abilities, keys);
     const pool = ov >= 45 ? ['即戦力の予感がする。', 'いきなり上級生に混ざっても見劣りしない。', '今年の目玉かもしれない。']
       : mx >= 45 ? ['光るものを1つ持っている。', '尖った長所がある。', '何か一芸がありそうだ。']
       : ov >= 28 ? ['素直そうな新入生だ。', 'まだ線が細いが伸びしろはある。', '平凡だが真面目に練習しそう。']
       : ['正直、まだまだこれから。', '体力づくりから始めよう。', '入部動機は「なんとなく」らしい。'];
     return pool[p.id % pool.length];
   }
+  function overallText(p) {
+    if (Core.isTwoWayKnown(p)) {
+      return '投 ' + Core.avgOf(p.abilities, Core.PITCH_KEYS) + ' / 打 ' + Core.avgOf(p.abilities, Core.BAT_KEYS);
+    }
+    return '総合 ' + Core.avgOf(p.abilities, Core.visibleKeys(p));
+  }
 
   // ---------- 画面 ----------
   function renderHeader() {
     document.getElementById('title').textContent = CONFIG.schoolName + ' 野球部';
     const stage = HighSchool.currentStage(state);
-    const active = state.players.filter((p) => !p.retired).length;
+    const mem = HighSchool.members(state).filter((p) => !p.retired).length;
     document.getElementById('meta').innerHTML = '<b>' + HighSchool.formatYear(state.year) + '</b> ・ ' + esc(stage.label)
-      + ' ・ チームの強さ <b>' + HighSchool.teamStrength(state) + '</b> ・ 部員 ' + active + '人';
+      + ' ・ チームの強さ <b>' + HighSchool.teamStrength(state) + '</b> ・ 部員 ' + mem + '人';
   }
 
   function renderCalendar() {
@@ -186,22 +234,35 @@
   }
 
   function renderEnrollment() {
+    const info = state.newcomerInfo || {};
+    const n = state.pendingRecruits.length;
     let html = '<div class="card"><h2>🌸 ' + HighSchool.formatYear(state.year) + ' 4月 新入生がやってきた!</h2>'
-      + '<div class="small">新入生ごとに育成方針を選んでください。特化:選んだ能力が伸びやすく、他はほとんど伸びない。バランス:全体が少しずつ伸びる。</div>';
+      + '<div class="nc">今年の入部希望者は <b>' + n + '人</b>'
+      + (info.strength != null ? '(前年夏のチームの強さ ' + info.strength + ')' : '')
+      + (info.capped ? '。部員数の上限のため人数を絞った' : '') + '</div>'
+      + '<div class="small">育成方針を選んでください。特化:選んだ能力が伸びやすく、他はほとんど伸びない。バランス:全体が少しずつ伸びる。'
+      + '表示は本職側の能力だけです。</div>';
+    if (!n) html += '<div class="small">今年は新入生がいません。</div>';
     for (const p of state.pendingRecruits) {
-      if (!draftPolicies[p.id]) draftPolicies[p.id] = 'balance';
-      html += '<div class="player"><span class="pname">' + esc(p.name) + '</span>' + posTag(p.position)
-        + ' <span class="small">総合 ' + Core.overall(p.abilities) + '</span>'
+      if (!draftPolicies[p.id]) draftPolicies[p.id] = p.policy;
+      html += '<div class="player"><span class="pname">' + esc(p.name) + '</span>' + posTag(p.position) + extraTags(p)
+        + ' <span class="small">' + overallText(p) + '</span>'
         + '<div class="impress">' + esc(impression(p)) + '</div>'
-        + abilGrid(p.position, p.abilities);
+        + mainGrids(p, p.abilities);
       if (p.reincarnation && p.reincarnationRevealed) {
         html += '<div class="reveal">……!? この新入生、ただ者ではない。<br>【' + esc(Core.reincarnationName(p.reincarnation)) + '】の転生者だ!</div>';
       }
-      html += '<select data-pid="' + p.id + '">' + Core.POLICIES[p.position].map((pol) =>
+      if (p.twoWay && p.twoWayRevealed) {
+        html += '<div class="reveal">投げても打っても本職級……! <br>【二刀流】の素質を持っている!</div>';
+      }
+      const set = Core.POLICIES[Core.policySetOf(p)];
+      html += '<select data-pid="' + p.id + '">' + set.map((pol) =>
         '<option value="' + pol.key + '"' + (draftPolicies[p.id] === pol.key ? ' selected' : '') + '>' + pol.label + '</option>'
       ).join('') + '</select></div>';
     }
-    html += '</div><div class="btns"><button class="btn" id="btnEnroll">この方針で入部させる</button></div>';
+    html += '</div><div class="btns">'
+      + (n ? '<button class="btn sub" id="btnAuto">おまかせ</button>' : '')
+      + '<button class="btn" id="btnEnroll">この方針で入部させる</button></div>';
     return html;
   }
 
@@ -215,6 +276,7 @@
       html += '<div class="btns"><button class="btn" id="btnNext">次へ進む</button>'
         + '<button class="btn sub" id="btnApril">次の4月まで</button></div>';
       for (const ev of evs) html += eventCard(ev);
+      html += '<div class="card"><h2>現在のスタメン</h2>' + lineupTable(HighSchool.lineup(state)) + '</div>';
     }
     const recent = state.log.slice(-8).reverse();
     html += '<div class="card"><h2>最近の出来事</h2><div class="lines">'
@@ -223,39 +285,57 @@
   }
 
   function playerCard(p) {
-    const tags = posTag(p.position) + reincTag(p) + (p.retired ? '<span class="tag ret">引退</span>' : '');
+    const keys = Core.visibleKeys(p);
+    let detail = '<div class="small">方針:' + esc(Core.policyLabel(p)) + ' / 試合 ' + p.record.games + '(' + p.record.wins + '勝)'
+      + (p.originalPosition !== p.position ? ' / 元:' + Core.POSITION_LABEL[p.originalPosition] : '') + '</div>'
+      + aptLine(p)
+      + snapTable(keys, p.snapshots, p.abilities);
+    if (Core.isSubKnown(p) && !Core.isTwoWayKnown(p)) {
+      detail += '<div class="sublabel">副能力(' + Core.SIDE_LABEL[Core.sideOf(p.position) === 'pitch' ? 'bat' : 'pitch'] + '・判明済み)</div>'
+        + abilGrid(Core.subKeysOf(p), p.abilities);
+    } else if (!Core.isTwoWayKnown(p)) {
+      detail += '<div class="sublabel">副能力:未判明(本職でない役割で出場すると分かる)</div>';
+    }
+    detail += histList(p.history);
     return '<div class="player"><details><summary><span class="pname">' + esc(p.name) + '</span> '
-      + '<span class="small">' + p.grade + '年</span>' + tags
-      + ' <span class="small">総合 ' + Core.overall(p.abilities) + ' / ' + esc(Core.policyLabel(p.position, p.policy)) + '</span></summary>'
-      + '<div class="small">試合 ' + p.record.games + '(' + p.record.wins + '勝)</div>'
-      + snapTable(p.position, p.snapshots, p.abilities)
-      + histList(p.history) + '</details>'
-      + abilGrid(p.position, p.abilities) + '</div>';
+      + '<span class="small">' + (p.helper ? '' : p.grade + '年') + '</span>' + posTag(p.position) + extraTags(p)
+      + ' <span class="small">' + overallText(p) + ' / ' + esc(Core.policyLabel(p)) + '</span></summary>'
+      + detail + '</details>'
+      + mainGrids(p, p.abilities) + '</div>';
   }
 
   function renderRoster() {
-    let html = '';
+    const posOrder = { P: 0, C: 1, IF: 2, OF: 3 };
+    const sortFn = (a, b) => posOrder[a.position] - posOrder[b.position]
+      || Core.avgOf(b.abilities, Core.visibleKeys(b)) - Core.avgOf(a.abilities, Core.visibleKeys(a));
+    const counts = HighSchool.countByPosition(HighSchool.members(state).filter((p) => !p.retired));
+    let html = '<div class="card"><h2>部員の構成</h2><div class="small">'
+      + Core.POSITIONS.map((pos) => Core.POSITION_LABEL[pos] + ' ' + counts[pos] + '人').join(' / ')
+      + '(引退した3年生を除く)</div>' + lineupTable(HighSchool.lineup(state), 'スタメン(自動編成)') + '</div>';
     for (const g of [3, 2, 1]) {
-      const list = state.players.filter((p) => p.grade === g)
-        .sort((a, b) => (a.position === b.position ? Core.overall(b.abilities) - Core.overall(a.abilities) : a.position === 'pitcher' ? -1 : 1));
+      const list = state.players.filter((p) => p.grade === g && !p.helper).sort(sortFn);
       html += '<div class="card"><h2>' + g + '年生(' + list.length + '人)</h2>';
       html += list.length ? list.map(playerCard).join('') : '<div class="small">いません</div>';
       html += '</div>';
     }
-    html += '<div class="small">名前をタップすると、年ごとの能力と成長履歴が見られます。隠れた才能は卒業まで分かりません。</div>';
+    const helpers = state.players.filter((p) => p.helper);
+    if (helpers.length) html += '<div class="card"><h2>助っ人(' + helpers.length + '人)</h2>' + helpers.map(playerCard).join('') + '</div>';
+    html += '<div class="small">名前をタップすると、年ごとの能力・適性・副能力・成長履歴が見られます。隠れた才能は卒業まで分かりません。</div>';
     return html;
   }
 
   function renderAlumni() {
-    const filters = [['all', 'すべて'], ['genius', '天才'], ['reinc', '転生'], ['pro', 'プロ入り']];
+    const filters = [['all', 'すべて'], ['genius', '天才'], ['reinc', '転生'], ['twoway', '二刀流'], ['pro', 'プロ入り'], ['helper', '助っ人']];
     let list = state.alumni.slice().reverse();
     if (alumniFilter === 'genius') list = list.filter((a) => a.talent === 'genius');
     if (alumniFilter === 'reinc') list = list.filter((a) => a.reincarnation);
+    if (alumniFilter === 'twoway') list = list.filter((a) => a.twoWay);
     if (alumniFilter === 'pro') list = list.filter((a) => a.career === CONFIG.career.paths[0].label);
-    let html = '<div class="card"><h2>名鑑(卒業生 ' + state.alumni.length + '人)</h2><div class="filters">'
+    if (alumniFilter === 'helper') list = list.filter((a) => a.helper);
+    let html = '<div class="card"><h2>名鑑(' + state.alumni.length + '人)</h2><div class="filters">'
       + filters.map((f) => '<button data-af="' + f[0] + '" class="' + (alumniFilter === f[0] ? 'on' : '') + '">' + f[1] + '</button>').join('')
       + '</div></div>';
-    if (!list.length) return html + '<div class="card small">まだ記録がありません。</div>';
+    if (!list.length) return html + '<div class="card small">該当する記録がありません。</div>';
     let lastYear = null;
     html += '<div class="card">';
     for (const a of list) {
@@ -265,26 +345,33 @@
       }
       const talent = a.talent === 'genius'
         ? '<span class="tag genius">' + (a.geniusBust ? '天才(開花せず)' : '天才') + '</span>' : '';
+      const subKeys = a.twoWay ? [] : Core.ALL_KEYS.filter((k) => a.mainKeys.indexOf(k) < 0);
       html += '<div class="player"><details><summary><span class="pname">' + esc(a.name) + '</span>'
-        + posTag(a.position) + talent + reincTag(a)
-        + ' <span class="small">総合 ' + a.overall + ' → ' + esc(a.career) + '</span></summary>'
-        + '<div class="small">育成方針:' + esc(Core.policyLabel(a.position, a.policy))
+        + posTag(a.position) + talent + extraTags(a, true)
+        + ' <span class="small">総合 ' + Core.avgOf(a.finalAbilities, a.mainKeys) + ' → ' + esc(a.career) + '</span></summary>'
+        + '<div class="small">育成方針:' + esc(a.policyLabel || Core.policyLabelByKey(a.policy))
         + ' / 才能:' + Core.TALENT_LABEL[a.talent] + (a.geniusBust ? '(開花せず)' : '')
         + ' / 転生の型:' + esc(Core.reincarnationName(a.reincarnation))
-        + (a.origin === 'initial' ? ' / 就任時の部員' : '') + '</div>'
+        + (a.twoWay ? ' / 二刀流' : '')
+        + (a.originalPosition && a.originalPosition !== a.position ? ' / 入学時:' + Core.POSITION_LABEL[a.originalPosition] : '')
+        + (a.origin === 'initial' ? ' / 就任時の部員' : '') + (a.helper ? ' / 助っ人' : '') + '</div>'
         + '<div class="small">成績:試合 ' + a.record.games + '(' + a.record.wins + '勝)'
         + (a.record.titles.length ? ' / ' + esc(a.record.titles.join('、')) : '') + '</div>'
-        + snapTable(a.position, a.snapshots)
+        + snapTable(a.mainKeys, a.snapshots)
+        + (subKeys.length ? '<div class="sublabel">副能力(' + (a.subRevealed ? '在学中に判明' : '在学中は未判明') + ')</div>'
+          + abilGrid(subKeys, a.finalAbilities, a.initialAbilities) : '')
         + histList(a.history) + '</details>'
-        + abilGrid(a.position, a.finalAbilities, a.initialAbilities) + '</div>';
+        + mainGrids(a, a.finalAbilities, a.initialAbilities) + '</div>';
     }
     return html + '</div>';
   }
 
   function renderSettings() {
+    const rv = (v) => (v === 'enrollment' ? '入学時' : '最初の合宿');
     return '<div class="card"><h2>ゲーム情報</h2><div class="small">シード:' + state.seed
-      + '<br>転生の型の判明:' + (CONFIG.reincarnationReveal === 'enrollment' ? '入学時' : '最初の合宿')
-      + '(config.js の reincarnationReveal で切替)<br>セーブは自動(このブラウザの localStorage)</div></div>'
+      + '<br>転生の型の判明:' + rv(CONFIG.reincarnationReveal) + '(config.js の reincarnationReveal で切替)'
+      + '<br>二刀流の判明:' + rv(CONFIG.twoWayReveal) + '(config.js の twoWayReveal で切替)'
+      + '<br>セーブは自動(このブラウザの localStorage。データ形式 v' + state.version + ')</div></div>'
       + '<div class="card"><h2>リセット</h2><div class="small">シードを入れると同じ展開を再現できます(空欄ならランダム)。</div>'
       + '<input type="text" id="seedInput" inputmode="numeric" placeholder="シード(任意の数字)">'
       + '<div class="btns"><button class="btn danger" id="btnReset">セーブを消して最初から</button></div></div>';
@@ -308,9 +395,12 @@
   });
   document.getElementById('main').addEventListener('click', (e) => {
     const id = e.target.id;
-    if (id === 'btnEnroll') {
+    if (id === 'btnAuto') {
+      for (const p of state.pendingRecruits) draftPolicies[p.id] = Core.autoPolicy(p);
+      render();
+    } else if (id === 'btnEnroll') {
       HighSchool.confirmEnrollment(state, draftPolicies);
-      for (const k of Object.keys(draftPolicies)) delete draftPolicies[k];
+      clearDraft();
       save(); render(); window.scrollTo(0, 0);
     } else if (id === 'btnNext') {
       HighSchool.advanceToNextStop(state);
@@ -328,8 +418,9 @@
     }
   });
 
+  // 古い形式のセーブは互換を取らずに初期化する
   state = load();
-  if (!state || state.version !== 1) startNew();
+  if (!state || state.version !== CONFIG.saveVersion) startNew();
   render();
 })();
 </script>
