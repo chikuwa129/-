@@ -102,6 +102,29 @@
   table.st th, table.st td { border: 1px solid var(--line); padding: 2px 5px; text-align: right; }
   table.st th { text-align: center; }
   .nc { font-size: 13px; margin: 4px 0; }
+  .months { display: grid; grid-template-columns: repeat(12, 1fr); gap: 2px; margin: 10px 0 4px; }
+  .months span { font-size: 10px; text-align: center; padding: 3px 0; border-radius: 4px; background: #e8e2d5; color: var(--sub); }
+  .months span.done { color: #bbb; }
+  .months span.now { background: var(--accent); color: #fff; font-weight: bold; }
+  .months span.ev { box-shadow: inset 0 -2px 0 #c9a040; }
+  .monthnote { font-size: 12px; color: var(--sub); margin-bottom: 6px; }
+  .lead { font-size: 12px; color: var(--sub); }
+  .lead b { color: var(--ink); }
+  .v100 b { color: #b8860b; text-shadow: 0 0 1px #f5d76e; }
+  .rt { font-weight: bold; }
+  .rlabel { font-size: 11px; margin-left: 3px; padding: 0 5px; border-radius: 8px; background: #fff4d6; color: #8a6400; border: 1px solid #e6c56a; white-space: nowrap; }
+  .rlabel.r200 { background: #fde8e8; color: #b03a2e; border-color: #e6a39b; }
+  .rlabel.r400 { background: #2b2b2b; color: #ffd84d; border-color: #2b2b2b; }
+  .mline { font-size: 13px; padding: 3px 0; border-bottom: 1px dotted #eee; }
+  .mline .ml { display: inline-block; min-width: 3.2em; font-weight: bold; }
+  .mline .nt { display: block; font-size: 12px; color: var(--special); padding-left: 3.2em; }
+  .mline .wt { display: block; font-size: 12px; color: #9a6a00; padding-left: 3.2em; }
+  .changed { background: #fff6dc; border-radius: 6px; }
+  .needpol { color: var(--lose); font-size: 12px; font-weight: bold; }
+  .capped { font-size: 11px; color: #fff; background: #888; border-radius: 8px; padding: 0 6px; margin-left: 4px; }
+  .autosel { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+  .autosel select { width: auto; margin: 0; padding: 6px; }
+  .btn.small { padding: 10px 6px; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -132,15 +155,48 @@
     // ---- 基本 ----
     schoolName: '白樺高校',        // 自校の名前(架空)
     saveKey: 'bbgacha_save',       // localStorage のキー
-    saveVersion: 4,                // セーブデータの形式。違うバージョンのセーブは初期化する
-    logLimit: 200,                 // 出来事ログの保存件数
+    saveVersion: 5,                // セーブデータの形式。違うバージョンのセーブは初期化する
+    logLimit: 300,                 // 出来事ログの保存件数
+
+    // ---- カレンダー(4月始まり) ----
+    // events には eventTypes のキーを並べる。行を足せば、新しいイベントを追加できる
+    //   例:春の甲子園 → eventTypes に { kind: 'tournament', key: 'spring' } を足し、3月や4月の行に加える
+    calendar: [
+      { month: 4,  label: '4月',  events: ['enrollment'], note: '入学' },
+      { month: 5,  label: '5月',  events: ['practiceGames'], note: '練習・練習試合' },
+      { month: 6,  label: '6月',  events: ['summerCamp'], note: '夏合宿' },
+      { month: 7,  label: '7月',  events: ['summerTournament'], note: '夏の地区大会' },
+      { month: 8,  label: '8月',  events: ['practiceGames'], note: '練習・練習試合' },
+      { month: 9,  label: '9月',  events: [], note: '練習' },
+      { month: 10, label: '10月', events: ['autumnTournament'], note: '秋の地区大会' },
+      { month: 11, label: '11月', events: ['practiceGames'], note: '練習・練習試合' },
+      { month: 12, label: '12月', events: ['winterCamp'], note: '冬合宿' },
+      { month: 1,  label: '1月',  events: [], note: '練習' },
+      { month: 2,  label: '2月',  events: ['practiceGames'], note: '練習・練習試合' },
+      { month: 3,  label: '3月',  events: ['yearEnd'], note: '年度末' },
+    ],
+    // イベントの種類。kind は logic.js の処理の種類(enrollment / practiceGames / camp / tournament / yearEnd)
+    eventTypes: {
+      enrollment:       { kind: 'enrollment', label: '入学' },
+      practiceGames:    { kind: 'practiceGames', label: '練習試合' },
+      summerCamp:       { kind: 'camp', label: '夏合宿', term: '夏' },
+      winterCamp:       { kind: 'camp', label: '冬合宿', term: '冬' },
+      summerTournament: { kind: 'tournament', key: 'summer', retireAfter: true },
+      autumnTournament: { kind: 'tournament', key: 'autumn' },
+      yearEnd:          { kind: 'yearEnd', label: '年度末' },
+    },
+    policyReviewMonths: [4, 12],   // 在校生の方針を見直せる月(4月は入学と同じ画面)
+    // 「次のイベントまで」で止まるイベントの種類
+    stopKinds: ['enrollment', 'camp', 'tournament', 'yearEnd'],
+    // 重要度の高い通知が出た月でも止まる
+    autoStop: { enabled: true, minImportance: 3 },
 
     // ---- 新入生の人数 ----
     // 人数 = base + (前年夏のチームの強さ - strengthPivot) * perStrength + 乱数(±noise)
     newcomers: {
-      base: 5,
-      strengthPivot: 34,
-      perStrength: 0.4,
+      base: 6,
+      strengthPivot: 50,
+      perStrength: 0.3,
       noise: 1,
       min: 3,
       max: 12,
@@ -148,79 +204,182 @@
     },
 
     // ---- 守備区分 ----
-    // 新入生の守備区分の出現率(転生・二刀流で決まる場合を除く)
     positionRates: { P: 0.22, C: 0.12, IF: 0.36, OF: 0.30 },
-    // 本職が不足しているとき(人数 < min)だけ、その区分の出現率に mult を掛ける
     positionDeficit: {
       P:  { min: 2, mult: 2.5 },
       C:  { min: 1, mult: 3.0 },
       IF: { min: 4, mult: 1.5 },
       OF: { min: 3, mult: 1.5 },
     },
-    // 開始時の部員(2年・3年合計)の守備区分の人数 [最小, 最大]
     initialComposition: { P: [2, 3], C: [1, 2], IF: [4, 5], OF: [3, 4] },
 
     // ---- 隠れた才能 / 転生 / 二刀流 ----
     talent: {
-      geniusRate: 0.05,            // 天才の出現率
-      reincarnationRate: 0.015,    // 転生の出現率(天才とは独立に抽選)
-      twoWayRate: 0.003,           // 二刀流の出現率(天才・転生とは独立に抽選)
-      geniusBustRate: 0.2,         // 天才なのに才能が開花しない確率(伸び方は通常と同じになる)
+      geniusRate: 0.05,
+      reincarnationRate: 0.015,
+      twoWayRate: 0.003,
+      geniusBustRate: 0.2,         // 開花しない天才は、通常と同じ扱い(項目上限100・成長限界あり)
     },
-    // 判明するタイミング:'enrollment'(入学時の演出) / 'firstCamp'(入学後、最初の合宿)
     reincarnationReveal: 'enrollment',
     twoWayReveal: 'enrollment',
 
-    // ---- 初期能力 ----
-    initialAbility: { mean: 30, sd: 8, min: 5, max: 65 },   // 本職側
+    // ---- 総合値と、初期能力のスケール ----
+    // 総合値 = 本職側の見える能力の平均 × ratingMultiplier(整数に丸める。上限なし)
+    ratingMultiplier: 5,
+    // 総合値の横に出すラベル(上から順に判定)
+    ratingLabels: [
+      { min: 400, label: '規格外' },
+      { min: 200, label: '怪物級' },
+      { min: 160, label: '逸材' },
+      { min: 120, label: '有望' },
+    ],
+    // 能力の項目上限
+    statCap: { normal: 100, special: 150 },     // special = 開花した天才 または 転生
+    // 100を超えた分の寄与の割引(試合の勝率・チームの強さ・成績の確率)
+    overCapWeight: 0.5,
+    // 新入生の初期の総合値
+    rating: {
+      normal: { mean: 100, sd: 9, min: 80, max: 120, highRate: 0.15, highMin: 120, highMax: 160 },
+      genius: { min: 150, max: 250 },
+      reincarnation: { min: 200, max: 300 },
+      geniusReincarnationMax: 300,
+      keySd: 4,                    // 項目ごとのばらつき(能力値)
+      itemMax: 95,                 // 初期の1項目の上限
+      min: 1,
+    },
     // 本職でない側(副能力):本職側の平均 × [coefMin, coefMax] + 乱数(sd)
-    subAbility: { coefMin: 0.25, coefMax: 0.4, sd: 4, min: 1 },
-    // 守備区分ごとの初期ボーナス(本職らしさ)
+    subAbility: { coefMin: 0.25, coefMax: 0.4, sd: 2, min: 1 },
+    // 守備区分ごとの得意項目(初期能力の偏り。総合値は変えずに配分だけ寄せる)
     positionBonus: {
       P: {},
-      C: { arm: 6, defense: 6 },
-      IF: { defense: 6, arm: 3 },
-      OF: { speed: 6, arm: 3 },
+      C: { arm: 4, defense: 4 },
+      IF: { defense: 4, arm: 2 },
+      OF: { speed: 4, arm: 2 },
     },
-    // 二刀流:もう一方の側を、本職側と同じ生成 × subRatio で持つ
     twoWay: {
       subRatio: 0.8,
-      bothShare: 0.7,              // 方針「両方」のとき、各側に回る成長ポイントの割合
-      careerBonus: 6,              // 進路判定でのボーナス
-      alwaysStartAsPitcher: true,  // 判明した二刀流は、適性に関係なくスタメンの投手の枠に優先して入る
+      bothShare: 0.7,
+      alwaysStartAsPitcher: true,
     },
-
-    // 転生の型:position の本職として生まれる。bonus を加算、allBonus は本職側の全能力に加算
+    // 転生の型:position の本職として生まれる。bonus の項目に初期能力を寄せる(総合値は変えない)
     reincarnationTypes: {
-      gouwan:   { name: '剛腕型', position: 'P',  allBonus: 6, bonus: { velocity: 28, stamina: 14 } },
-      gikou:    { name: '技巧型', position: 'P',  allBonus: 6, bonus: { control: 25, breaking: 22 } },
-      kyouken:  { name: '強肩型', position: 'C',  allBonus: 6, bonus: { arm: 28, defense: 14 } },
-      kouda:    { name: '巧打型', position: 'IF', allBonus: 6, bonus: { contact: 28, defense: 10 } },
-      kyouda:   { name: '強打型', position: 'OF', allBonus: 6, bonus: { power: 28, contact: 10 } },
-      shunsoku: { name: '俊足型', position: 'OF', allBonus: 6, bonus: { speed: 28, arm: 10 } },
+      gouwan:   { name: '剛腕型', position: 'P',  bonus: { velocity: 22, stamina: 10 } },
+      gikou:    { name: '技巧型', position: 'P',  bonus: { control: 18, breaking: 16 } },
+      kyouken:  { name: '強肩型', position: 'C',  bonus: { arm: 22, defense: 10 } },
+      kouda:    { name: '巧打型', position: 'IF', bonus: { contact: 22, defense: 8 } },
+      kyouda:   { name: '強打型', position: 'OF', bonus: { power: 22, contact: 8 } },
+      shunsoku: { name: '俊足型', position: 'OF', bonus: { speed: 22, arm: 8 } },
     },
 
-    // ---- 合宿での成長(本職側のみ伸びる) ----
-    camp: {
-      outcomeRates: {
-        normal: { big: 0.15, small: 0.50, none: 0.35 },
-        genius: { big: 0.45, small: 0.40, none: 0.15 }, // 開花した天才のみ
+    // ---- 成長 ----
+    growth: {
+      // 育成方針の重み(成長を振り分ける)
+      focusWeight: 1.0,
+      otherWeight: 0.12,
+      balanceWeight: 1.0,
+      // 「元々高い能力ほど伸びやすい」補正:効率 = 1 + (現在値 - pivot) / 100 * slope を [min, max] に
+      efficiency: { pivot: 40, slope: 0.6, min: 0.7, max: 1.3 },
+      chunk: 1.5,                  // 成長を振り分ける単位(能力値)
+      // 才能による成長の倍率(全ての成長に掛かる)
+      talentMult: { genius: 1.42, reincarnation: 1.6, both: 1.75 },
+
+      // (1) 練習による成長(毎月)
+      monthly: {
+        chance: 0.35,
+        amount: [3.6, 8.0],        // 1回の成長量(能力値の合計)
+        retiredMult: 0.5,          // 引退後の3年生の成長確率の倍率
+        // 季節の補正(月ごと、項目ごとの伸びやすさ)
+        season: {
+          4:  { contact: 1.3, control: 1.3 },
+          5:  { contact: 1.3, control: 1.3 },
+          12: { power: 1.3, stamina: 1.3 },
+          1:  { power: 1.3, stamina: 1.3 },
+          2:  { power: 1.3, stamina: 1.3 },
+        },
       },
-      points: {
-        big:   [14, 22],
-        small: [6, 11],
-        none:  [0, 1],
+
+      // (2) 合宿による成長
+      camp: {
+        outcomeRates: {
+          normal: { big: 0.15, small: 0.50, none: 0.35 },
+          genius: { big: 0.45, small: 0.40, none: 0.15 },
+        },
+        points: { big: [13, 22], small: [5, 9], none: [0, 0.5] },
       },
-      geniusPointMult: 1.6,
-      balancePointMult: 1.0,
-      focusWeight: 1.0,            // 特化:選んだ能力
-      otherWeight: 0.06,           // 特化:それ以外
-      balanceWeight: 1.0,          // バランス:全能力
-      efficiency: { pivot: 45, slope: 0.8, min: 0.6, max: 1.4 },
-      softCap: { start: 88, mult: 0.5 },
+
+      // (3) 試合経験値による成長
+      exp: {
+        starter: 2,                // スタメンで出場
+        bench: 0.25,               // ベンチ入りのみ(仕様の仮値 0.5 から調整)
+        benchSize: 11,             // ベンチ入りの人数(スタメン以外)
+        practiceStarter: 2,        // 練習試合でスタメン
+        practiceSub: 0.5,          // 練習試合で出場した控え(仕様の仮値 1 から調整)
+        winMult: 1.5,
+        tournamentMult: [1.5, 2.0],   // 大会の1回戦 → 決勝(上の段階ほど高い)
+        strongerMult: 1.3,         // 相手が格上(強さの差 > margin)
+        weakerMult: 0.7,           // 相手が格下
+        margin: 3,
+        maxMult: 3,                // 倍率を掛け合わせた上限
+        consumeRate: 0.5,          // 毎月、貯まった経験値のこの割合を成長に変換
+        carryMax: 30,              // 持ち越せる経験値の上限
+        growthPerExp: 1.8,        // 消費した経験値1あたりの成長量(能力値)
+        capVsPractice: 3,          // 試合経験値による成長は、練習による成長(期待値)の最大この倍
+      },
+
+      // (4) 成長限界(通常の選手・開花しない天才)
+      limit: {
+        mean: 405, sd: 32, min: 340, max: 470,   // 総合値換算
+        rareRate: 0.03, rareMin: 480, rareMax: 500,
+        focusBonus: 15,            // 特化した項目の実効上限 = 平均 + focusBonus(最大100)
+        jitter: 4,                 // 項目ごとの実効上限のばらつき
+        zone: 14,                  // 実効上限のこの手前から成長が鈍る(能力値)
+        cappedRatio: 0.97,         // 総合値が限界のこの割合以上で「頭打ち」
+      },
+      // 天才・転生(成長限界なし):100までは緩やかに、100を超えると強く鈍る
+      special: {
+        solo: { soft: 0.35, hardExp: 1.6 },
+        both: { soft: 0.2, hardExp: 1.2 },   // 天才かつ転生
+      },
     },
     // 副能力の側で出場した年は、年度末に副能力が少し伸びる(転向ボーナス。能力ごとの範囲)
     subRoleGrowth: [1, 4],
+
+    // ---- (5) 指導力 ----
+    leadership: {
+      maxLv: 10,
+      needPerLv: 5,                // Lv n → n+1 に必要な経験値 = needPerLv × n
+      gains: { champion: 3, runnerUp: 2, best4: 1, pro: 2 },
+      monthlyMultMax: 1.4,         // Lv10 での月ごとの成長確率の倍率(Lv1 で 1.0)
+      campBigBonusMax: 0.10,       // Lv10 での合宿「大きく伸びる」確率の加算
+    },
+
+    // ---- (6) 限界突破 ----
+    limitBreak: {
+      threshold: 0.95,             // 総合値が成長限界のこの割合以上の選手が対象
+      chance: 0.015,               // 毎月の確率
+      bigWinBonus: 0.03,           // 決勝以上の試合に出て勝った月の加算
+      leadershipLv: 7,
+      leadershipBonus: 0.01,       // 指導力がこのLv以上のときの加算
+      maxTimes: 2,
+      gain: [20, 40],              // 成長限界の上昇(総合値換算)
+      texts: [
+        '{n}が壁を破った!',
+        '{n}、限界の先へ。何かをつかんだようだ。',
+        '{n}の目の色が変わった。止まっていた成長が再び動き出す。',
+        '{n}が殻を破った。周りが驚くほどの変化だ。',
+      ],
+    },
+
+    // ---- 練習試合 ----
+    practiceGames: {
+      perMonth: 3,
+      subShare: 0.5,               // 控えのうち出場する割合
+      includeInStats: false,       // 打率などの成績に含めるか
+      oppMean: 46, oppSd: 7,       // 相手校の強さ(大会の相手と同じ尺度)
+    },
+
+    // ---- 在校生の方針見直し ----
+    // (変更に代償はない。変更は選手詳細の履歴に残る)
 
     // ---- 適性(能力から計算。全選手同じ式) ----
     aptitudeWeights: {
@@ -229,48 +388,44 @@
       IF: { defense: 0.6, arm: 0.4 },
       OF: { speed: 0.5, arm: 0.5 },
     },
-    // 適性が threshold 未満の区分で出場すると、(threshold - 適性) × rate を減点
-    lowAptitude: { threshold: 30, rate: 0.5 },
+    lowAptitude: { threshold: 12, rate: 0.5 },
 
     // ---- コンバート(年度の始め) ----
     conversion: {
-      minimum: { P: 2, C: 1, IF: 4, OF: 3 },   // これ未満なら不足
-      maxPerYear: 3,               // 1年の提案回数の上限
-      successBase: 0.55,           // 成功率 = successBase + (適性 - 30) × perAptitude
+      minimum: { P: 2, C: 1, IF: 4, OF: 3 },
+      maxPerYear: 3,
+      successBase: 0.55,           // 成功率 = successBase + (適性 - pivot) × perAptitude
+      pivot: 20,
       perAptitude: 0.01,
       successMin: 0.2,
       successMax: 0.95,
-      penaltyStart: 12,            // 転向直後の、その区分の適性への減点
-      recoverPerYear: 6,           // 毎年度末に減点が戻る量
+      penaltyStart: 12,
+      recoverPerYear: 6,
     },
 
-    // ---- 副能力の判明 ----
-    subReveal: { goodThreshold: 22 },          // 判明した側の平均がこれ以上なら「意外にも」の文面
+    subReveal: { goodThreshold: 12 },
 
-    // ---- 助っ人 ----
-    helper: { mean: 18, sd: 5, min: 5, max: 35 },
+    // ---- 助っ人(総合値) ----
+    helper: { mean: 70, sd: 8, min: 50, max: 90 },
 
     // ---- スタメン・チームの強さ ----
     lineup: { P: 1, C: 1, IF: 4, OF: 3 },
     lineupOrder: ['C', 'P', 'IF', 'OF'],
-    primaryBonus: 8,               // 編成時、本職の選手を優先するための加点(強さには影響しない)
+    primaryBonus: 20,              // 編成時、本職の選手を優先するための加点(強さには影響しない)
     teamStrength: {
-      pitchWeight: 0.35,           // 投手(投手系の適性)
-      fieldWeight: 0.53,           // 野手8人の平均
-      pitcherBatWeight: 0.12,      // 投手の打撃(軽く反映。二刀流ならここが大きくなる)
-      fielderBat: 0.6,             // 野手の値 = 打撃 × fielderBat + 守備適性 × fielderDef
+      pitchWeight: 0.35,
+      fieldWeight: 0.53,
+      pitcherBatWeight: 0.12,
+      fielderBat: 0.6,
       fielderDef: 0.4,
       batWeights: { contact: 0.4, power: 0.4, speed: 0.2 },
-      missingValue: 10,
+      missingValue: 8,
     },
-    // 投手のスタミナ不足の補正:(threshold - スタミナ) × (perGame × (試合目-1) + 接戦なら close)
-    stamina: { threshold: 50, perGame: 0.05, close: 0.1, closeRange: 3 },
+    stamina: { threshold: 35, perGame: 0.05, close: 0.1, closeRange: 3 },
 
-    // ---- 打順(強さの計算には影響しない。表示と打席数だけに使う) ----
+    // ---- 打順 ----
     battingOrder: {
-      // 決める順番(打順の番号)。9番(最も打撃力が低い)→3番→4番→1番→2番→残り
       pickSequence: [9, 3, 4, 1, 2],
-      // 各打順で並べるスコアの重み(打撃力 = teamStrength.batWeights)
       weights: {
         1: { speed: 0.5, contact: 0.5 },
         2: { contact: 1 },
@@ -279,23 +434,20 @@
       },
     },
 
-    // ---- 簡易成績(試合のスコアとは独立に計算。成績専用の乱数を使う) ----
+    // ---- 簡易成績(成績専用の乱数を使う) ----
     stats: {
-      paFirst: 4.5,                // 1番の1試合あたりの打席数
-      paLast: 3.5,                 // 9番の1試合あたりの打席数
-      walkRate: 0.08,              // 四死球の確率(打数に数えない)
-      // 打数あたりの安打率 = base + (ミート - pivot) × perContact + (パワー - pivot) × perPower + (走力 - pivot) × perSpeed
-      hit: { base: 0.29, pivot: 40, perContact: 0.0035, perPower: 0.001, perSpeed: 0.001, min: 0.08, max: 0.45 },
-      // 安打のうち本塁打の割合 = base + (パワー - pivot) × perPower
-      homeRun: { base: 0.06, pivot: 40, perPower: 0.003, min: 0.0, max: 0.35 },
-      // 安打でない打数のうち三振の割合 = base - (ミート - pivot) × perContact
-      strikeout: { base: 0.25, pivot: 40, perContact: 0.004, min: 0.05, max: 0.6 },
-      rbiOnHit: 0.3,               // 本塁打以外の安打で打点が付く確率
-      rbiOnOut: 0.03,              // 凡打(三振以外)で打点が付く確率
-      homeRunRunners: [55, 30, 12, 3], // 本塁打のときの走者数 0〜3人の重み
-      cleanupRbiBonus: 0.08,       // 3〜5番の打点の付きやすさの上乗せ
-      innings: 9,                  // 先発投手は1試合を投げ切ったとみなす
-      earnedRate: 0.85,            // 失点のうち自責点とする割合
+      paFirst: 4.5,
+      paLast: 3.5,
+      walkRate: 0.08,
+      hit: { base: 0.27, pivot: 45, perContact: 0.0032, perPower: 0.0009, perSpeed: 0.0009, min: 0.08, max: 0.45 },
+      homeRun: { base: 0.06, pivot: 45, perPower: 0.0028, min: 0.0, max: 0.35 },
+      strikeout: { base: 0.25, pivot: 45, perContact: 0.0035, min: 0.05, max: 0.6 },
+      rbiOnHit: 0.3,
+      rbiOnOut: 0.03,
+      homeRunRunners: [55, 30, 12, 3],
+      cleanupRbiBonus: 0.08,
+      innings: 9,
+      earnedRate: 0.85,
       // 名鑑の「3割打者」の判定に必要な通算打数。
       // 今は大会が年6試合ほどで通算100打数に届かないため30にしている。
       // フェーズ2以降で甲子園などの試合が増えたら、100に戻すこと。
@@ -303,19 +455,16 @@
     },
 
     // ---- 注目選手と通知 ----
-    watch: {
-      max: 5,                      // 注目選手の上限(在籍中の選手のみ数える)
-    },
-    // 通知の重要度:1=小さな出来事 / 2=通常 / 3=大きな出来事
-    // minImportance 以上なら通知する。注目選手は重要度に関わらず通知する(addEvent)
+    watch: { max: 5 },
+    // 通知の重要度:1=小さな出来事 / 2=通常 / 3=大きな出来事 / 4=年表に載る出来事
+    //   minImportance 以上なら通知する。注目選手は重要度に関わらず通知する(addEvent)
     notify: {
-      minImportance: 2,
-      // 成績の節目(注目選手のみ通知される小さな出来事)
+      minImportance: 3,
+      monthMax: 5,                 // 1か月に表示する通知の上限(超えた分は「ほか○件」)
       hitMilestones: [1, 10, 20, 30, 50],
       homeRunMilestones: [1, 3, 5, 10],
       winMilestones: [1, 5, 10],
     },
-    // 年度末の「今年の成長トップ3」の人数
     growthTopN: 3,
 
     // ---- 試合 ----
@@ -328,9 +477,10 @@
     },
 
     // ---- 大会(簡易版。フェーズ2で本格的なトーナメントに置き換える) ----
+    // 相手校の強さはチームの強さと同じ尺度
     tournaments: {
-      summer: { name: '夏の地区大会', rounds: 5, oppBase: 25, oppStep: 2.5, oppSd: 6 },
-      autumn: { name: '秋の地区大会', rounds: 4, oppBase: 24, oppStep: 2.5, oppSd: 6 },
+      summer: { name: '夏の地区大会', rounds: 5, oppBase: 44, oppStep: 2.5, oppSd: 6 },
+      autumn: { name: '秋の地区大会', rounds: 4, oppBase: 35, oppStep: 2.5, oppSd: 6 },
     },
     opponentNames: [
       '青葉台', '桜ヶ丘', '北斗学園', '南陵', '東雲', '西園寺学院', '若葉', '朝霧',
@@ -339,15 +489,17 @@
     ],
 
     // ---- 卒業後の進路 ----
+    // score = 総合値 × overallWeight + 最高能力 × 5 × maxWeight + 乱数(sd)
     career: {
       overallWeight: 0.6,
       maxWeight: 0.4,
-      noiseSd: 4,
+      noiseSd: 20,
+      twoWayBonus: 30,
       paths: [
-        { min: 72, label: 'プロ入り(ドラフト指名)' },
-        { min: 62, label: '強豪大学へ進学' },
-        { min: 52, label: '社会人野球へ' },
-        { min: 42, label: '大学で野球を続ける' },
+        { min: 500, label: 'プロ入り(ドラフト指名)' },
+        { min: 420, label: '強豪大学へ進学' },
+        { min: 375, label: '社会人野球へ' },
+        { min: 325, label: '大学で野球を続ける' },
         { min: -999, label: '野球は高校で区切り' },
       ],
       helperLabel: '元の部活に戻った',
@@ -363,7 +515,7 @@
 // =============================================================
 // logic.js : ゲームロジック(DOM 非依存)
 //   - Core       : 乱数・選手生成・成長・適性・編成・記録。高校版/プロ版で共通に使う部分
-//   - HighSchool : 高校版の進行(カレンダー、入部、コンバート、大会、卒業)
+//   - HighSchool : 高校版の進行(月カレンダー、入部、コンバート、大会、卒業、指導力)
 // ブラウザでは window.Logic、Node.js では module.exports で使う。
 // =============================================================
 (function (root, factory) {
@@ -413,6 +565,15 @@
     }
     const last = keys[keys.length - 1];
     return Array.isArray(weights) ? Number(last) : last;
+  };
+  // 配列をシャッフルした新しい配列
+  Rng.prototype.shuffle = function (arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(this.next() * (i + 1));
+      const t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
   };
 
   // ---------- 定義(ラベル類) ----------
@@ -491,6 +652,7 @@
   // ---------- 小物 ----------
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
   function round1(v) { return Math.round(v * 10) / 10; }
+  function mean(arr) { return arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0; }
   function avgOf(abilities, keys) {
     return round1(keys.reduce((s, k) => s + abilities[k], 0) / keys.length);
   }
@@ -499,9 +661,7 @@
   function sideKeys(side) { return side === 'pitch' ? PITCH_KEYS : BAT_KEYS; }
   function mainSide(p) { return sideOf(p.position); }
 
-  // 二刀流と判明しているか
   function isTwoWayKnown(p) { return !!(p.twoWay && p.twoWayRevealed); }
-  // 副能力(本職でない側)が判明しているか
   function isSubKnown(p) { return !!(p.subRevealed || isTwoWayKnown(p)); }
   // 一覧に表示する能力(本職側。判明した二刀流は両方)
   function visibleKeys(p) {
@@ -509,14 +669,54 @@
     return sideKeys(mainSide(p));
   }
   function subKeysOf(p) { return sideKeys(otherSide(mainSide(p))); }
+  // 成長する側(本職側。二刀流は両方)
+  function growthKeys(p) { return p.twoWay ? ALL_KEYS : sideKeys(mainSide(p)); }
 
-  // 総合値(本職側の平均。二刀流は両側の平均)
+  // ---------- 総合値 ----------
+  // 総合値 = 指定した能力の平均 × ratingMultiplier(整数)
+  function ratingOfKeys(abilities, keys) {
+    return Math.round(keys.reduce((s, k) => s + abilities[k], 0) / keys.length * CONFIG.ratingMultiplier);
+  }
+  function abilitiesOf(p) { return p.finalAbilities || p.abilities; }
+  // 投手側・野手側それぞれの総合値
+  function ratingSides(p) {
+    const a = abilitiesOf(p);
+    return { pitch: ratingOfKeys(a, PITCH_KEYS), bat: ratingOfKeys(a, BAT_KEYS) };
+  }
+  // 総合値(本職側。二刀流は高い方)
+  function rating(p) {
+    if (p.twoWay) {
+      const s = ratingSides(p);
+      return Math.max(s.pitch, s.bat);
+    }
+    return ratingOfKeys(abilitiesOf(p), sideKeys(mainSide(p)));
+  }
+  function initialRating(p) {
+    if (p.twoWay) {
+      return Math.max(ratingOfKeys(p.initialAbilities, PITCH_KEYS), ratingOfKeys(p.initialAbilities, BAT_KEYS));
+    }
+    return ratingOfKeys(p.initialAbilities, sideKeys(sideOf(p.originalPosition || p.position)));
+  }
+  function ratingLabel(r) {
+    for (const x of CONFIG.ratingLabels) if (r >= x.min) return x.label;
+    return '';
+  }
+  // 旧来の「総合」(能力の平均)。内部の比較用
   function overall(p) {
     if (p.twoWay) return round1((avgOf(p.abilities, PITCH_KEYS) + avgOf(p.abilities, BAT_KEYS)) / 2);
     return avgOf(p.abilities, sideKeys(mainSide(p)));
   }
   function maxAbility(abilities, keys) {
     return Math.max.apply(null, (keys || Object.keys(abilities)).map((k) => abilities[k]));
+  }
+
+  // 100を超えた分を割り引いた、試合・成績用の能力値
+  let overCapWeight = CONFIG.overCapWeight;
+  function effAbility(v) { return v <= 100 ? v : 100 + (v - 100) * overCapWeight; }
+  function withOverCapWeight(w, fn) {
+    const prev = overCapWeight;
+    overCapWeight = w;
+    try { return fn(); } finally { overCapWeight = prev; }
   }
 
   function policySetOf(p) { return isTwoWayKnown(p) ? 'twoWay' : mainSide(p); }
@@ -549,7 +749,6 @@
   }
 
   // ---------- 名前の生成 ----------
-  // takenSurnames: 在籍中の選手の名字(Set)。被ったら引き直す
   function generateName(rng, takenSurnames) {
     let surname = rng.pick(SURNAMES);
     for (let i = 0; i < 100 && takenSurnames && takenSurnames.has(surname); i++) {
@@ -559,12 +758,36 @@
   }
 
   // ---------- 選手の生成 ----------
-  function genMainAbility(rng) {
-    const IA = CONFIG.initialAbility;
-    return clamp(Math.round(rng.normal(IA.mean, IA.sd)), IA.min, IA.max);
+  function isBloomingGenius(p) { return p.talent === 'genius' && !p.geniusBust; }
+  function isSpecial(p) { return isBloomingGenius(p) || !!p.reincarnation; }
+
+  // 新入生の初期の総合値を抽選する
+  function drawInitialRating(rng, talent, reincarnation) {
+    const R = CONFIG.rating;
+    if (reincarnation) {
+      const r = rng.float(R.reincarnation.min, R.reincarnation.max);
+      return talent === 'genius' ? Math.min(r, R.geniusReincarnationMax) : r;
+    }
+    if (talent === 'genius') return rng.float(R.genius.min, R.genius.max);
+    const N = R.normal;
+    if (rng.chance(N.highRate)) return rng.float(N.highMin, N.highMax);
+    return clamp(rng.normal(N.mean, N.sd), N.min, N.max);
   }
 
-  // opts: { id, year, grade, takenSurnames, position, positionWeights, forceTwoWay, abilityOverride }
+  // 総合値 targetRating になるように、keys の能力を作る。bonus の項目に偏らせる(平均は変えない)
+  function fillSide(rng, abilities, keys, targetRating, bonus) {
+    const R = CONFIG.rating;
+    const avg = targetRating / CONFIG.ratingMultiplier;
+    for (const k of keys) abilities[k] = avg + rng.normal(0, R.keySd) + ((bonus && bonus[k]) || 0);
+    // 平均を目標に戻す(上下限で切れた分も、2回で概ね戻る)
+    for (let pass = 0; pass < 3; pass++) {
+      const shift = avg - mean(keys.map((k) => abilities[k]));
+      for (const k of keys) abilities[k] = clamp(abilities[k] + shift, R.min, R.itemMax);
+    }
+    for (const k of keys) abilities[k] = round1(abilities[k]);
+  }
+
+  // opts: { id, year, grade, takenSurnames, position, positionWeights, forceTwoWay, ratingOverride }
   function createPlayer(rng, opts) {
     const T = CONFIG.talent;
     const reincarnation = rng.chance(T.reincarnationRate)
@@ -580,29 +803,33 @@
     else position = rng.weighted(opts.positionWeights || CONFIG.positionRates);
 
     const side = sideOf(position);
+    const targetRating = opts.ratingOverride != null ? opts.ratingOverride : drawInitialRating(rng, talent, reincarnation);
     const abilities = {};
-    // 本職側
-    for (const k of sideKeys(side)) abilities[k] = opts.abilityOverride ? opts.abilityOverride(rng) : genMainAbility(rng);
-    const bonus = CONFIG.positionBonus[position] || {};
-    for (const k of Object.keys(bonus)) abilities[k] += bonus[k];
+    // 得意項目への偏り(守備区分と転生の型)
+    const bonusFor = (s) => {
+      const b = {};
+      if (s === side) Object.assign(b, CONFIG.positionBonus[position] || {});
+      if (reincarnation) {
+        const rt = CONFIG.reincarnationTypes[reincarnation];
+        if (sideOf(rt.position) === s) for (const k of Object.keys(rt.bonus)) b[k] = (b[k] || 0) + rt.bonus[k];
+      }
+      return b;
+    };
+    fillSide(rng, abilities, sideKeys(side), targetRating, bonusFor(side));
     // もう一方の側
-    const mainAvg = sideKeys(side).reduce((s, k) => s + abilities[k], 0) / sideKeys(side).length;
-    for (const k of sideKeys(otherSide(side))) {
-      if (twoWay) {
-        abilities[k] = Math.round(genMainAbility(rng) * CONFIG.twoWay.subRatio);
-      } else {
-        const S = CONFIG.subAbility;
-        abilities[k] = Math.round(mainAvg * rng.float(S.coefMin, S.coefMax) + rng.normal(0, S.sd));
+    const os = otherSide(side);
+    if (twoWay) {
+      fillSide(rng, abilities, sideKeys(os), targetRating * CONFIG.twoWay.subRatio, bonusFor(os));
+    } else {
+      const S = CONFIG.subAbility;
+      const mainAvg = targetRating / CONFIG.ratingMultiplier;
+      for (const k of sideKeys(os)) {
+        abilities[k] = round1(Math.max(S.min, mainAvg * rng.float(S.coefMin, S.coefMax) + rng.normal(0, S.sd)));
       }
     }
-    if (reincarnation) {
-      const rt = CONFIG.reincarnationTypes[reincarnation];
-      for (const k of sideKeys(sideOf(rt.position))) abilities[k] += (rt.allBonus || 0) + (rt.bonus[k] || 0);
-    }
-    for (const k of ALL_KEYS) abilities[k] = clamp(abilities[k], CONFIG.subAbility.min, 100);
 
     const name = generateName(rng, opts.takenSurnames);
-    return {
+    const p = {
       id: opts.id,
       surname: name.surname,
       given: name.given,
@@ -621,17 +848,39 @@
       subRevealed: false,
       subPlayedThisYear: false,  // 副能力の側で出場したか(年度末の転向ボーナス用)
       convert: null,             // 転向中の減点 { pos, penalty }
+      needsPolicy: false,        // 本職の側が変わるコンバートで方針がバランスに戻った
       policy: opts.policy || 'balance',
       enrolledYear: opts.year,
+      statCap: 100,
+      limit: null,               // 成長限界(通常の選手のみ){ rating, jitter, caps }。画面には出さない
+      limitBreaks: 0,
+      exp: 0,                    // 試合経験値(未消費)
+      expTotal: 0,               // 試合経験値の累計
+      growthBy: { practice: 0, camp: 0, exp: 0 },  // 成長の内訳(能力値の合計)
+      yearGain: {},              // 今年度の練習・試合経験による増分(年度末に履歴へ)
+      bigWinThisMonth: false,    // 決勝以上の試合に出て勝った月
+      starts: 0,                 // スタメン出場(大会・練習試合)
+      teamGames: 0,              // 在籍中にチームが戦った試合数
       history: [],      // 出来事のメモ { y, g, ev, res, d }
       snapshots: [],    // 年ごとの能力 { y, g, a }
+      timeline: [],     // 能力の推移(グラフ用){ label, a }
       record: { games: 0, wins: 0, titles: [] },
-      stats: { career: emptyStatLine(), byYear: {} }, // 簡易成績(通算・年度ごと)
-      watched: false,   // 注目選手の印(★)
-      lastNotice: null, // 直近の通知 { y, t }
-      hidden: { clutch: 0 }, // 内部の隠れ数値(後のフェーズで使う)
+      stats: { career: emptyStatLine(), byYear: {} },
+      watched: false,
+      lastNotice: null,
+      hidden: { clutch: 0 },
       retired: false,
     };
+    p.statCap = isSpecial(p) ? CONFIG.statCap.special : CONFIG.statCap.normal;
+    if (!isSpecial(p)) {
+      const L = CONFIG.growth.limit;
+      const r = rng.chance(L.rareRate) ? rng.float(L.rareMin, L.rareMax) : clamp(rng.normal(L.mean, L.sd), L.min, L.max);
+      const jitter = {};
+      for (const k of ALL_KEYS) jitter[k] = round1(rng.normal(0, L.jitter));
+      p.limit = { rating: Math.round(r), jitter: jitter, caps: {} };
+      computeLimitCaps(p);
+    }
+    return p;
   }
 
   // 能力の低い助っ人を作る
@@ -639,94 +888,155 @@
     const H = CONFIG.helper;
     const p = createPlayer(rng, Object.assign({}, opts, {
       forceTwoWay: false,
-      abilityOverride: (r) => clamp(Math.round(r.normal(H.mean, H.sd)), H.min, H.max),
+      ratingOverride: clamp(rng.normal(H.mean, H.sd), H.min, H.max),
     }));
-    // 助っ人に隠れた才能は持たせない
     p.talent = 'normal';
     p.geniusBust = false;
     p.reincarnation = null;
     p.helper = true;
     p.subRevealed = true;
+    p.statCap = CONFIG.statCap.normal;
     return p;
   }
 
-  // ---------- 成長 ----------
-  function isBloomingGenius(p) { return p.talent === 'genius' && !p.geniusBust; }
-
-  // 合宿の結果(大きく伸びる / 少し伸びる / 変わらない)を抽選
-  function drawGrowthOutcome(rng, p) {
-    const rates = CONFIG.camp.outcomeRates[isBloomingGenius(p) ? 'genius' : 'normal'];
-    return rng.weighted(rates);
+  // ---------- 成長限界 ----------
+  // 成長限界(総合値)を、項目ごとの実効上限に配分する(特化した項目は高く、それ以外は低く。1項目の最大は100)
+  function computeLimitCaps(p) {
+    if (!p.limit) return;
+    const L = CONFIG.growth.limit;
+    const avg = p.limit.rating / CONFIG.ratingMultiplier;
+    const caps = {};
+    const sides = p.twoWay ? ['pitch', 'bat'] : [mainSide(p)];
+    for (const side of sides) {
+      const keys = sideKeys(side);
+      let focus = null;
+      const tw = POLICIES.twoWay.find((x) => x.key === p.policy);
+      if (!(p.twoWay && tw)) {
+        const pol = POLICIES[side].find((x) => x.key === p.policy);
+        focus = pol ? pol.focus : null;
+      }
+      const base = {};
+      if (focus) {
+        const capF = Math.min(100, avg + L.focusBonus);
+        const rest = Math.min(100, (avg * keys.length - capF) / (keys.length - 1));
+        for (const k of keys) base[k] = k === focus ? capF : rest;
+      } else {
+        for (const k of keys) base[k] = Math.min(100, avg);
+      }
+      for (const k of keys) caps[k] = round1(clamp(base[k] + (p.limit.jitter[k] || 0), 10, 100));
+    }
+    p.limit.caps = caps;
+  }
+  // 頭打ち(成長限界に達した)
+  function isCappedOut(p) {
+    if (!p.limit) return false;
+    return rating(p) >= p.limit.rating * CONFIG.growth.limit.cappedRatio
+      || growthKeys(p).every((k) => p.limit.caps[k] == null || p.abilities[k] >= p.limit.caps[k] - 1);
   }
 
-  // 現在値に応じた伸びの効率
+  // ---------- 成長 ----------
+  // 現在値に応じた伸びの効率(元々高い能力ほど伸びやすい)
   function growthEfficiency(cur) {
-    const E = CONFIG.camp.efficiency;
-    const S = CONFIG.camp.softCap;
-    if (cur >= 100) return 0;
-    let eff = clamp(1 + ((cur - E.pivot) / 100) * E.slope, E.min, E.max);
-    if (cur >= S.start) eff *= S.mult;
-    return eff;
+    const E = CONFIG.growth.efficiency;
+    return clamp(1 + ((Math.min(cur, 100) - E.pivot) / 100) * E.slope, E.min, E.max);
+  }
+  // 上限に近づくほど成長が鈍る係数(0〜1)
+  function slowFactor(p, k) {
+    const cur = p.abilities[k];
+    const cap = p.statCap;
+    if (cur >= cap) return 0;
+    if (p.limit) {
+      const c = p.limit.caps[k] != null ? p.limit.caps[k] : cap;
+      return clamp((c - cur) / CONFIG.growth.limit.zone, 0, 1);
+    }
+    const S = isBloomingGenius(p) && p.reincarnation ? CONFIG.growth.special.both : CONFIG.growth.special.solo;
+    if (cur < 100) return 1 - S.soft * Math.pow(cur / 100, 2);
+    return (1 - S.soft) * Math.pow((cap - cur) / (cap - 100), S.hardExp);
+  }
+  function talentMult(p) {
+    const T = CONFIG.growth.talentMult;
+    if (isBloomingGenius(p) && p.reincarnation) return T.both;
+    if (isBloomingGenius(p)) return T.genius;
+    if (p.reincarnation) return T.reincarnation;
+    return 1;
   }
 
   // 育成方針から、能力ごとの伸びやすさの重みを作る
   function policyWeights(side, policyKey) {
-    const C = CONFIG.camp;
+    const G = CONFIG.growth;
     const pol = POLICIES[side].find((x) => x.key === policyKey) || { focus: null };
     const w = {};
     for (const key of sideKeys(side)) {
-      if (!pol.focus) w[key] = C.balanceWeight;
-      else w[key] = key === pol.focus ? C.focusWeight : C.otherWeight;
+      if (!pol.focus) w[key] = G.balanceWeight;
+      else w[key] = key === pol.focus ? G.focusWeight : G.otherWeight;
     }
     return w;
   }
-
-  // pts 点を weights に従って振り分け、delta に加算する
-  function distributePoints(rng, p, weights, pts, delta) {
-    pts = Math.floor(pts) + (rng.chance(pts - Math.floor(pts)) ? 1 : 0);
-    const acc = {};
-    for (const key of Object.keys(weights)) acc[key] = 0;
-    for (let i = 0; i < pts; i++) {
-      const key = rng.weighted(weights);
-      acc[key] += growthEfficiency(p.abilities[key] + Math.floor(acc[key]));
+  // 成長の振り分け先 [{ weights, share }]
+  function growthTargets(p) {
+    const tw = POLICIES.twoWay.find((x) => x.key === p.policy);
+    if (p.twoWay && tw) {
+      if (tw.side) return [{ weights: policyWeights(tw.side, 'balance'), share: 1 }];
+      return [
+        { weights: policyWeights('pitch', 'balance'), share: CONFIG.twoWay.bothShare },
+        { weights: policyWeights('bat', 'balance'), share: CONFIG.twoWay.bothShare },
+      ];
     }
-    for (const key of Object.keys(acc)) {
-      let gain = Math.floor(acc[key]) + (rng.chance(acc[key] - Math.floor(acc[key])) ? 1 : 0);
-      gain = Math.min(gain, 100 - p.abilities[key]);
-      if (gain > 0) {
-        p.abilities[key] += gain;
-        delta[key] = (delta[key] || 0) + gain;
-      }
-    }
+    return [{ weights: policyWeights(mainSide(p), p.policy), share: 1 }];
   }
 
-  // 成長を適用し、能力の増分 { key: +n } を返す(合宿では本職側だけが伸びる)
-  function applyGrowth(rng, p, outcome) {
-    const C = CONFIG.camp;
-    const range = C.points[outcome];
-    let pts = rng.int(range[0], range[1]);
-    if (isBloomingGenius(p)) pts *= C.geniusPointMult;
+  // amount(能力値の合計)だけ成長させる。source は 'practice' / 'camp' / 'exp'
+  //   season は { 項目: 倍率 }(季節の補正)。戻り値は増分 { key: +n }
+  function grow(rng, p, amount, source, season) {
     const delta = {};
-    const twoWayPolicy = POLICIES.twoWay.find((x) => x.key === p.policy);
-    if (p.twoWay && twoWayPolicy) {
-      if (twoWayPolicy.side) {
-        distributePoints(rng, p, policyWeights(twoWayPolicy.side, 'balance'), pts, delta);
-      } else {
-        // 両方:伸びを分け合う
-        distributePoints(rng, p, policyWeights('pitch', 'balance'), pts * CONFIG.twoWay.bothShare, delta);
-        distributePoints(rng, p, policyWeights('bat', 'balance'), pts * CONFIG.twoWay.bothShare, delta);
+    if (amount <= 0) return delta;
+    amount *= talentMult(p);
+    const chunk = CONFIG.growth.chunk;
+    let total = 0;
+    for (const t of growthTargets(p)) {
+      const amt = amount * t.share;
+      const n = Math.max(1, Math.round(amt / chunk));
+      const size = amt / n;
+      for (let i = 0; i < n; i++) {
+        // 上限に近い項目には振り分けにくくする(その分、他の項目が伸びる)
+        const w = {};
+        let sum = 0;
+        for (const k of Object.keys(t.weights)) {
+          const sf = slowFactor(p, k);
+          w[k] = t.weights[k] * ((season && season[k]) || 1) * Math.sqrt(sf);
+          sum += w[k];
+        }
+        if (sum <= 0) break;
+        const k = rng.weighted(w);
+        const cur = p.abilities[k];
+        const gain = Math.min(size * growthEfficiency(cur) * slowFactor(p, k), p.statCap - cur);
+        if (gain <= 0) continue;
+        p.abilities[k] = cur + gain;
+        delta[k] = (delta[k] || 0) + gain;
+        total += gain;
       }
-    } else {
-      if (p.policy === 'balance') pts *= C.balancePointMult;
-      distributePoints(rng, p, policyWeights(mainSide(p), p.policy), pts, delta);
     }
+    if (p.growthBy) p.growthBy[source] = (p.growthBy[source] || 0) + total;
     return delta;
   }
 
-  // 成長の1イベント(抽選→適用→履歴)をまとめて行う
-  function growthEvent(rng, p, year, label) {
-    const outcome = drawGrowthOutcome(rng, p);
-    const delta = applyGrowth(rng, p, outcome);
+  // 合宿の結果(大きく伸びる / 少し伸びる / 変わらない)を抽選。bigBonus は指導力による加算
+  function drawGrowthOutcome(rng, p, bigBonus) {
+    const base = CONFIG.growth.camp.outcomeRates[isBloomingGenius(p) ? 'genius' : 'normal'];
+    const r = Object.assign({}, base);
+    if (bigBonus) {
+      r.big += bigBonus;
+      const fromNone = Math.min(r.none, bigBonus);
+      r.none -= fromNone;
+      r.small = Math.max(0, r.small - (bigBonus - fromNone));
+    }
+    return rng.weighted(r);
+  }
+  // 合宿の成長の1イベント(抽選→適用→履歴)
+  function campGrowth(rng, p, year, label, bigBonus) {
+    const outcome = drawGrowthOutcome(rng, p, bigBonus);
+    const range = CONFIG.growth.camp.points[outcome];
+    const delta = grow(rng, p, rng.float(range[0], range[1]), 'camp');
     addHistory(p, year, label, OUTCOME_LABEL[outcome], delta);
     return { outcome: outcome, delta: delta };
   }
@@ -743,15 +1053,13 @@
   }
 
   // ---------- 適性 ----------
-  // 区分ごとの適性(能力の重み付き平均。全選手同じ式)
   function aptitude(p, pos) {
     const w = CONFIG.aptitudeWeights[pos];
     let s = 0;
     let t = 0;
-    for (const k of Object.keys(w)) { s += p.abilities[k] * w[k]; t += w[k]; }
+    for (const k of Object.keys(w)) { s += effAbility(p.abilities[k]) * w[k]; t += w[k]; }
     return round1(s / t);
   }
-  // 出場時の実効適性(転向直後の減点と、適性が低い区分での減点を引く)
   function effectiveAptitude(p, pos) {
     const apt = aptitude(p, pos);
     let v = apt;
@@ -760,43 +1068,61 @@
     if (apt < L.threshold) v -= (L.threshold - apt) * L.rate;
     return round1(Math.max(0, v));
   }
-  // 打撃力
   function batting(p) {
     const w = CONFIG.teamStrength.batWeights;
     let s = 0;
     let t = 0;
-    for (const k of Object.keys(w)) { s += p.abilities[k] * w[k]; t += w[k]; }
+    for (const k of Object.keys(w)) { s += effAbility(p.abilities[k]) * w[k]; t += w[k]; }
     return round1(s / t);
   }
 
   // ---------- 記録 ----------
+  function roundDelta(d) {
+    const out = {};
+    for (const k of Object.keys(d || {})) {
+      const v = round1(d[k]);
+      if (v > 0) out[k] = v;
+    }
+    return out;
+  }
   function addHistory(p, year, ev, res, delta) {
-    p.history.push({ y: year, g: p.grade, ev: ev, res: res || '', d: delta || null });
+    p.history.push({ y: year, g: p.grade, ev: ev, res: res || '', d: delta ? roundDelta(delta) : null });
   }
   function takeSnapshot(p, year) {
-    p.snapshots.push({ y: year, g: p.grade, a: Object.assign({}, p.abilities) });
+    const a = {};
+    for (const k of ALL_KEYS) a[k] = round1(p.abilities[k]);
+    p.snapshots.push({ y: year, g: p.grade, a: a });
+  }
+  function addTimeline(p, label) {
+    const a = {};
+    for (const k of ALL_KEYS) a[k] = round1(p.abilities[k]);
+    p.timeline.push({ label: label, a: a });
+  }
+  function fmtNum(v) {
+    const r = round1(v);
+    return Math.abs(r) >= 10 || r === Math.round(r) ? String(Math.round(r)) : String(r);
   }
   function formatDelta(delta) {
     if (!delta) return '';
-    return Object.keys(delta).map((k) => ABILITY_LABEL[k] + '+' + delta[k]).join(' ');
+    return Object.keys(delta).filter((k) => round1(delta[k]) > 0)
+      .map((k) => ABILITY_LABEL[k] + '+' + fmtNum(delta[k])).join(' ');
   }
 
   // 卒業・引退時の進路を決める
   function decideCareer(rng, p) {
     const C = CONFIG.career;
-    let ov = overall(p);
+    let r = rating(p);
     let mx = maxAbility(p.abilities, sideKeys(mainSide(p)));
-    if (p.twoWay) {
-      ov = Math.max(avgOf(p.abilities, PITCH_KEYS), avgOf(p.abilities, BAT_KEYS)) + CONFIG.twoWay.careerBonus;
-      mx = maxAbility(p.abilities, ALL_KEYS);
-    }
-    const score = ov * C.overallWeight + mx * C.maxWeight + rng.normal(0, C.noiseSd);
+    if (p.twoWay) { r += C.twoWayBonus; mx = maxAbility(p.abilities, ALL_KEYS); }
+    const score = r * C.overallWeight + mx * CONFIG.ratingMultiplier * C.maxWeight + rng.normal(0, C.noiseSd);
     for (const path of C.paths) if (score >= path.min) return path.label;
     return C.paths[C.paths.length - 1].label;
   }
 
   // 名鑑に残す記録を作る
   function makeAlumniRecord(p, extra) {
+    const fin = {};
+    for (const k of ALL_KEYS) fin[k] = round1(p.abilities[k]);
     return Object.assign({
       id: p.id,
       name: p.name,
@@ -806,16 +1132,27 @@
       geniusBust: p.geniusBust,
       reincarnation: p.reincarnation,
       twoWay: p.twoWay,
+      twoWayRevealed: true,
       helper: !!p.helper,
       subRevealed: isSubKnown(p),
       policy: p.policy,
       policyLabel: policyLabel(p),
       mainKeys: p.twoWay ? ALL_KEYS.slice() : sideKeys(mainSide(p)).slice(),
       initialAbilities: Object.assign({}, p.initialAbilities),
-      finalAbilities: Object.assign({}, p.abilities),
-      overall: overall(p),
+      finalAbilities: fin,
+      rating: rating(p),
+      initialRating: initialRating(p),
+      statCap: p.statCap,
+      cappedOut: isCappedOut(p),
+      limitBreaks: p.limitBreaks,
+      expTotal: round1(p.expTotal),
+      growthBy: Object.assign({}, p.growthBy),
+      starts: p.starts,
+      teamGames: p.teamGames,
+      lvAtEntry: p.lvAtEntry || 1,
       history: p.history.slice(),
       snapshots: p.snapshots.slice(),
+      timeline: p.timeline.slice(),
       record: JSON.parse(JSON.stringify(p.record)),
       stats: JSON.parse(JSON.stringify(p.stats)),
       watched: !!p.watched,
@@ -825,9 +1162,6 @@
   }
 
   // ---------- スタメン編成・チームの強さ ----------
-  // 捕手 → 投手 → 内野 → 外野 の順に、適性の高い順で割り当てる。
-  //   投手の枠:判明した二刀流がいれば優先(設定で切替)。次に本職の投手。1人もいなければ野手から。
-  //   野手の枠:投手以外から。足りなければ控えの投手から。
   function buildLineup(players) {
     const avail = players.filter((p) => !p.retired && !p.excluded);
     const used = new Set();
@@ -872,14 +1206,14 @@
     for (const s of slots) {
       if (s.pos === 'P') {
         if (s.player) {
-          pitch = s.apt;
+          pitch = effectiveAptitude(s.player, 'P');
           pitcherBat = batting(s.player);
           const ST = CONFIG.stamina;
-          const lack = Math.max(0, ST.threshold - s.player.abilities.stamina);
+          const lack = Math.max(0, ST.threshold - effAbility(s.player.abilities.stamina));
           fatigue = lack * (ST.perGame * Math.max(0, (opts.gameNo || 1) - 1) + (opts.close ? ST.close : 0));
         }
       } else {
-        fielderVals.push(s.player ? batting(s.player) * TS.fielderBat + s.apt * TS.fielderDef : TS.missingValue);
+        fielderVals.push(s.player ? batting(s.player) * TS.fielderBat + effectiveAptitude(s.player, s.pos) * TS.fielderDef : TS.missingValue);
       }
     }
     const fieldAvg = fielderVals.length ? fielderVals.reduce((a, b) => a + b, 0) / fielderVals.length : TS.missingValue;
@@ -895,12 +1229,10 @@
       fatigue: round1(fatigue),
     };
   }
-
   function calcTeamStrength(players, opts) {
     return evaluateLineup(buildLineup(players), opts).strength;
   }
 
-  // 強さの差から勝率を出し、勝敗とスコアを乱数で決める
   function winProbability(my, opp) {
     const M = CONFIG.match;
     return clamp(1 / (1 + Math.exp(-(my - opp) / M.scale)), M.minWinRate, M.maxWinRate);
@@ -913,12 +1245,30 @@
     return { win: win, my: win ? winner : loser, opp: win ? loser : winner };
   }
 
+  // ---------- 試合経験値 ----------
+  // 倍率を掛け合わせて経験値を加える(倍率の合計は上限あり)
+  function expMultiplier(opt) {
+    const X = CONFIG.growth.exp;
+    let m = 1;
+    if (opt.win) m *= X.winMult;
+    if (opt.stageMult) m *= opt.stageMult;
+    if (opt.oppDiff != null) {
+      if (opt.oppDiff > X.margin) m *= X.strongerMult;
+      else if (opt.oppDiff < -X.margin) m *= X.weakerMult;
+    }
+    return Math.min(m, X.maxMult);
+  }
+  function gainExp(p, base, mult) {
+    const v = base * mult;
+    p.exp += v;
+    p.expTotal += v;
+  }
+
   // ---------- 成長の見える化(乱数は使わない) ----------
-  // 入学時からの増減。keys を省くと見えている能力(本職側。判明した二刀流は両方)
   function growthSinceEntry(p, keys) {
     keys = keys || visibleKeys(p);
     const base = p.initialAbilities;
-    const now = p.finalAbilities || p.abilities;
+    const now = abilitiesOf(p);
     let best = null;
     let total = 0;
     for (const k of keys) {
@@ -926,22 +1276,15 @@
       total += d;
       if (!best || d > best.delta) best = { key: k, delta: d };
     }
-    return { best: best && best.delta > 0 ? best : null, total: total };
+    return { best: best && Math.round(best.delta) > 0 ? best : null, total: total };
   }
   function formatBestGrowth(g) {
-    return g && g.best ? ABILITY_LABEL[g.best.key] + ' +' + g.best.delta : '';
+    return g && g.best ? ABILITY_LABEL[g.best.key] + ' +' + Math.round(g.best.delta) : '';
   }
-  // 能力の推移(入学時から、成長の記録を順に足していく)。グラフ用
-  //   戻り値 [{ label, a }]。label は「入学」「1年夏」「1年冬」など
+  // 能力の推移(入学・各合宿・卒業の時点)。在籍中なら「現在」を足す。グラフ用
   function growthSeries(p) {
-    const a = Object.assign({}, p.initialAbilities);
-    const out = [{ label: '入学', a: Object.assign({}, a) }];
-    for (const h of p.history) {
-      if (!h.d || !Object.keys(h.d).length) continue;
-      for (const k of Object.keys(h.d)) a[k] += h.d[k];
-      const short = h.ev === '夏合宿' ? '夏' : h.ev === '冬合宿' ? '冬' : h.ev === '転向ボーナス' ? '末' : h.ev;
-      out.push({ label: h.g + '年' + short, a: Object.assign({}, a) });
-    }
+    const out = (p.timeline || []).slice();
+    if (!p.finalAbilities) out.push({ label: '現在', a: p.abilities });
     return out;
   }
 
@@ -949,11 +1292,9 @@
   function weightedScore(p, w) {
     let s = 0;
     let t = 0;
-    for (const k of Object.keys(w)) { s += p.abilities[k] * w[k]; t += w[k]; }
+    for (const k of Object.keys(w)) { s += effAbility(p.abilities[k]) * w[k]; t += w[k]; }
     return s / t;
   }
-  // スタメンから打順を決める。戻り値は { 選手id: 打順番号 }
-  //   二刀流の投手も野手系の能力で並べるので、上位に入ることがある
   function battingOrder(slots) {
     const BO = CONFIG.battingOrder;
     const left = slots.filter((s) => s.player).map((s) => s.player);
@@ -970,7 +1311,6 @@
       if (num === 9) take(9, batting, true);
       else take(num, (p) => weightedScore(p, BO.weights[num]));
     }
-    // 残り(5〜8番)は打撃力の高い順
     left.sort((a, b) => batting(b) - batting(a) || a.id - b.id);
     for (let num = 1; num <= 9 && left.length; num++) {
       if (!used.has(num)) order[left.shift().id] = num;
@@ -980,8 +1320,6 @@
 
   // ---------- 簡易成績 ----------
   function emptyStatLine() {
-    // g:出場試合 pa:打席 ab:打数 h:安打 hr:本塁打 rbi:打点 k:三振 bb:四死球
-    // pg:登板 w:勝 l:敗 er:自責点 outs:投球アウト数
     return { g: 0, pa: 0, ab: 0, h: 0, hr: 0, rbi: 0, k: 0, bb: 0, pg: 0, w: 0, l: 0, er: 0, outs: 0 };
   }
   function statLinesFor(p, year) {
@@ -1005,29 +1343,28 @@
     const v = earnedRunAverage(line);
     return v == null ? '-.--' : v.toFixed(2);
   }
-
-  // 打順に応じた1試合の打席数(1番ほど多い)
   function plateAppearances(rng, orderNum) {
     const S = CONFIG.stats;
     const x = S.paFirst - (S.paFirst - S.paLast) * (orderNum - 1) / 8;
     return Math.floor(x) + (rng.chance(x - Math.floor(x)) ? 1 : 0);
   }
-
-  // 1打席の結果を、ミート・パワー・走力から抽選する
+  // 1打席の結果を、ミート・パワー・走力から抽選する(100超は割り引く)
   function plateAppearance(rng, p, orderNum) {
     const S = CONFIG.stats;
-    const a = p.abilities;
+    const c = effAbility(p.abilities.contact);
+    const pw = effAbility(p.abilities.power);
+    const sp = effAbility(p.abilities.speed);
     const r = { pa: 1, ab: 0, h: 0, hr: 0, rbi: 0, k: 0, bb: 0 };
     if (rng.chance(S.walkRate)) { r.bb = 1; return r; }
     r.ab = 1;
     const H = S.hit;
-    const hitP = clamp(H.base + (a.contact - H.pivot) * H.perContact + (a.power - H.pivot) * H.perPower
-      + (a.speed - H.pivot) * H.perSpeed, H.min, H.max);
+    const hitP = clamp(H.base + (c - H.pivot) * H.perContact + (pw - H.pivot) * H.perPower
+      + (sp - H.pivot) * H.perSpeed, H.min, H.max);
     const cleanup = orderNum >= 3 && orderNum <= 5 ? S.cleanupRbiBonus : 0;
     if (rng.chance(hitP)) {
       r.h = 1;
       const HR = S.homeRun;
-      if (rng.chance(clamp(HR.base + (a.power - HR.pivot) * HR.perPower, HR.min, HR.max))) {
+      if (rng.chance(clamp(HR.base + (pw - HR.pivot) * HR.perPower, HR.min, HR.max))) {
         r.hr = 1;
         r.rbi = 1 + rng.weighted(S.homeRunRunners);
       } else if (rng.chance(S.rbiOnHit + cleanup)) {
@@ -1036,13 +1373,10 @@
       return r;
     }
     const K = S.strikeout;
-    if (rng.chance(clamp(K.base - (a.contact - K.pivot) * K.perContact, K.min, K.max))) r.k = 1;
+    if (rng.chance(clamp(K.base - (c - K.pivot) * K.perContact, K.min, K.max))) r.k = 1;
     else if (rng.chance(S.rbiOnOut + cleanup / 2)) r.rbi = 1;
     return r;
   }
-
-  // 1試合ぶんの成績を記録する。result はその試合の結果 { win, my, opp }
-  //   戻り値:打順ごとの打席数(検証用)
   function recordGameStats(rng, year, slots, order, result) {
     const S = CONFIG.stats;
     const paByOrder = {};
@@ -1086,6 +1420,7 @@
     SURNAMES: SURNAMES,
     GIVEN_NAMES: GIVEN_NAMES,
     clamp: clamp,
+    round1: round1,
     avgOf: avgOf,
     sideOf: sideOf,
     sideKeys: sideKeys,
@@ -1094,8 +1429,20 @@
     isSubKnown: isSubKnown,
     visibleKeys: visibleKeys,
     subKeysOf: subKeysOf,
+    growthKeys: growthKeys,
+    rating: rating,
+    ratingSides: ratingSides,
+    ratingOfKeys: ratingOfKeys,
+    initialRating: initialRating,
+    ratingLabel: ratingLabel,
     overall: overall,
     maxAbility: maxAbility,
+    effAbility: effAbility,
+    withOverCapWeight: withOverCapWeight,
+    isBloomingGenius: isBloomingGenius,
+    isSpecial: isSpecial,
+    isCappedOut: isCappedOut,
+    computeLimitCaps: computeLimitCaps,
     policySetOf: policySetOf,
     policyLabel: policyLabel,
     policyLabelByKey: policyLabelByKey,
@@ -1106,14 +1453,17 @@
     createHelper: createHelper,
     drawGrowthOutcome: drawGrowthOutcome,
     growthEfficiency: growthEfficiency,
-    applyGrowth: applyGrowth,
-    growthEvent: growthEvent,
+    slowFactor: slowFactor,
+    grow: grow,
+    campGrowth: campGrowth,
     subRoleGrowth: subRoleGrowth,
     aptitude: aptitude,
     effectiveAptitude: effectiveAptitude,
     batting: batting,
     addHistory: addHistory,
     takeSnapshot: takeSnapshot,
+    addTimeline: addTimeline,
+    fmtNum: fmtNum,
     formatDelta: formatDelta,
     decideCareer: decideCareer,
     makeAlumniRecord: makeAlumniRecord,
@@ -1122,6 +1472,8 @@
     calcTeamStrength: calcTeamStrength,
     winProbability: winProbability,
     playMatch: playMatch,
+    expMultiplier: expMultiplier,
+    gainExp: gainExp,
     battingOrder: battingOrder,
     growthSinceEntry: growthSinceEntry,
     formatBestGrowth: formatBestGrowth,
@@ -1141,18 +1493,10 @@
   // 高校版(HighSchool)
   // ===========================================================
 
-  // 1年のカレンダー(この順で進む)
-  const STAGES = [
-    { key: 'enrollment', label: '4月 入学' },
-    { key: 'springKoshien', label: '春 甲子園' },
-    { key: 'summerCamp', label: '夏 合宿' },
-    { key: 'summerTournament', label: '夏 地区大会' },
-    { key: 'autumnTournament', label: '秋 地区大会' },
-    { key: 'winterCamp', label: '冬 合宿' },
-    { key: 'yearEnd', label: '年度末 卒業' },
-  ];
-
+  const CAL = CONFIG.calendar;
   function formatYear(y) { return y >= 1 ? y + '年目' : '就任' + (1 - y) + '年前'; }
+  function monthLabel(i) { return CAL[i].label; }
+  function monthIndexOf(monthNum) { return CAL.findIndex((c) => c.month === monthNum); }
 
   // 乱数状態を state に保存しながら処理を実行する
   function withRng(state, fn) {
@@ -1163,34 +1507,50 @@
       state.rngState = rng.s;
     }
   }
+  function withStatRng(state, fn) {
+    const rng = new Rng(state.statRngState);
+    try {
+      return fn(rng);
+    } finally {
+      state.statRngState = rng.s;
+    }
+  }
 
   function takenSurnames(state) {
     const set = new Set(state.players.map((p) => p.surname));
     for (const p of state.pendingRecruits) set.add(p.surname);
     return set;
   }
-
   function members(state) { return state.players.filter((p) => !p.helper); }
   function activeMembers(state) { return state.players.filter((p) => !p.retired); }
-
   function countByPosition(list) {
     const c = { P: 0, C: 0, IF: 0, OF: 0 };
     for (const p of list) c[p.position]++;
     return c;
   }
 
-  // 通知をまとめて扱う。importance:1=小さな出来事 / 2=通常 / 3=大きな出来事
+  function pushLog(state, text, importance) {
+    state.log.push({ y: state.year, m: CAL[state.month].month, t: text, i: importance || 2 });
+    if (state.log.length > CONFIG.logLimit) state.log.splice(0, state.log.length - CONFIG.logLimit);
+  }
+
+  // 通知をまとめて扱う(フェーズ1.8以降のイベントもここを通す)
+  //   importance:1=小さな出来事 / 2=通常 / 3=大きな出来事 / 4=年表に載る出来事
   //   注目選手なら、重要度に関わらず通知する(文面に★を付ける)
-  //   通知したら lines(イベントの表示行)とログに追加し、true を返す
-  //   opt: { player, text, importance, lines, cls, log }
+  //   opt: { player, text, importance, cls, history: { ev, res }, silent }
+  //     history … 選手の履歴に記録する  silent … 通知はせず、履歴だけに残す
+  //   通知したら、その月の通知一覧とログに追加して true を返す
   function addEvent(state, opt) {
     const p = opt.player;
+    const imp = opt.importance || 1;
+    if (p && opt.history) addHistory(p, state.year, opt.history.ev, opt.history.res);
+    if (opt.silent) return false;
     const watched = !!(p && p.watched);
-    if (!watched && (opt.importance || 1) < CONFIG.notify.minImportance) return false;
+    if (!watched && imp < CONFIG.notify.minImportance) return false;
     const text = (watched ? '★' : '') + opt.text;
-    if (opt.lines) opt.lines.push({ text: text, cls: watched && (opt.importance || 1) < CONFIG.notify.minImportance ? 'watch' : (opt.cls || '') });
-    if (opt.log !== false) pushLog(state, text);
-    if (p) p.lastNotice = { y: state.year, t: opt.text };
+    state.monthNotices.push({ text: text, importance: imp, cls: opt.cls || (imp >= 4 ? 'special' : imp >= 3 ? 'special' : 'watch') });
+    pushLog(state, text, imp);
+    if (p) p.lastNotice = { y: state.year, m: CAL[state.month].month, t: opt.text };
     return true;
   }
 
@@ -1200,8 +1560,6 @@
   function watchedPlayers(state) {
     return state.players.concat(state.pendingRecruits).filter((p) => p.watched);
   }
-  // 注目の付け外し。在籍中(入学前を含む)は上限あり。名鑑の選手は上限なしで付け外しできる
-  //   戻り値 { ok, needRemove: [上限のため外す候補] }
   function setWatch(state, id, on) {
     const p = findPlayer(state, id);
     if (!p) {
@@ -1217,11 +1575,6 @@
     return { ok: true, needRemove: [] };
   }
 
-  function pushLog(state, text) {
-    state.log.push({ y: state.year, t: text });
-    if (state.log.length > CONFIG.logLimit) state.log.splice(0, state.log.length - CONFIG.logLimit);
-  }
-
   function emptyStats() {
     return {
       years: 0,
@@ -1230,35 +1583,149 @@
       reincarnation: 0,
       reincarnationByType: {},
       twoWay: 0,
+      recruitRatings: [],      // { g: 区分, r: 入学時の総合値 }
       tournaments: {
         summer: { played: 0, champion: 0, roundsWon: 0 },
         autumn: { played: 0, champion: 0, roundsWon: 0 },
       },
       teamStrengthSum: 0,
       teamStrengthCount: 0,
-      rosterByYear: [],        // { y, members, newcomers, strength }
-      shortageBefore: { P01: 0, C0: 0 },   // 年度始め(コンバート前)に投手0〜1人・捕手0人だった年
-      shortageAfter: { P01: 0, C0: 0 },    // コンバート後
+      rosterByYear: [],
+      shortageBefore: { P01: 0, C0: 0 },
+      shortageAfter: { P01: 0, C0: 0 },
       conversion: { attempts: 0, success: 0, fielderToPitcher: 0 },
       subReveal: { count: 0, values: [], fielderPitched: 0, pitcherFielded: 0 },
       helper: { years: 0, total: 0, _lastYear: 0 },
-      pitcherSlot: { twoWay: [], normal: [] },  // 夏の大会でのエース枠の貢献(強さへの寄与)
-      batting: { ab: 0, h: 0, paByOrder: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], games: 0 }, // 簡易成績の集計(検証用)
-      camp: { events: 0, big: 0, small: 0, none: 0, points: 0 },  // 合宿の集計(検証用)
+      pitcherSlot: { twoWay: [], normal: [] },
+      batting: { ab: 0, h: 0, paByOrder: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], games: 0 },
+      camp: { events: 0, big: 0, small: 0, none: 0, points: 0 },
+      practiceGames: { played: 0, won: 0 },
+      limitBreak: { count: 0 },
+      leadershipByYear: [],    // 年度末の指導力Lv
+      policyReview: { reviewed: 0, changed: 0 },
+      stops: 0,                // 「次のイベントまで」で止まった回数
+      overCap: { n: 0, strengthDiff: 0, winDiff: 0 },
+      freshmanSpecial: { onRoster: 0, starting: 0 },  // 夏の大会時点の1年生の天才・転生(在籍 / スタメン)
     };
   }
 
   function newPlayer(state, rng, opts) {
-    const p = createPlayer(rng, Object.assign({
+    return createPlayer(rng, Object.assign({
       id: state.nextId++,
       year: state.year,
       grade: 1,
       takenSurnames: takenSurnames(state),
     }, opts));
-    return p;
   }
 
-  // 新しいゲームを作る。opts: { seed }
+  // ---------- 指導力 ----------
+  function leadershipNeed(lv) { return CONFIG.leadership.needPerLv * lv; }
+  function leadershipMonthlyMult(lv) {
+    const L = CONFIG.leadership;
+    return 1 + (L.monthlyMultMax - 1) * (lv - 1) / (L.maxLv - 1);
+  }
+  function leadershipCampBonus(lv) {
+    const L = CONFIG.leadership;
+    return L.campBigBonusMax * (lv - 1) / (L.maxLv - 1);
+  }
+  function gainLeadership(state, n, reason) {
+    const L = state.leadership;
+    if (L.lv >= CONFIG.leadership.maxLv || n <= 0) return;
+    L.exp += n;
+    while (L.lv < CONFIG.leadership.maxLv && L.exp >= leadershipNeed(L.lv)) {
+      L.exp -= leadershipNeed(L.lv);
+      L.lv++;
+      addEvent(state, { importance: 3, text: '指導力が Lv.' + L.lv + ' に上がった!(' + reason + ')', cls: 'special' });
+    }
+    if (L.lv >= CONFIG.leadership.maxLv) L.exp = 0;
+  }
+
+  // ---------- 月ごとの成長 ----------
+  function expectedPractice(p, lv) {
+    const M = CONFIG.growth.monthly;
+    return M.chance * leadershipMonthlyMult(lv) * (p.retired ? M.retiredMult : 1) * (M.amount[0] + M.amount[1]) / 2;
+  }
+  // 1人の1か月ぶんの成長(練習・試合経験値・限界突破)。増分を返す
+  function growPlayerMonth(state, rng, p, monthNum, lv) {
+    const M = CONFIG.growth.monthly;
+    const X = CONFIG.growth.exp;
+    const delta = {};
+    const add = (d) => { for (const k of Object.keys(d)) delta[k] = (delta[k] || 0) + d[k]; };
+    // (1) 練習
+    const chance = M.chance * leadershipMonthlyMult(lv) * (p.retired ? M.retiredMult : 1);
+    if (rng.chance(chance)) add(grow(rng, p, rng.float(M.amount[0], M.amount[1]), 'practice', M.season[monthNum]));
+    // (3) 試合経験値(一部を消費して成長に変換。残りは上限まで持ち越す)
+    if (p.exp > 0) {
+      const used = p.exp * X.consumeRate;
+      p.exp -= used;
+      const amt = Math.min(used * X.growthPerExp, X.capVsPractice * expectedPractice(p, lv));
+      add(grow(rng, p, amt, 'exp', M.season[monthNum]));
+      p.exp = Math.min(p.exp, X.carryMax);
+    }
+    for (const k of Object.keys(delta)) p.yearGain[k] = (p.yearGain[k] || 0) + delta[k];
+    // (6) 限界突破
+    const B = CONFIG.limitBreak;
+    if (state && p.limit && p.limitBreaks < B.maxTimes && rating(p) >= p.limit.rating * B.threshold) {
+      let c = B.chance;
+      if (p.bigWinThisMonth) c += B.bigWinBonus;
+      if (lv >= B.leadershipLv) c += B.leadershipBonus;
+      if (rng.chance(c)) {
+        const gain = rng.int(B.gain[0], B.gain[1]);
+        p.limit.rating += gain;
+        p.limitBreaks++;
+        computeLimitCaps(p);
+        state.stats.limitBreak.count++;
+        addEvent(state, {
+          player: p, importance: 4, cls: 'special',
+          text: rng.pick(B.texts).replace('{n}', p.name),
+          history: { ev: '限界突破', res: '成長の壁を破った' },
+        });
+      }
+    }
+    p.bigWinThisMonth = false;
+    return delta;
+  }
+
+  // 月ごとの成長をチーム全体で行い、月のまとめの行を返す
+  function runMonthlyGrowth(state, rng) {
+    const monthNum = CAL[state.month].month;
+    const lv = state.leadership.lv;
+    let grown = 0;
+    const watchLines = [];
+    for (const p of state.players) {
+      const d = growPlayerMonth(state, rng, p, monthNum, lv);
+      const any = Object.keys(d).some((k) => d[k] >= 0.05);
+      if (any) grown++;
+      if (p.watched) {
+        watchLines.push('★' + p.name + ' ' + (any ? formatDelta(d) : '変化なし'));
+      }
+    }
+    return { grown: grown, watchLines: watchLines };
+  }
+
+  // ---------- 新しいゲーム ----------
+  // 開始時の在校生の、入学からこれまでの成長を再現する(月ごとの練習・経験値・合宿)
+  function simulatePast(state, rng, p, years) {
+    addTimeline(p, '入学');
+    for (let g = 1; g <= years; g++) {
+      const y = p.enrolledYear + g - 1;
+      for (const c of CAL) {
+        // 試合の経験値は、出場の度合いがわからないので平均的な量を与える
+        p.exp += rng.float(0, 6);
+        growPlayerMonth(null, rng, p, c.month, 1);
+        const ev = c.events.map((e) => CONFIG.eventTypes[e]).find((t) => t && t.kind === 'camp');
+        if (ev) {
+          campGrowth(rng, p, y, ev.label, 0);
+          addTimeline(p, p.grade + '年' + ev.term);
+        }
+      }
+      addHistory(p, y, '練習・試合経験(1年間)', '', p.yearGain);
+      p.yearGain = {};
+      takeSnapshot(p, y);
+      p.grade++;
+    }
+  }
+
   function newGame(opts) {
     opts = opts || {};
     const seed = (opts.seed != null ? Number(opts.seed) : Math.floor(Math.random() * 4294967296)) >>> 0;
@@ -1268,8 +1735,9 @@
       rngState: seed,
       statRngState: (seed ^ 0x5bd1e995) >>> 0, // 成績専用の乱数(試合展開の乱数とは別系統)
       year: 1,
-      stageIndex: 0,
-      awaiting: null,        // 'enrollment' のとき、方針選択待ち
+      month: 0,              // CONFIG.calendar の添字(0 = 4月)
+      awaiting: null,        // 'policy' のとき方針の選択待ち
+      policyContext: null,   // 'enrollment'(4月) / 'review'(見直し)
       players: [],
       pendingRecruits: [],
       newcomerInfo: null,
@@ -1277,19 +1745,20 @@
       nextId: 1,
       log: [],
       lastEvents: [],
-      reputation: null,      // 前年夏のチームの強さ(入部人数に使う)
+      carryCards: [],        // 次の月のまとめに載せる結果(入学の結果など)
+      monthNotices: [],
+      reputation: null,
+      leadership: { lv: 1, exp: 0 },
       stats: emptyStats(),
     };
 
     withRng(state, (rng) => {
-      // 開始時の2年生・3年生:守備区分のバランスが取れるように人数を決める
       const positions = [];
       const IC = CONFIG.initialComposition;
       for (const pos of POSITIONS) {
         const n = rng.int(IC[pos][0], IC[pos][1]);
         for (let i = 0; i < n; i++) positions.push(pos);
       }
-      // 学年を交互に割り振る(区分ごとに偏らないように)
       positions.forEach((pos, i) => {
         const grade = i % 2 === 0 ? 3 : 2;
         const p = newPlayer(state, rng, { position: pos });
@@ -1298,21 +1767,16 @@
         p.reincarnationRevealed = true;
         p.twoWayRevealed = true;
         p.policy = rng.pick(POLICIES[policySetOf(p)]).key;
+        computeLimitCaps(p);
         addHistory(p, p.enrolledYear, '入学', '方針:' + policyLabel(p));
         takeSnapshot(p, p.enrolledYear);
-        for (let g = 1; g < grade; g++) {
-          const y = p.enrolledYear + g - 1;
-          growthEvent(rng, p, y, '夏合宿');
-          growthEvent(rng, p, y, '冬合宿');
-          takeSnapshot(p, y);
-          p.grade++;
-        }
+        simulatePast(state, rng, p, grade - 1);
         state.players.push(p);
       });
     });
     state.reputation = calcTeamStrength(state.players);
-    pushLog(state, CONFIG.schoolName + 'の監督に就任した。');
-    startEnrollment(state);
+    pushLog(state, CONFIG.schoolName + 'の監督に就任した。', 3);
+    beginMonth(state);
     return state;
   }
 
@@ -1326,14 +1790,13 @@
     return { count: Math.min(n, room), strength: strength, capped: n > room };
   }
 
-  // 新入生を引く(方針選択待ちにする)
-  function startEnrollment(state) {
+  // 新入生を引く
+  function drawRecruits(state) {
     withRng(state, (rng) => {
       state.pendingRecruits = [];
       const info = newcomerCount(state, rng);
       state.newcomerInfo = info;
       for (let i = 0; i < info.count; i++) {
-        // 本職が不足している区分だけ出現率を上げる
         const counts = countByPosition(members(state).concat(state.pendingRecruits));
         const weights = {};
         for (const pos of POSITIONS) {
@@ -1345,11 +1808,29 @@
         if (p.reincarnation && CONFIG.reincarnationReveal === 'enrollment') p.reincarnationRevealed = true;
         if (p.twoWay && CONFIG.twoWayReveal === 'enrollment') p.twoWayRevealed = true;
         p.policy = POLICIES[policySetOf(p)][POLICIES[policySetOf(p)].length - 1].key; // バランス / 両方
+        computeLimitCaps(p);
         state.pendingRecruits.push(p);
       }
     });
-    state.stageIndex = 0;
-    state.awaiting = 'enrollment';
+  }
+
+  // 月の始め:入学や方針見直しの月なら、選択待ちにする
+  function beginMonth(state) {
+    const c = CAL[state.month];
+    const isEnroll = c.events.some((e) => CONFIG.eventTypes[e] && CONFIG.eventTypes[e].kind === 'enrollment');
+    if (isEnroll) {
+      drawRecruits(state);
+      state.awaiting = 'policy';
+      state.policyContext = 'enrollment';
+    } else if (CONFIG.policyReviewMonths.indexOf(c.month) >= 0) {
+      state.awaiting = 'policy';
+      state.policyContext = 'review';
+    }
+  }
+
+  // 方針の見直しの対象(引退後の3年生と助っ人は除く)
+  function reviewablePlayers(state) {
+    return state.players.filter((p) => !p.retired && !p.helper);
   }
 
   // 年度始めのコンバート
@@ -1370,30 +1851,31 @@
         attempts++;
         state.stats.conversion.attempts++;
         const apt = aptitude(p, pos);
-        const rate = clamp(CV.successBase + (apt - 30) * CV.perAptitude, CV.successMin, CV.successMax);
+        const rate = clamp(CV.successBase + (apt - CV.pivot) * CV.perAptitude, CV.successMin, CV.successMax);
         const from = p.position;
         if (rng.chance(rate)) {
           const sideChanged = sideOf(from) !== sideOf(pos);
           p.position = pos;
           p.convert = { pos: pos, penalty: CV.penaltyStart };
           if (sideChanged) {
-            // 本職の側が変わる:それまでの副能力が本職側になる
+            // 本職の側が変わる:方針はバランスに戻し、選び直してもらう
             p.policy = 'balance';
             p.subRevealed = true;
+            p.needsPolicy = true;
           }
+          computeLimitCaps(p);
           counts[from]--;
           counts[pos]++;
           state.stats.conversion.success++;
           if (pos === 'P') state.stats.conversion.fielderToPitcher++;
-          const msg = p.name + 'が' + POSITION_LABEL[from] + 'から' + POSITION_LABEL[pos] + 'に転向した。';
-          addHistory(p, state.year, 'コンバート', POSITION_LABEL[from] + '→' + POSITION_LABEL[pos]);
+          const msg = p.name + 'が' + POSITION_LABEL[from] + 'から' + POSITION_LABEL[pos] + 'に転向した。'
+            + (sideChanged ? '(方針を選び直してください)' : '');
+          addEvent(state, { player: p, importance: 3, text: '【転向】' + msg, history: { ev: 'コンバート', res: POSITION_LABEL[from] + '→' + POSITION_LABEL[pos] } });
           lines.push({ text: '【転向】' + msg, cls: 'special' });
-          pushLog(state, msg);
         } else {
           const msg = p.name + 'の' + POSITION_LABEL[pos] + 'への転向を試したが、' + POSITION_LABEL[from] + 'に戻った。';
-          addHistory(p, state.year, 'コンバート失敗', POSITION_LABEL[pos] + 'を試して' + POSITION_LABEL[from] + 'に戻る');
+          addEvent(state, { player: p, importance: 2, text: msg, history: { ev: 'コンバート失敗', res: POSITION_LABEL[pos] + 'を試して' + POSITION_LABEL[from] + 'に戻る' } });
           lines.push({ text: '【転向失敗】' + msg, cls: 'none' });
-          pushLog(state, msg);
         }
       }
     }
@@ -1405,117 +1887,96 @@
     if (c.C === 0) state.stats[key].C0++;
   }
 
-  // 方針を決めて入学させる。policies: { 選手id: 方針key }
-  function confirmEnrollment(state, policies) {
-    if (state.awaiting !== 'enrollment') throw new Error('入学の受付中ではありません');
+  // 方針を変更する(在校生)。変更は通知せず、履歴に残す
+  function changePolicy(state, p, key) {
+    if (!key || !POLICIES[policySetOf(p)].some((x) => x.key === key)) return false;
+    const changed = key !== p.policy;
+    const before = policyLabel(p);
+    p.policy = key;
+    p.needsPolicy = false;
+    if (changed) {
+      computeLimitCaps(p);
+      addEvent(state, { player: p, importance: 1, silent: true, text: '', history: { ev: '方針変更', res: before + ' → ' + policyLabel(p) } });
+    }
+    return changed;
+  }
+
+  // 方針を決める(4月は新入生の入学も行う)。policies: { 選手id: 方針key }
+  function confirmPolicies(state, policies) {
+    if (state.awaiting !== 'policy') throw new Error('方針の選択中ではありません');
     policies = policies || {};
     const lines = [];
-    for (const p of state.pendingRecruits) {
-      const key = policies[p.id];
-      if (key && POLICIES[policySetOf(p)].some((x) => x.key === key)) p.policy = key;
-      takeSnapshot(p, state.year);
-      addHistory(p, state.year, '入学', POSITION_LABEL[p.position] + ' / 方針:' + policyLabel(p));
-      state.players.push(p);
+    // 在校生の見直し
+    let changed = 0;
+    const reviewable = reviewablePlayers(state);
+    for (const p of reviewable) {
+      if (policies[p.id] != null && changePolicy(state, p, policies[p.id])) changed++;
+    }
+    state.stats.policyReview.reviewed += reviewable.length;
+    state.stats.policyReview.changed += changed;
+    if (changed) lines.push({ text: '在校生 ' + changed + '人の方針を変更した。', cls: 'summary' });
+
+    if (state.policyContext === 'enrollment') {
       const S = state.stats;
-      S.recruits++;
-      if (p.talent === 'genius') S.genius++;
-      if (p.twoWay) S.twoWay++;
-      if (p.reincarnation) {
-        S.reincarnation++;
-        S.reincarnationByType[p.reincarnation] = (S.reincarnationByType[p.reincarnation] || 0) + 1;
+      for (const p of state.pendingRecruits) {
+        const key = policies[p.id];
+        if (key && POLICIES[policySetOf(p)].some((x) => x.key === key)) p.policy = key;
+        computeLimitCaps(p);
+        p.lvAtEntry = state.leadership.lv;
+        takeSnapshot(p, state.year);
+        addTimeline(p, '入学');
+        addHistory(p, state.year, '入学', POSITION_LABEL[p.position] + ' / 方針:' + policyLabel(p) + ' / 総合値 ' + rating(p));
+        state.players.push(p);
+        S.recruits++;
+        const grp = p.reincarnation && p.talent === 'genius' ? '天才かつ転生' : p.reincarnation ? '転生' : p.talent === 'genius' ? '天才' : p.twoWay ? '二刀流' : '通常';
+        S.recruitRatings.push({ g: grp, r: rating(p), tw: p.twoWay });
+        if (p.talent === 'genius') S.genius++;
+        if (p.twoWay) S.twoWay++;
+        if (p.reincarnation) {
+          S.reincarnation++;
+          S.reincarnationByType[p.reincarnation] = (S.reincarnationByType[p.reincarnation] || 0) + 1;
+        }
+        lines.push(p.name + '(' + POSITION_LABEL[p.position] + '・総合値' + rating(p) + ')方針:' + policyLabel(p));
+        if (p.reincarnation && p.reincarnationRevealed) {
+          addEvent(state, { player: p, importance: 3, text: '【転生】' + p.name + 'は' + reincarnationName(p.reincarnation) + 'の転生者だった!' });
+        }
+        if (p.twoWay && p.twoWayRevealed) {
+          addEvent(state, { player: p, importance: 3, text: '【二刀流】' + p.name + 'は投打両方で本職級の素質を持っている!' });
+        }
       }
-      lines.push(p.name + '(' + POSITION_LABEL[p.position] + ')方針:' + policyLabel(p));
-      if (p.reincarnation && p.reincarnationRevealed) {
-        pushLog(state, '【転生】' + p.name + 'は' + reincarnationName(p.reincarnation) + 'の転生者だった!');
-      }
-      if (p.twoWay && p.twoWayRevealed) pushLog(state, '【二刀流】' + p.name + 'は投打両方で本職級の素質を持っている!');
+      const n = state.pendingRecruits.length;
+      state.pendingRecruits = [];
+      pushLog(state, '新入生' + n + '人が入部した。', 2);
+      lines.unshift({ text: '新入生 ' + n + '人 / 部員 ' + members(state).length + '人', cls: 'summary' });
+      // 入学処理の直後:不足している区分のコンバートと、助っ人
+      recordShortage(state, 'shortageBefore');
+      withRng(state, (rng) => {
+        runConversions(state, rng, lines);
+        ensureHelpers(state, rng);
+      });
+      recordShortage(state, 'shortageAfter');
+      state.stats.rosterByYear.push({
+        y: state.year, members: members(state).length, newcomers: n,
+        strength: state.newcomerInfo ? state.newcomerInfo.strength : null,
+      });
+      state.carryCards.push({ type: 'enrollment', title: formatYear(state.year) + ' 4月 新入生が入部', lines: lines });
+    } else if (lines.length) {
+      state.carryCards.push({ type: 'review', title: formatYear(state.year) + ' ' + monthLabel(state.month) + ' 方針の見直し', lines: lines });
     }
-    const n = state.pendingRecruits.length;
-    state.pendingRecruits = [];
     state.awaiting = null;
-    state.stageIndex = 1;
-    pushLog(state, '新入生' + n + '人が入部した。');
-    lines.unshift({ text: '新入生 ' + n + '人 / 部員 ' + members(state).length + '人', cls: 'summary' });
-
-    // 年度の始め:不足している区分があれば自動でコンバート
-    recordShortage(state, 'shortageBefore');
-    withRng(state, (rng) => runConversions(state, rng, lines));
-    recordShortage(state, 'shortageAfter');
-    state.stats.rosterByYear.push({
-      y: state.year, members: members(state).length, newcomers: n,
-      strength: state.newcomerInfo ? state.newcomerInfo.strength : null,
-    });
-
-    const ev = { type: 'enrollment', title: formatYear(state.year) + ' 4月 新入生が入部', lines: lines };
-    state.lastEvents = [ev];
-    return ev;
+    state.policyContext = null;
+    return true;
   }
+  // 互換用(以前の名前)
+  function confirmEnrollment(state, policies) { return confirmPolicies(state, policies); }
 
-  // ---------- 各ステージの処理 ----------
-  function runCamp(state, rng, label) {
-    const lines = [];
-    const counts = { big: 0, small: 0, none: 0 };
-    const targets = state.players.filter((p) => !p.retired);
-    const reveals = [];
-    const notices = [];
-    const bigLines = [];
-    let unchanged = 0;
-    for (const p of targets) {
-      // 転生・二刀流の判明(設定が 'firstCamp' の場合)
-      if (p.reincarnation && !p.reincarnationRevealed) {
-        p.reincarnationRevealed = true;
-        const msg = '【判明】' + p.name + 'は' + reincarnationName(p.reincarnation) + 'の転生者だった!';
-        reveals.push({ text: msg, cls: 'special' });
-        addHistory(p, state.year, '転生判明', reincarnationName(p.reincarnation));
-        pushLog(state, msg);
-      }
-      if (p.twoWay && !p.twoWayRevealed) {
-        p.twoWayRevealed = true;
-        p.policy = 'both';
-        const msg = '【判明】' + p.name + 'は打っても一流、二刀流の素質の持ち主だった!(方針は「両方」に)';
-        reveals.push({ text: msg, cls: 'special' });
-        addHistory(p, state.year, '二刀流判明', '方針:両方');
-        pushLog(state, msg);
-      }
-      const r = growthEvent(rng, p, state.year, label);
-      counts[r.outcome]++;
-      const gained = Object.keys(r.delta).length > 0;
-      const CS = state.stats.camp;
-      CS[r.outcome]++;
-      CS.events++;
-      for (const k of Object.keys(r.delta)) CS.points += r.delta[k];
-      const who = p.name + '(' + p.grade + '年・' + POSITION_SHORT[p.position] + ')';
-      if (!gained) {
-        unchanged++;
-      } else if (r.outcome === 'big') {
-        bigLines.push({ text: '◎ ' + who + ' 大きく伸びた! ' + formatDelta(r.delta), cls: 'big' });
-      } else {
-        lines.push({ text: (r.outcome === 'small' ? '○ ' : '- ') + who + ' ' + formatDelta(r.delta), cls: r.outcome });
-      }
-      // 注目選手は小さな成長でも通知する(大きく伸びたときは誰でも通常の重要度)
-      if (p.watched) {
-        addEvent(state, {
-          player: p, lines: notices, importance: r.outcome === 'big' ? 2 : 1, cls: 'special',
-          text: p.name + ':' + label + 'で' + OUTCOME_LABEL[r.outcome] + (gained ? '(' + formatDelta(r.delta) + ')' : ''),
-        });
-      }
-    }
-    const summary = '大きく伸びた ' + counts.big + '人 / 少し伸びた ' + counts.small + '人 / 変わらない ' + counts.none + '人';
-    pushLog(state, label + ':' + summary);
-    const tail = unchanged ? [{ text: '変化なし:' + unchanged + '人', cls: 'none' }] : [];
-    return {
-      type: 'camp', title: formatYear(state.year) + ' ' + label + 'の結果',
-      lines: [{ text: summary, cls: 'summary' }].concat(reveals, notices, bigLines, lines, tail),
-    };
-  }
-
+  // ---------- 各イベントの処理 ----------
   // 9人そろわなければ、助っ人を補う
-  function ensureHelpers(state, rng, lines) {
+  function ensureHelpers(state, rng) {
     const need = Object.values(CONFIG.lineup).reduce((a, b) => a + b, 0);
     let active = activeMembers(state);
     let added = 0;
     while (active.length < need) {
-      // 足りない区分を埋める(投手は野手が登板するので、捕手・内野・外野を優先)
       const c = countByPosition(active);
       let pos = 'OF';
       let worst = -Infinity;
@@ -1530,12 +1991,11 @@
       h.origin = 'helper';
       addHistory(h, state.year, '助っ人', '人数不足のため' + POSITION_LABEL[pos] + 'で加入');
       takeSnapshot(h, state.year);
+      addTimeline(h, '加入');
       state.players.push(h);
       active = activeMembers(state);
       added++;
-      const msg = '【助っ人】人数が足りず、' + h.name + 'が' + POSITION_LABEL[pos] + 'の助っ人として加わった。';
-      lines.push({ text: msg, cls: 'special' });
-      pushLog(state, msg);
+      addEvent(state, { importance: 3, text: '【助っ人】人数が足りず、' + h.name + 'が' + POSITION_LABEL[pos] + 'の助っ人として加わった。' });
     }
     if (added) {
       state.stats.helper.total += added;
@@ -1547,7 +2007,7 @@
   }
 
   // 副能力の側で出場した選手の処理(判明・通知)
-  function handleSubRoles(state, rng, slots, lines) {
+  function handleSubRoles(state, rng, slots) {
     for (const s of slots) {
       if (!s.player || !s.subRole) continue;
       const p = s.player;
@@ -1559,9 +2019,7 @@
       const good = val >= CONFIG.subReveal.goodThreshold;
       const text = rng.pick(REVEAL_TEXTS[side][good ? 'good' : 'bad']).replace('{n}', p.name)
         + '(' + SIDE_LABEL[side] + 'の能力が判明)';
-      lines.push({ text: '【判明】' + text, cls: 'special' });
-      addHistory(p, state.year, '副能力判明', POSITION_LABEL[s.pos] + 'で出場');
-      pushLog(state, text);
+      addEvent(state, { player: p, importance: 3, text: '【判明】' + text, history: { ev: '副能力判明', res: POSITION_LABEL[s.pos] + 'で出場' } });
       const SR = state.stats.subReveal;
       SR.count++;
       SR.values.push(val);
@@ -1570,19 +2028,113 @@
     }
   }
 
+  // 出場機会の記録(スタメン率の集計用)
+  function countGame(state, starters) {
+    const ids = new Set(starters.map((p) => p.id));
+    for (const p of activeMembers(state)) {
+      p.teamGames++;
+      if (ids.has(p.id)) p.starts++;
+    }
+  }
+  // ベンチ入り(スタメン以外の上位 benchSize 人)
+  function benchOf(state, starters) {
+    const ids = new Set(starters.map((p) => p.id));
+    return activeMembers(state).filter((p) => !ids.has(p.id))
+      .sort((a, b) => rating(b) - rating(a) || a.id - b.id).slice(0, CONFIG.growth.exp.benchSize);
+  }
+
+  // 練習試合:スコアは簡易に抽選。大会・指導力には影響しない。経験値は貯まる
+  function runPracticeGames(state, rng) {
+    const PG = CONFIG.practiceGames;
+    const X = CONFIG.growth.exp;
+    const slots = buildLineup(state.players);
+    const starters = slots.filter((s) => s.player).map((s) => s.player);
+    const my = evaluateLineup(slots).strength;
+    const order = PG.includeInStats ? battingOrder(slots) : null;
+    let w = 0;
+    let l = 0;
+    for (let i = 0; i < PG.perMonth; i++) {
+      const opp = round1(rng.normal(PG.oppMean, PG.oppSd));
+      const res = playMatch(rng, my, opp);
+      if (res.win) w++; else l++;
+      const mult = expMultiplier({ win: res.win, oppDiff: opp - my });
+      for (const p of starters) gainExp(p, X.practiceStarter, mult);
+      const subs = benchOf(state, starters);
+      const n = Math.round(subs.length * PG.subShare);
+      for (const p of rng.shuffle(subs).slice(0, n)) gainExp(p, X.practiceSub, mult);
+      countGame(state, starters);
+      if (PG.includeInStats) withStatRng(state, (srng) => recordGameStats(srng, state.year, slots, order, res));
+      state.stats.practiceGames.played++;
+      if (res.win) state.stats.practiceGames.won++;
+    }
+    return { summary: '練習試合 ' + w + '勝' + l + '敗' };
+  }
+
+  // 合宿
+  function runCamp(state, rng, type) {
+    const label = type.label;
+    const lines = [];
+    const counts = { big: 0, small: 0, none: 0 };
+    const targets = state.players.filter((p) => !p.retired);
+    const bigLines = [];
+    let unchanged = 0;
+    const bonus = leadershipCampBonus(state.leadership.lv);
+    for (const p of targets) {
+      // 転生・二刀流の判明(設定が 'firstCamp' の場合)
+      if (p.reincarnation && !p.reincarnationRevealed) {
+        p.reincarnationRevealed = true;
+        addEvent(state, { player: p, importance: 3, text: '【判明】' + p.name + 'は' + reincarnationName(p.reincarnation) + 'の転生者だった!', history: { ev: '転生判明', res: reincarnationName(p.reincarnation) } });
+      }
+      if (p.twoWay && !p.twoWayRevealed) {
+        p.twoWayRevealed = true;
+        p.policy = 'both';
+        computeLimitCaps(p);
+        addEvent(state, { player: p, importance: 3, text: '【判明】' + p.name + 'は打っても一流、二刀流の素質の持ち主だった!(方針は「両方」に)', history: { ev: '二刀流判明', res: '方針:両方' } });
+      }
+      const r = campGrowth(rng, p, state.year, label, bonus);
+      addTimeline(p, p.grade + '年' + type.term);
+      counts[r.outcome]++;
+      const gained = formatDelta(r.delta) !== '';
+      const CS = state.stats.camp;
+      CS[r.outcome]++;
+      CS.events++;
+      for (const k of Object.keys(r.delta)) CS.points += r.delta[k];
+      // 注目選手は、この一覧にだけ★付きで出す
+      const who = (p.watched ? '★' : '') + p.name + '(' + p.grade + '年・' + POSITION_SHORT[p.position] + ')';
+      if (!gained) {
+        if (p.watched) lines.push({ text: '- ' + who + ' 変化なし', cls: 'watch' });
+        else unchanged++;
+      } else if (r.outcome === 'big') {
+        bigLines.push({ text: '◎ ' + who + ' 大きく伸びた! ' + formatDelta(r.delta), cls: 'big' });
+      } else {
+        lines.push({ text: (r.outcome === 'small' ? '○ ' : '- ') + who + ' ' + formatDelta(r.delta), cls: p.watched ? 'watch' : r.outcome });
+      }
+    }
+    const summary = '大きく伸びた ' + counts.big + '人 / 少し伸びた ' + counts.small + '人 / 変わらない ' + counts.none + '人';
+    pushLog(state, label + ':' + summary, 2);
+    const tail = unchanged ? [{ text: '変化なし:' + unchanged + '人', cls: 'none' }] : [];
+    return {
+      type: 'camp', title: formatYear(state.year) + ' ' + label + 'の結果',
+      lines: [{ text: summary, cls: 'summary' }].concat(bigLines, lines, tail),
+    };
+  }
+
   // 簡易トーナメント(勝ち抜き。フェーズ2で本格版に置き換え)
-  function runSimpleTournament(state, rng, key) {
+  function runSimpleTournament(state, rng, type) {
+    const key = type.key;
     const T = CONFIG.tournaments[key];
+    const X = CONFIG.growth.exp;
     const st = state.stats.tournaments[key];
     const lines = [];
-    ensureHelpers(state, rng, lines);
+    ensureHelpers(state, rng);
     const slots = buildLineup(state.players);
-    handleSubRoles(state, rng, slots, lines);
+    handleSubRoles(state, rng, slots);
     const ev0 = evaluateLineup(slots);
     const myStrength = ev0.strength;
     const members_ = slots.filter((s) => s.player).map((s) => s.player);
+    const bench = benchOf(state, members_);
     const usedNames = new Set();
-    lines.unshift({ text: '自校の強さ ' + myStrength, cls: 'summary' });
+    lines.push({ text: '自校の強さ ' + myStrength, cls: 'summary' });
     let wins = 0;
     let champion = true;
     st.played++;
@@ -1590,8 +2142,20 @@
     state.stats.teamStrengthCount++;
     if (key === 'summer') {
       state.reputation = myStrength;
+      const fs = activeMembers(state).filter((p) => p.grade === 1 && isSpecial(p));
+      state.stats.freshmanSpecial.onRoster += fs.length;
+      state.stats.freshmanSpecial.starting += fs.filter((p) => members_.indexOf(p) >= 0).length;
       const ace = slots.find((s) => s.pos === 'P').player;
       if (ace) state.stats.pitcherSlot[ace.twoWay ? 'twoWay' : 'normal'].push(ev0.pitcherSlotValue);
+      // 100超の能力の寄与(割り引かない場合との差)
+      const hasOver = members_.some((p) => ALL_KEYS.some((k) => p.abilities[k] > 100));
+      if (hasOver) {
+        const full = withOverCapWeight(1, () => evaluateLineup(slots).strength);
+        const ref = T.oppBase + T.oppStep * (T.rounds - 1) / 2;
+        state.stats.overCap.n++;
+        state.stats.overCap.strengthDiff += full - myStrength;
+        state.stats.overCap.winDiff += winProbability(full, ref) - winProbability(myStrength, ref);
+      }
     }
     const order = battingOrder(slots);
     const careerBefore = {};
@@ -1603,7 +2167,6 @@
       for (let i = 0; i < 20 && usedNames.has(opp); i++) opp = rng.pick(CONFIG.opponentNames);
       usedNames.add(opp);
       const oppStrength = round1(rng.normal(T.oppBase + T.oppStep * (r - 1), T.oppSd));
-      // 連戦・接戦ではスタミナの低い投手が失点しやすい
       const close = Math.abs(myStrength - oppStrength) < CONFIG.stamina.closeRange;
       const evr = evaluateLineup(slots, { gameNo: r, close: close });
       const res = playMatch(rng, evr.strength, oppStrength);
@@ -1618,7 +2181,14 @@
         p.record.games++;
         if (res.win) p.record.wins++;
       }
-      // 簡易成績(成績専用の乱数を使うので、試合展開には影響しない)
+      // 試合経験値(上の段階ほど多い)
+      const stageMult = X.tournamentMult[0] + (X.tournamentMult[1] - X.tournamentMult[0]) * (r - 1) / Math.max(1, T.rounds - 1);
+      const mult = expMultiplier({ win: res.win, stageMult: stageMult, oppDiff: oppStrength - myStrength });
+      for (const p of members_) gainExp(p, X.starter, mult);
+      for (const p of bench) gainExp(p, X.bench, mult);
+      if (r === T.rounds && res.win) for (const p of members_) p.bigWinThisMonth = true;
+      countGame(state, members_);
+      // 簡易成績(成績専用の乱数を使う)
       const before = members_.map((p) => statLinesFor(p, state.year)[1]).map((l) => [l.ab, l.h]);
       const paByOrder = recordGameStats(srng, state.year, slots, order, res);
       const B = state.stats.batting;
@@ -1646,27 +2216,35 @@
       if (hr) marks.push(hr === 1 ? '初本塁打' : '通算' + hr + '本塁打');
       const w = crossed(NT.winMilestones, b.w, c.w);
       if (w) marks.push(w === 1 ? '初勝利' : '通算' + w + '勝');
-      if (marks.length) addEvent(state, { player: p, lines: lines, importance: 1, text: p.name + 'が' + marks.join('・') + 'を記録' });
+      if (marks.length) addEvent(state, { player: p, importance: 1, text: p.name + 'が' + marks.join('・') + 'を記録' });
     }
     st.roundsWon += wins;
     let resultText;
+    const G = CONFIG.leadership.gains;
     if (champion) {
       st.champion++;
       resultText = T.name + ' 優勝!';
       for (const p of members_) p.record.titles.push(formatYear(state.year) + ' ' + T.name + '優勝');
+      gainLeadership(state, G.champion, T.name + '優勝');
     } else {
-      resultText = T.name + ' ' + (wins === 0 ? '初戦敗退' : (wins + 1 === T.rounds ? '準優勝' : wins + '勝で敗退'));
+      const runnerUp = wins + 1 === T.rounds;
+      resultText = T.name + ' ' + (wins === 0 ? '初戦敗退' : (runnerUp ? '準優勝' : wins + '勝で敗退'));
+      if (runnerUp) gainLeadership(state, G.runnerUp, T.name + '準優勝');
+      else if (wins + 2 === T.rounds) gainLeadership(state, G.best4, T.name + 'ベスト4');
     }
     lines.splice(1, 0, { text: resultText, cls: champion ? 'special' : 'summary' });
-    pushLog(state, resultText);
-    return {
+    pushLog(state, resultText, 3);
+    const out = {
       type: 'tournament', title: formatYear(state.year) + ' ' + T.name,
       lines: lines.concat(games), champion: champion, lineup: lineupSummary(slots, order),
     };
+    if (type.retireAfter) {
+      const retired = retireThirdYears(state);
+      if (retired.length) out.lines.push({ text: '3年生' + retired.length + '人が引退した。', cls: 'summary' });
+    }
+    return out;
   }
 
-  // 画面表示用のスタメン(保存できる形)
-  // order を渡さなければ、ここで打順を決める。打順の順に並べて返す
   function lineupSummary(slots, order) {
     order = order || battingOrder(slots);
     return slots.map((s) => ({
@@ -1692,9 +2270,9 @@
     return retired;
   }
 
+  // 年度末(卒業・進級・名鑑への記録)
   function runYearEnd(state, rng) {
     const lines = [];
-    // 副能力の側で出場した選手は、副能力が少し伸びる(転向ボーナス)
     for (const p of state.players) {
       if (p.subPlayedThisYear) {
         const d = subRoleGrowth(rng, p);
@@ -1705,8 +2283,11 @@
         p.convert.penalty -= CONFIG.conversion.recoverPerYear;
         if (p.convert.penalty <= 0) p.convert = null;
       }
+      // 1年間の練習・試合経験による成長を、履歴に1行で残す
+      if (Object.keys(p.yearGain).length) addHistory(p, state.year, '練習・試合経験(1年間)', '', p.yearGain);
+      p.yearGain = {};
     }
-    // 今年の成長トップ3(見えている能力の増分の合計。最後の記録=前年度末か入学時と比べる)
+    // 今年の成長トップ3(見えている能力の増分の合計。前年度末か入学時と比べる)
     const yearGrowth = state.players.filter((p) => !p.helper && p.snapshots.length).map((p) => {
       const last = p.snapshots[p.snapshots.length - 1].a;
       const d = {};
@@ -1716,13 +2297,12 @@
         if (v > 0) { d[k] = v; total += v; }
       }
       return { p: p, total: total, d: d };
-    }).filter((x) => x.total > 0).sort((a, b) => b.total - a.total || a.p.id - b.p.id).slice(0, CONFIG.growthTopN);
+    }).filter((x) => x.total >= 0.5).sort((a, b) => b.total - a.total || a.p.id - b.p.id).slice(0, CONFIG.growthTopN);
     const topLines = yearGrowth.map((x, i) => ({
       text: (i + 1) + '位 ' + (x.p.watched ? '★' : '') + x.p.name + '(' + x.p.grade + '年・' + POSITION_SHORT[x.p.position] + ')'
-        + ' 合計+' + x.total + '(' + formatDelta(x.d) + ')',
+        + ' 総合値+' + Math.round(x.total / visibleKeys(x.p).length * CONFIG.ratingMultiplier) + '(' + formatDelta(x.d) + ')',
       cls: i === 0 ? 'big' : '',
     }));
-    // 助っ人は元の部活に戻る
     const helpers = state.players.filter((p) => p.helper);
     for (const p of helpers) {
       addHistory(p, state.year, '助っ人終了', CONFIG.career.helperLabel);
@@ -1731,20 +2311,25 @@
     if (helpers.length) lines.push({ text: '助っ人' + helpers.length + '人が元の部活に戻った。', cls: 'none' });
     const graduates = state.players.filter((p) => p.grade >= 3 && !p.helper);
     const summaries = [];
+    let pros = 0;
     for (const p of graduates) {
       const career = decideCareer(rng, p);
+      if (career === CONFIG.career.paths[0].label) pros++;
       takeSnapshot(p, state.year);
-      addHistory(p, state.year, '卒業', career);
+      addTimeline(p, '卒業');
+      addHistory(p, state.year, '卒業', career + '(総合値 ' + rating(p) + ')');
       state.alumni.push(makeAlumniRecord(p, { graduatedYear: state.year, career: career }));
-      lines.push(p.name + '(' + POSITION_SHORT[p.position] + '・総合' + overall(p) + ')→ ' + career);
+      lines.push(p.name + '(' + POSITION_SHORT[p.position] + '・総合値' + rating(p) + ')→ ' + career);
       if (p.watched) summaries.push.apply(summaries, watchSummary(state, p, career));
     }
+    if (pros) gainLeadership(state, pros * CONFIG.leadership.gains.pro, 'プロ入り' + pros + '人');
     state.players = state.players.filter((p) => p.grade < 3 && !p.helper);
     for (const p of state.players) {
       takeSnapshot(p, state.year);
       p.grade++;
     }
-    pushLog(state, graduates.length + '人が卒業した。');
+    pushLog(state, graduates.length + '人が卒業した。', 2);
+    state.stats.leadershipByYear.push(state.leadership.lv);
     state.stats.years++;
     state.year++;
     lines.unshift({ text: graduates.length + '人が卒業。名鑑に記録されました。', cls: 'summary' });
@@ -1757,101 +2342,122 @@
     const keys = visibleKeys(p);
     const g = growthSinceEntry(p, keys);
     const big = p.history.filter((h) => h.res === OUTCOME_LABEL.big).length;
-    const major = p.history.filter((h) => ['転生判明', '二刀流判明', '副能力判明', 'コンバート', 'コンバート失敗'].indexOf(h.ev) >= 0)
+    const major = p.history.filter((h) => ['転生判明', '二刀流判明', '副能力判明', 'コンバート', 'コンバート失敗', '限界突破'].indexOf(h.ev) >= 0)
       .map((h) => h.ev + (h.res ? '(' + h.res + ')' : ''));
     if (big) major.unshift('合宿で大きく伸びた ×' + big);
     if (p.record.titles.length) major.push(p.record.titles.join('、'));
     const l = p.stats.career;
     const statText = (l.pg ? l.w + '勝' + l.l + '敗 ' : '') + (l.ab ? '打率' + (l.h / l.ab).toFixed(3).replace(/^0/, '') + ' ' + l.hr + '本' : '');
-    const ini = avgOf(p.initialAbilities, keys);
-    const fin = avgOf(p.abilities, keys);
+    const ini = initialRating(p);
+    const fin = rating(p);
     const out = [
       { text: '★3年間のまとめ:' + p.name + '(' + POSITION_LABEL[p.position] + ')→ ' + career, cls: 'watchhead' },
-      { text: '  入学時 総合' + ini + ' → 卒業時 総合' + fin + '(+' + round1(fin - ini) + ')', cls: 'watch' },
+      { text: '  入学時 総合値' + ini + ' → 卒業時 総合値' + fin + '(+' + (fin - ini) + ')', cls: 'watch' },
       { text: '  一番伸びた:' + (formatBestGrowth(g) || 'なし'), cls: 'watch' },
       { text: '  主なイベント:' + (major.length ? major.join(' / ') : '特になし'), cls: 'watch' },
     ];
     if (statText) out.push({ text: '  通算成績:' + statText, cls: 'watch' });
-    pushLog(state, '★' + p.name + 'が卒業(' + career + ')');
+    pushLog(state, '★' + p.name + 'が卒業(' + career + ')', 2);
     return out;
   }
 
-  // 現在のステージを1つ実行する。止まる場面ならイベントを返し、そうでなければ null
-  function step(state) {
+  // イベントの種類ごとの処理(カレンダーの表から呼び出す)
+  const EVENT_HANDLERS = {
+    enrollment: () => null,                       // 月の始めに処理済み(方針選択の画面)
+    practiceGames: (state, rng) => runPracticeGames(state, rng),
+    camp: (state, rng, type) => runCamp(state, rng, type),
+    tournament: (state, rng, type) => runSimpleTournament(state, rng, type),
+    yearEnd: (state, rng) => runYearEnd(state, rng),
+  };
+
+  // 1か月を進める。月のまとめ { type:'month', ... } を返す
+  function processMonth(state) {
     if (state.awaiting) return null;
-    const stage = STAGES[state.stageIndex];
-    let ev = null;
+    const c = CAL[state.month];
+    const mev = {
+      type: 'month', year: state.year, month: c.month, label: c.label, note: c.note,
+      cards: state.carryCards.splice(0), summaries: [], notices: [], hidden: 0, stop: false,
+      watchLines: [], grown: 0,
+    };
+    state.monthNotices = [];
+    const types = c.events.map((k) => Object.assign({ id: k }, CONFIG.eventTypes[k])).filter((t) => t.kind);
     withRng(state, (rng) => {
-      switch (stage.key) {
-        case 'springKoshien':
-          // フェーズ2で実装(秋の成績で出場が決まる)
-          break;
-        case 'summerCamp':
-          ev = runCamp(state, rng, '夏合宿');
-          break;
-        case 'summerTournament': {
-          ev = runSimpleTournament(state, rng, 'summer');
-          const retired = retireThirdYears(state);
-          if (retired.length) ev.lines.push({ text: '3年生' + retired.length + '人が引退した。', cls: 'summary' });
-          break;
-        }
-        case 'autumnTournament':
-          ev = runSimpleTournament(state, rng, 'autumn');
-          break;
-        case 'winterCamp':
-          ev = runCamp(state, rng, '冬合宿');
-          break;
-        case 'yearEnd':
-          ev = runYearEnd(state, rng);
-          break;
-        default:
-          break;
-      }
+      const runEvent = (t) => {
+        const res = EVENT_HANDLERS[t.kind](state, rng, t);
+        if (res && res.summary) mev.summaries.push(res.summary);
+        else if (res) mev.cards.push(res);
+        if (CONFIG.stopKinds.indexOf(t.kind) >= 0 && t.kind !== 'enrollment') mev.stop = true;
+      };
+      // 年度末より前のイベント → 月ごとの成長 → 年度末
+      for (const t of types) if (t.kind !== 'yearEnd') runEvent(t);
+      const g = runMonthlyGrowth(state, rng);
+      mev.grown = g.grown;
+      mev.watchLines = g.watchLines;
+      for (const t of types) if (t.kind === 'yearEnd') runEvent(t);
     });
-    if (stage.key === 'yearEnd') startEnrollment(state);
-    else state.stageIndex++;
-    return ev;
+    // 通知:重要度の高い順に上限まで
+    const ns = state.monthNotices.slice().sort((a, b) => b.importance - a.importance);
+    mev.notices = ns.slice(0, CONFIG.notify.monthMax);
+    mev.hidden = Math.max(0, ns.length - CONFIG.notify.monthMax);
+    if (CONFIG.autoStop.enabled && ns.some((n) => n.importance >= CONFIG.autoStop.minImportance)) mev.stop = true;
+    state.monthNotices = [];
+    // 次の月へ
+    state.month = (state.month + 1) % CAL.length;
+    beginMonth(state);
+    return mev;
   }
 
-  // 次に止まる場面まで進める
-  function advanceToNextStop(state) {
+  // 1か月だけ進める
+  function advanceMonth(state) {
+    const mev = processMonth(state);
+    state.lastEvents = mev ? [mev] : [];
+    return state.lastEvents;
+  }
+  // 次のイベント(入学・合宿・大会・年度末、または重要な通知)のある月まで進める
+  function advanceToNextEvent(state) {
+    const out = [];
     while (!state.awaiting) {
-      const ev = step(state);
-      if (ev) {
-        state.lastEvents = [ev];
-        return ev;
-      }
+      const mev = processMonth(state);
+      out.push(mev);
+      if (mev.stop) break;
     }
-    return null;
+    state.stats.stops++;
+    state.lastEvents = out;
+    return out;
   }
-
-  // 次の4月(新入生の引き)まで一気に進める。途中のイベントを配列で返す
+  // 次の4月(新入生の引き)まで進める。途中の方針見直しは、変更なしで確定する
   function advanceToApril(state) {
-    const events = [];
-    while (!state.awaiting) {
-      const ev = step(state);
-      if (ev) events.push(ev);
+    const out = [];
+    for (;;) {
+      if (state.awaiting) {
+        if (state.policyContext === 'review') confirmPolicies(state, {});
+        else break;
+      }
+      out.push(processMonth(state));
     }
-    state.lastEvents = events;
-    return events;
+    state.lastEvents = out;
+    return out;
   }
-
-  function currentStage(state) { return STAGES[state.stageIndex]; }
 
   const HighSchool = {
-    STAGES: STAGES,
+    CALENDAR: CAL,
     formatYear: formatYear,
+    monthLabel: monthLabel,
+    monthIndexOf: monthIndexOf,
     newGame: newGame,
+    confirmPolicies: confirmPolicies,
     confirmEnrollment: confirmEnrollment,
-    step: step,
-    advanceToNextStop: advanceToNextStop,
+    reviewablePlayers: reviewablePlayers,
+    processMonth: processMonth,
+    advanceMonth: advanceMonth,
+    advanceToNextEvent: advanceToNextEvent,
     advanceToApril: advanceToApril,
-    currentStage: currentStage,
     members: members,
     addEvent: addEvent,
     setWatch: setWatch,
     watchedPlayers: watchedPlayers,
     countByPosition: countByPosition,
+    leadershipNeed: leadershipNeed,
     lineup: (state) => lineupSummary(buildLineup(state.players)),
     teamStrength: (state) => calcTeamStrength(state.players),
   };
@@ -1873,9 +2479,10 @@
   let state = null;
   let tab = 'home';
   let alumniFilter = 'all';
-  let pendingWatchId = null;    // 上限を超えて注目しようとした選手
-  const openDetails = new Set(); // 開いている選手詳細(描き直しても開いたままにする)
-  const draftPolicies = {}; // 入学時に選択中の方針
+  let autoTarget = 'new';        // おまかせの対象:'new'(新入生のみ) / 'all'(全員)
+  let pendingWatchId = null;     // 上限を超えて注目しようとした選手
+  const openDetails = new Set(); // 開いている詳細(描き直しても開いたままにする)
+  const draftPolicies = {};      // 方針の選択画面で選択中の方針
 
   // ---------- セーブ / ロード ----------
   function save() {
@@ -1899,23 +2506,38 @@
   function esc(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
-  function vClass(v) { return v >= 80 ? 'v80' : v >= 60 ? 'v60' : v >= 40 ? 'v40' : 'v0'; }
-  // 能力のマス目。keys の順に並べる。base を渡すと増分も表示
+  const int = (v) => Math.round(v);
+  function vClass(v) { return v > 100 ? 'v100' : v >= 80 ? 'v80' : v >= 60 ? 'v60' : v >= 40 ? 'v40' : 'v0'; }
+  // 能力のマス目。keys の順に並べる。base を渡すと増分も表示。100を超えた項目は金色
   function abilGrid(keys, abilities, base) {
     return '<div class="abil" style="--cols:' + keys.length + '">' + keys.map((k) => {
       const v = abilities[k];
-      const diff = base ? v - base[k] : 0;
-      return '<div class="' + vClass(v) + '">' + Core.ABILITY_LABEL[k] + '<b>' + v + '</b>'
+      const diff = base ? int(v) - int(base[k]) : 0;
+      return '<div class="' + vClass(v) + '">' + Core.ABILITY_LABEL[k] + '<b>' + int(v) + '</b>'
         + (base ? '<span class="small">' + (diff > 0 ? '+' + diff : '±0') + '</span>' : '') + '</div>';
     }).join('') + '</div>';
   }
-  // 本職側の能力(判明した二刀流は投打2段)
   function mainGrids(p, abilities, base) {
     if (Core.isTwoWayKnown(p) || (p.finalAbilities && p.twoWay)) {
       return '<div class="sublabel">投手系</div>' + abilGrid(Core.PITCH_KEYS, abilities, base)
         + '<div class="sublabel">野手系</div>' + abilGrid(Core.BAT_KEYS, abilities, base);
     }
     return abilGrid(Core.sideKeys(Core.sideOf(p.position)), abilities, base);
+  }
+  // 総合値とラベル(二刀流は投手側・野手側の両方)
+  function ratingBadge(r) {
+    const label = Core.ratingLabel(r);
+    if (!label) return '';
+    const cls = r >= 400 ? ' r400' : r >= 200 ? ' r200' : '';
+    return '<span class="rlabel' + cls + '">' + label + '</span>';
+  }
+  function ratingHtml(p) {
+    if (Core.isTwoWayKnown(p) || (p.finalAbilities && p.twoWay)) {
+      const s = Core.ratingSides(p);
+      return '総合値 投<span class="rt">' + s.pitch + '</span>/打<span class="rt">' + s.bat + '</span>' + ratingBadge(Math.max(s.pitch, s.bat));
+    }
+    const r = p.finalAbilities ? p.rating : Core.rating(p);
+    return '総合値 <span class="rt">' + r + '</span>' + ratingBadge(r);
   }
   function posTag(pos) { return '<span class="tag ' + pos + '">' + Core.POSITION_LABEL[pos] + '</span>'; }
   function extraTags(p, isAlumni) {
@@ -1935,28 +2557,24 @@
       + (h.d && Object.keys(h.d).length ? ' <span class="small">' + esc(Core.formatDelta(h.d)) + '</span>' : '') + '</li>'
     ).join('') + '</ul>';
   }
-  // 年ごとの能力表。current を渡すと末尾に「現在」の行を付ける
   function snapTable(keys, snaps, current) {
     if (!snaps || !snaps.length) return '';
-    let html = '<table class="snap"><tr><th>年</th>' + keys.map((k) => '<th>' + Core.ABILITY_LABEL[k] + '</th>').join('') + '</tr>';
-    snaps.forEach((s, i) => {
-      const label = i === 0 ? '入学時' : HighSchool.formatYear(s.y) + '末';
-      html += '<tr><td>' + label + '</td>' + keys.map((k) => '<td>' + s.a[k] + '</td>').join('') + '</tr>';
-    });
-    if (current) html += '<tr><td>現在</td>' + keys.map((k) => '<td>' + current[k] + '</td>').join('') + '</tr>';
-    return html + '</table>';
+    let html = '<div class="scroll"><table class="snap"><tr><th>年</th>' + keys.map((k) => '<th>' + Core.ABILITY_LABEL[k] + '</th>').join('') + '<th>総合値</th></tr>';
+    const row = (label, a) => '<tr><td>' + label + '</td>' + keys.map((k) => '<td>' + int(a[k]) + '</td>').join('')
+      + '<td>' + Core.ratingOfKeys(a, keys) + '</td></tr>';
+    snaps.forEach((s, i) => { html += row(i === 0 ? '入学時' : HighSchool.formatYear(s.y) + '末', s.a); });
+    if (current) html += row('現在', current);
+    return html + '</table></div>';
   }
-  // 適性(見えている能力から計算できる区分だけ表示)
   function aptLine(p) {
     const known = Core.isSubKnown(p);
     const side = Core.mainSide(p);
     const parts = Core.POSITIONS.filter((pos) => known || Core.sideOf(pos) === side)
-      .map((pos) => Core.POSITION_SHORT[pos] + ' ' + Core.aptitude(p, pos));
+      .map((pos) => Core.POSITION_SHORT[pos] + ' ' + int(Core.aptitude(p, pos)));
     let s = '適性:' + parts.join(' / ');
     if (p.convert) s += '(' + Core.POSITION_LABEL[p.convert.pos] + 'は転向直後のため -' + p.convert.penalty + ')';
     return '<div class="small">' + s + '</div>';
   }
-  // 入学時から一番伸びた項目(名前の横に小さく)
   function growthLabel(p) {
     const t = Core.formatBestGrowth(Core.growthSinceEntry(p));
     return t ? '<span class="gr">' + esc(t) + '</span>' : '';
@@ -1969,12 +2587,15 @@
   function growthChart(p, keys) {
     const series = Core.growthSeries(p);
     if (series.length < 2) return '';
+    let top = 100;
+    for (const pt of series) for (const k of keys) top = Math.max(top, pt.a[k]);
+    top = top > 100 ? 150 : 100;
     const W = 320, H = 150, L = 24, R = 14, T = 6, B = 30;
     const x = (i) => L + (W - L - R) * i / (series.length - 1);
-    const y = (v) => T + (H - T - B) * (1 - v / 100);
+    const y = (v) => T + (H - T - B) * (1 - v / top);
     let svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="能力の推移">';
-    for (const v of [0, 20, 40, 60, 80, 100]) {
-      svg += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="#e5ddd0" stroke-width="1"/>'
+    for (let v = 0; v <= top; v += top > 100 ? 25 : 20) {
+      svg += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="' + (v === 100 && top > 100 ? '#e0b84d' : '#e5ddd0') + '" stroke-width="1"/>'
         + '<text x="' + (L - 3) + '" y="' + (y(v) + 3) + '" font-size="8" text-anchor="end" fill="#999">' + v + '</text>';
     }
     series.forEach((pt, i) => {
@@ -1990,7 +2611,6 @@
     return '<div class="sublabel">能力の推移</div>' + svg + legend;
   }
   function detailsOpen(key) { return openDetails.has(key) ? ' open' : ''; }
-  // 上限を超えて注目しようとしたときの、外す選手の選択
   function renderWatchChooser() {
     if (pendingWatchId == null) return '';
     const cur = HighSchool.watchedPlayers(state);
@@ -2001,29 +2621,71 @@
       + cur.map((p) => '<button data-swapwatch="' + p.id + '">★ ' + esc(p.name) + '(' + p.grade + '年・' + Core.POSITION_SHORT[p.position] + ')を外す</button>').join('')
       + '<div><button data-swapwatch="cancel">やめる</button></div></div>';
   }
-  // ホームの注目選手欄(0人なら出さない)
+  function whenText(n) { return HighSchool.formatYear(n.y) + (n.m ? ' ' + n.m + '月' : ''); }
   function renderWatchCard() {
     const list = HighSchool.watchedPlayers(state);
     if (!list.length) return '';
     return '<div class="card"><h2>★ 注目選手(' + list.length + '/' + CONFIG.watch.max + ')</h2>' + list.map((p) =>
       '<div class="watchrow">' + starBtn(p) + '<b>' + esc(p.name) + '</b> '
-      + '<span class="small">' + (state.pendingRecruits.indexOf(p) >= 0 ? '入学前' : p.grade + '年') + '・' + Core.POSITION_LABEL[p.position] + '</span>'
+      + '<span class="small">' + (state.pendingRecruits.indexOf(p) >= 0 ? '入学前' : p.grade + '年') + '・' + Core.POSITION_LABEL[p.position] + '</span> '
+      + '<span class="small">' + ratingHtml(p) + '</span>'
       + growthLabel(p)
-      + '<span class="note">' + (p.lastNotice ? HighSchool.formatYear(p.lastNotice.y) + ':' + esc(p.lastNotice.t) : 'まだ通知はありません') + '</span></div>'
+      + '<span class="note">' + (p.lastNotice ? whenText(p.lastNotice) + ':' + esc(p.lastNotice.t) : 'まだ通知はありません') + '</span></div>'
     ).join('') + '</div>';
   }
 
-  function eventCard(ev) {
-    return '<div class="card"><h2>' + esc(ev.title) + '</h2><div class="lines">' + ev.lines.map((l) => {
+  function linesHtml(lines) {
+    return '<div class="lines">' + lines.map((l) => {
       const o = typeof l === 'string' ? { text: l, cls: '' } : l;
       return '<div class="' + (o.cls || '') + '">' + esc(o.text) + '</div>';
-    }).join('') + '</div>' + (ev.lineup ? lineupTable(ev.lineup, 'この大会のスタメン') : '') + '</div>';
+    }).join('') + '</div>';
   }
+  function eventCard(ev) {
+    return '<div class="card"><h2>' + esc(ev.title) + '</h2>' + linesHtml(ev.lines)
+      + (ev.lineup ? lineupTable(ev.lineup, 'この大会のスタメン') : '') + '</div>';
+  }
+  // 月のまとめの1行(練習の成長人数・練習試合など)
+  function monthLine(m) {
+    const parts = [];
+    if (m.note) parts.push(m.note);
+    parts.push('成長 ' + m.grown + '人');
+    for (const s of m.summaries) parts.push(s);
+    return parts.join(' / ');
+  }
+  // 「次のイベントまで」などで進んだ月の表示。途中の月は1行、最後の月はくわしく
+  function renderMonths(list) {
+    if (!list.length) return '';
+    let html = '';
+    const last = list[list.length - 1];
+    const mid = list.slice(0, -1);
+    if (mid.length) {
+      html += '<div class="card"><h2>途中の月</h2>' + mid.map((m) =>
+        '<div class="mline"><span class="ml">' + esc(m.label) + '</span>' + esc(monthLine(m))
+        + m.watchLines.map((w) => '<span class="wt">' + esc(w) + '</span>').join('')
+        + m.notices.map((n) => '<span class="nt">' + esc(n.text) + '</span>').join('')
+        + (m.hidden ? '<span class="nt">ほか ' + m.hidden + '件</span>' : '') + '</div>').join('') + '</div>';
+    }
+    // 最後の月
+    html += '<div class="card"><h2>' + esc(HighSchool.formatYear(last.year) + ' ' + last.label) + 'のまとめ</h2>';
+    if (last.watchLines.length) {
+      html += '<div class="sublabel">★ 注目選手の成長</div>' + linesHtml(last.watchLines.map((t) => ({ text: t, cls: 'watch' })));
+    }
+    html += '<div class="mline">' + esc(monthLine(last)) + '</div>';
+    if (last.notices.length) {
+      html += '<div class="sublabel">通知</div>' + linesHtml(last.notices.map((n) => ({ text: n.text, cls: n.cls }))
+        .concat(last.hidden ? [{ text: 'ほか ' + last.hidden + '件', cls: 'none' }] : []));
+    }
+    html += '</div>';
+    for (const c of last.cards) html += eventCard(c);
+    // 途中の月の結果(入学など)
+    for (const m of mid) for (const c of m.cards) html += eventCard(c);
+    return html;
+  }
+
   // ---------- 成績の表示 ----------
   function careerOf(p) { return (p && p.stats && p.stats.career) || Core.emptyStatLine(); }
   function batText(l) { return Core.formatAverage(l) + ' ' + l.hr + '本 ' + l.rbi + '点'; }
   function pitchText(l) { return l.w + '勝' + l.l + '敗 防' + Core.formatEra(l); }
-  // 一覧の見出しに出す成績(投手は防御率、野手は打率。二刀流は両方)
   function statBrief(p) {
     const l = careerOf(p);
     const parts = [];
@@ -2031,10 +2693,9 @@
     if (p.position !== 'P' || Core.isTwoWayKnown(p) || p.twoWay && p.finalAbilities) parts.push('打率' + Core.formatAverage(l));
     return parts.join(' ');
   }
-  // 年度ごとの成績表(通算の行付き)
   function statTable(p) {
     const st = p.stats;
-    if (!st || !st.career.g) return '<div class="sublabel">成績:まだ試合に出ていません</div>';
+    if (!st || !st.career.g) return '<div class="sublabel">成績:まだ大会に出ていません</div>';
     const years = Object.keys(st.byYear).map(Number).sort((a, b) => a - b);
     const rows = years.map((y) => [HighSchool.formatYear(y), st.byYear[y]]).concat([['通算', st.career]]);
     let html = '';
@@ -2054,13 +2715,11 @@
     }
     return html;
   }
-
-  // スタメン表。withStats のときは、在籍中の選手の通算成績を表示する
   function lineupTable(lu, title, withStats) {
     const byId = {};
     for (const p of state.players) byId[p.id] = p;
     const head = '<tr><th>打順</th><th>守</th><th>名前</th><th>学年</th>'
-      + (withStats ? '<th>打率</th><th>本</th><th>点</th>' : '<th>適性</th>') + '</tr>';
+      + (withStats ? '<th>総合値</th><th>打率</th><th>本</th><th>点</th>' : '<th>適性</th>') + '</tr>';
     const rows = lu.map((s) => {
       const p = byId[s.id];
       const isP = s.pos === 'P';
@@ -2069,15 +2728,16 @@
         + (s.outOfPosition && s.primary ? ' <span class="small">(本職:' + Core.POSITION_LABEL[s.primary] + ')</span>' : '');
       let cols;
       if (!withStats) {
-        cols = '<td class="num small">' + (s.apt == null ? '-' : s.apt) + '</td>';
+        cols = '<td class="num small">' + (s.apt == null ? '-' : int(s.apt)) + '</td>';
       } else {
         const l = careerOf(p);
+        const r = p ? Core.rating(p) : null;
+        const rCol = '<td class="num">' + (r == null ? '-' : r + ratingBadge(r)) + '</td>';
         if (isP) {
-          // 投手は勝敗と防御率。二刀流は打撃成績も添える
           if (s.twoWay) name += '<div class="small">' + batText(l) + '</div>';
-          cols = '<td class="num" colspan="3">' + pitchText(l) + '</td>';
+          cols = rCol + '<td class="num" colspan="3">' + pitchText(l) + '</td>';
         } else {
-          cols = '<td class="num">' + Core.formatAverage(l) + '</td><td class="num">' + l.hr + '</td><td class="num">' + l.rbi + '</td>';
+          cols = rCol + '<td class="num">' + Core.formatAverage(l) + '</td><td class="num">' + l.hr + '</td><td class="num">' + l.rbi + '</td>';
         }
       }
       const grade = s.helper ? '助' : (s.grade ? s.grade + '年' : '-');
@@ -2091,93 +2751,137 @@
   }
   // 入学時の第一印象(固定の文章リストから選ぶ)
   function impression(p) {
-    const keys = Core.visibleKeys(p);
-    const ov = Core.avgOf(p.abilities, keys);
-    const mx = Core.maxAbility(p.abilities, keys);
-    const pool = ov >= 45 ? ['即戦力の予感がする。', 'いきなり上級生に混ざっても見劣りしない。', '今年の目玉かもしれない。']
-      : mx >= 45 ? ['光るものを1つ持っている。', '尖った長所がある。', '何か一芸がありそうだ。']
-      : ov >= 28 ? ['素直そうな新入生だ。', 'まだ線が細いが伸びしろはある。', '平凡だが真面目に練習しそう。']
+    const r = Core.rating(p);
+    const pool = r >= 200 ? ['……空気が変わった。', '入部初日から格の違いを見せつけた。', 'どこでこんな選手が埋もれていたのか。']
+      : r >= 150 ? ['即戦力の予感がする。', 'いきなり上級生に混ざっても見劣りしない。', '今年の目玉かもしれない。']
+      : r >= 115 ? ['光るものを持っている。', '尖った長所がある。', '何か一芸がありそうだ。']
+      : r >= 95 ? ['素直そうな新入生だ。', 'まだ線が細いが伸びしろはある。', '平凡だが真面目に練習しそう。']
       : ['正直、まだまだこれから。', '体力づくりから始めよう。', '入部動機は「なんとなく」らしい。'];
     return pool[p.id % pool.length];
-  }
-  function overallText(p) {
-    if (Core.isTwoWayKnown(p)) {
-      return '投 ' + Core.avgOf(p.abilities, Core.PITCH_KEYS) + ' / 打 ' + Core.avgOf(p.abilities, Core.BAT_KEYS);
-    }
-    return '総合 ' + Core.avgOf(p.abilities, Core.visibleKeys(p));
   }
 
   // ---------- 画面 ----------
   function renderHeader() {
     document.getElementById('title').textContent = CONFIG.schoolName + ' 野球部';
-    const stage = HighSchool.currentStage(state);
     const mem = HighSchool.members(state).filter((p) => !p.retired).length;
-    document.getElementById('meta').innerHTML = '<b>' + HighSchool.formatYear(state.year) + '</b> ・ ' + esc(stage.label)
+    document.getElementById('meta').innerHTML = '<b>' + HighSchool.formatYear(state.year) + ' ' + esc(HighSchool.monthLabel(state.month)) + '</b>'
       + ' ・ チームの強さ <b>' + HighSchool.teamStrength(state) + '</b> ・ 部員 ' + mem + '人';
   }
-
-  function renderCalendar() {
-    return '<div class="cal">' + HighSchool.STAGES.map((s, i) =>
-      '<span class="' + (i < state.stageIndex ? 'done' : i === state.stageIndex ? 'now' : '') + '">' + esc(s.label) + '</span>'
-    ).join('') + '</div>';
+  // 12か月の帯(現在の月を強調。イベントのある月に下線)
+  function renderMonthBand() {
+    const cal = HighSchool.CALENDAR;
+    const band = '<div class="months">' + cal.map((c, i) => {
+      const hasEv = c.events.some((e) => CONFIG.eventTypes[e] && CONFIG.stopKinds.indexOf(CONFIG.eventTypes[e].kind) >= 0);
+      const cls = (i < state.month ? 'done' : i === state.month ? 'now' : '') + (hasEv ? ' ev' : '');
+      return '<span class="' + cls + '">' + c.month + '月</span>';
+    }).join('') + '</div>';
+    const c = cal[state.month];
+    const L = state.leadership;
+    const lead = '<div class="lead">指導力 <b>Lv.' + L.lv + '</b>'
+      + (L.lv < CONFIG.leadership.maxLv ? '(次のLvまで ' + L.exp + '/' + HighSchool.leadershipNeed(L.lv) + ')' : '(最大)') + '</div>';
+    return band + '<div class="monthnote">今月:' + esc(c.label + ' ' + (c.note || '')) + '</div>' + lead;
   }
 
-  function renderEnrollment() {
-    const info = state.newcomerInfo || {};
-    const n = state.pendingRecruits.length;
-    let html = '<div class="card"><h2>🌸 ' + HighSchool.formatYear(state.year) + ' 4月 新入生がやってきた!</h2>'
-      + '<div class="nc">今年の入部希望者は <b>' + n + '人</b>'
-      + (info.strength != null ? '(前年夏のチームの強さ ' + info.strength + ')' : '')
-      + (info.capped ? '。部員数の上限のため人数を絞った' : '') + '</div>'
-      + '<div class="small">育成方針を選んでください。特化:選んだ能力が伸びやすく、他はほとんど伸びない。バランス:全体が少しずつ伸びる。'
-      + '表示は本職側の能力だけです。</div>';
-    if (!n) html += '<div class="small">今年は新入生がいません。</div>';
-    for (const p of state.pendingRecruits) {
-      if (!draftPolicies[p.id]) draftPolicies[p.id] = p.policy;
-      html += '<div class="player">' + starBtn(p) + '<span class="pname">' + esc(p.name) + '</span>' + posTag(p.position) + extraTags(p)
-        + ' <span class="small">' + overallText(p) + '</span>'
-        + '<div class="impress">' + esc(impression(p)) + '</div>'
-        + mainGrids(p, p.abilities);
-      if (p.reincarnation && p.reincarnationRevealed) {
-        html += '<div class="reveal">……!? この新入生、ただ者ではない。<br>【' + esc(Core.reincarnationName(p.reincarnation)) + '】の転生者だ!</div>';
-      }
-      if (p.twoWay && p.twoWayRevealed) {
-        html += '<div class="reveal">投げても打っても本職級……! <br>【二刀流】の素質を持っている!</div>';
-      }
-      const set = Core.POLICIES[Core.policySetOf(p)];
-      html += '<select data-pid="' + p.id + '">' + set.map((pol) =>
-        '<option value="' + pol.key + '"' + (draftPolicies[p.id] === pol.key ? ' selected' : '') + '>' + pol.label + '</option>'
-      ).join('') + '</select></div>';
+  // 方針の選択画面(4月:新入生と在校生 / 12月:在校生の見直し)
+  function policySelect(p) {
+    const set = Core.POLICIES[Core.policySetOf(p)];
+    const cur = draftPolicies[p.id] != null ? draftPolicies[p.id] : p.policy;
+    return '<select data-pid="' + p.id + '">' + set.map((pol) =>
+      '<option value="' + pol.key + '"' + (cur === pol.key ? ' selected' : '') + '>' + pol.label + '</option>'
+    ).join('') + '</select>';
+  }
+  function recruitCard(p) {
+    let html = '<div class="player">' + starBtn(p) + '<span class="pname">' + esc(p.name) + '</span>' + posTag(p.position) + extraTags(p)
+      + ' <span class="small">' + ratingHtml(p) + '</span>'
+      + '<div class="impress">' + esc(impression(p)) + '</div>'
+      + mainGrids(p, p.abilities);
+    if (p.reincarnation && p.reincarnationRevealed) {
+      html += '<div class="reveal">……!? この新入生、ただ者ではない。<br>【' + esc(Core.reincarnationName(p.reincarnation)) + '】の転生者だ!</div>';
     }
-    html += '</div><div class="btns">'
-      + (n ? '<button class="btn sub" id="btnAuto">おまかせ</button>' : '')
-      + '<button class="btn" id="btnEnroll">この方針で入部させる</button></div>';
+    if (p.twoWay && p.twoWayRevealed) {
+      html += '<div class="reveal">投げても打っても本職級……! <br>【二刀流】の素質を持っている!</div>';
+    }
+    return html + policySelect(p) + '</div>';
+  }
+  function reviewRow(p) {
+    const changed = draftPolicies[p.id] != null && draftPolicies[p.id] !== p.policy;
+    return '<div class="player' + (changed ? ' changed' : '') + '"><span class="pname">' + esc(p.name) + '</span>'
+      + posTag(p.position) + extraTags(p) + ' <span class="small">' + ratingHtml(p) + ' / 現在:' + esc(Core.policyLabel(p)) + '</span>'
+      + (p.needsPolicy ? '<div class="needpol">⚠ 本職が変わったため方針がバランスに戻りました。選び直してください</div>' : '')
+      + (changed ? '<div class="small">変更あり</div>' : '')
+      + policySelect(p) + '</div>';
+  }
+  function renderPolicyScreen() {
+    const isEnroll = state.policyContext === 'enrollment';
+    let html = '';
+    if (isEnroll) {
+      const info = state.newcomerInfo || {};
+      const n = state.pendingRecruits.length;
+      html += '<div class="card"><h2>🌸 ' + HighSchool.formatYear(state.year) + ' 4月 新入生がやってきた!</h2>'
+        + '<div class="nc">今年の入部希望者は <b>' + n + '人</b>'
+        + (info.strength != null ? '(前年夏のチームの強さ ' + info.strength + ')' : '')
+        + (info.capped ? '。部員数の上限のため人数を絞った' : '') + '</div>'
+        + '<div class="small">育成方針を選んでください。特化:選んだ能力が伸びやすく、他はほとんど伸びない。バランス:全体が少しずつ伸びる。'
+        + '表示は本職側の能力だけです。総合値 = 本職側の能力の平均 × 5。</div>';
+      if (!n) html += '<div class="small">今年は新入生がいません。</div>';
+      html += '<details data-open="pol-new"' + (openDetails.has('pol-new-closed') ? '' : ' open') + '><summary><b>新入生(' + n + '人)</b></summary>'
+        + state.pendingRecruits.map(recruitCard).join('') + '</details></div>';
+    } else {
+      html += '<div class="card"><h2>📝 ' + HighSchool.formatYear(state.year) + ' ' + esc(HighSchool.monthLabel(state.month)) + ' 方針の見直し</h2>'
+        + '<div class="small">冬合宿の前に、在校生の育成方針を見直せます。変更しなければそのまま進みます。</div></div>';
+    }
+    // 在校生(学年ごとに折りたたみ)
+    const list = HighSchool.reviewablePlayers(state);
+    const grades = [3, 2, 1].filter((g) => list.some((p) => p.grade === g));
+    html += '<div class="card"><h2>在校生の方針</h2><div class="small">変更した選手は色が付きます。⚠ は選び直しが必要な選手です。</div>';
+    for (const g of grades) {
+      const ps = list.filter((p) => p.grade === g);
+      const need = ps.filter((p) => p.needsPolicy).length;
+      const changed = ps.filter((p) => draftPolicies[p.id] != null && draftPolicies[p.id] !== p.policy).length;
+      const key = 'pol-g' + g;
+      html += '<details data-open="' + key + '"' + (openDetails.has(key) || need ? ' open' : '') + '><summary><b>' + g + '年生(' + ps.length + '人)</b>'
+        + (need ? ' <span class="needpol">⚠' + need + '</span>' : '') + (changed ? ' <span class="small">変更 ' + changed + '人</span>' : '') + '</summary>'
+        + ps.map(reviewRow).join('') + '</details>';
+    }
+    html += '</div>';
+    html += '<div class="autosel">おまかせの対象:<select id="autoTarget">'
+      + '<option value="new"' + (autoTarget === 'new' ? ' selected' : '') + '>' + (isEnroll ? '新入生のみ' : '選び直しが必要な選手のみ') + '</option>'
+      + '<option value="all"' + (autoTarget === 'all' ? ' selected' : '') + '>全員</option></select></div>'
+      + '<div class="btns"><button class="btn sub" id="btnAuto">おまかせ</button>'
+      + '<button class="btn" id="btnPolicy">' + (isEnroll ? 'この方針で入部させる' : 'この方針で進む') + '</button></div>';
     return html;
   }
 
   function renderHome() {
-    let html = renderCalendar() + renderWatchChooser();
+    let html = renderMonthBand() + renderWatchChooser();
     const evs = state.lastEvents || [];
-    if (state.awaiting === 'enrollment') {
-      for (const ev of evs) html += eventCard(ev);
-      html += renderEnrollment();
+    if (state.awaiting === 'policy') {
+      html += renderMonths(evs);
+      html += renderPolicyScreen();
     } else {
-      html += '<div class="btns"><button class="btn" id="btnNext">次へ進む</button>'
-        + '<button class="btn sub" id="btnApril">次の4月まで</button></div>';
-      for (const ev of evs) html += eventCard(ev);
+      html += '<div class="btns"><button class="btn" id="btnNextEvent">次のイベントまで</button></div>'
+        + '<div class="btns"><button class="btn sub small" id="btnNextMonth">次の月へ</button>'
+        + '<button class="btn sub small" id="btnApril">次の4月まで</button></div>';
+      html += renderMonths(evs);
       html += renderWatchCard();
       html += '<div class="card"><h2>現在のスタメン</h2>' + lineupTable(HighSchool.lineup(state), null, true) + '</div>';
     }
-    const recent = state.log.slice(-8).reverse();
+    if (state.awaiting === 'policy') html += renderWatchCard();
+    const recent = state.log.slice(-10).reverse();
     html += '<div class="card"><h2>最近の出来事</h2><div class="lines">'
-      + recent.map((l) => '<div>' + HighSchool.formatYear(l.y) + ':' + esc(l.t) + '</div>').join('') + '</div></div>';
+      + recent.map((l) => '<div>' + esc(whenText(l)) + ':' + esc(l.t) + '</div>').join('') + '</div></div>';
     return html;
   }
 
   function playerCard(p) {
     const keys = Core.visibleKeys(p);
-    let detail = '<div class="small">方針:' + esc(Core.policyLabel(p)) + ' / 試合 ' + p.record.games + '(' + p.record.wins + '勝)'
+    const capped = Core.isCappedOut(p);
+    let detail = '<div class="small">方針:' + esc(Core.policyLabel(p)) + (p.needsPolicy ? ' <span class="needpol">⚠選び直し</span>' : '')
+      + ' / 試合 ' + p.record.games + '(' + p.record.wins + '勝)'
       + (p.originalPosition !== p.position ? ' / 元:' + Core.POSITION_LABEL[p.originalPosition] : '') + '</div>'
+      + '<div class="small">入学時の総合値 ' + Core.initialRating(p) + ' → 現在 ' + Core.rating(p)
+      + (capped ? ' <span class="capped">頭打ち</span>' : '') + (p.limitBreaks ? ' / 限界突破 ' + p.limitBreaks + '回' : '')
+      + ' / 試合経験値 ' + int(p.exp) + '(累計 ' + int(p.expTotal) + ')</div>'
       + aptLine(p)
       + snapTable(keys, p.snapshots, p.abilities);
     if (Core.isSubKnown(p) && !Core.isTwoWayKnown(p)) {
@@ -2191,7 +2895,8 @@
     return '<div class="player">' + starBtn(p) + '<details data-open="p' + p.id + '"' + detailsOpen('p' + p.id) + ' style="display:inline-block;width:calc(100% - 32px);vertical-align:top">'
       + '<summary><span class="pname">' + esc(p.name) + '</span>' + growthLabel(p) + ' '
       + '<span class="small">' + (p.helper ? '' : p.grade + '年') + '</span>' + posTag(p.position) + extraTags(p)
-      + ' <span class="small">' + overallText(p) + ' / ' + statBrief(p) + ' / ' + esc(Core.policyLabel(p)) + '</span></summary>'
+      + (capped ? '<span class="capped">頭打ち</span>' : '')
+      + '<div class="small">' + ratingHtml(p) + ' / ' + statBrief(p) + ' / ' + esc(Core.policyLabel(p)) + '</div></summary>'
       + detail + '</details>'
       + mainGrids(p, p.abilities) + '</div>';
   }
@@ -2201,8 +2906,7 @@
   }
   function renderRosterBody() {
     const posOrder = { P: 0, C: 1, IF: 2, OF: 3 };
-    const sortFn = (a, b) => posOrder[a.position] - posOrder[b.position]
-      || Core.avgOf(b.abilities, Core.visibleKeys(b)) - Core.avgOf(a.abilities, Core.visibleKeys(a));
+    const sortFn = (a, b) => posOrder[a.position] - posOrder[b.position] || Core.rating(b) - Core.rating(a);
     const counts = HighSchool.countByPosition(HighSchool.members(state).filter((p) => !p.retired));
     let html = '<div class="card"><h2>部員の構成</h2><div class="small">'
       + Core.POSITIONS.map((pos) => Core.POSITION_LABEL[pos] + ' ' + counts[pos] + '人').join(' / ')
@@ -2215,11 +2919,10 @@
     }
     const helpers = state.players.filter((p) => p.helper);
     if (helpers.length) html += '<div class="card"><h2>助っ人(' + helpers.length + '人)</h2>' + helpers.map(playerCard).join('') + '</div>';
-    html += '<div class="small">名前をタップすると、年ごとの能力・適性・副能力・成長履歴が見られます。隠れた才能は卒業まで分かりません。</div>';
+    html += '<div class="small">名前をタップすると、能力の推移・適性・副能力・成績・成長履歴が見られます。隠れた才能と成長限界は表示されません。</div>';
     return html;
   }
 
-  // 名鑑の通算成績(投手は勝敗と防御率、野手は打率・本塁打・打点。両方あれば両方)
   function alumniStatLine(a) {
     const l = careerOf(a);
     const parts = [];
@@ -2227,7 +2930,6 @@
     if (l.pa > 0 && (a.position !== 'P' || a.twoWay || l.pg === 0)) parts.push('打率 ' + batText(l));
     return parts.length ? parts.join(' / ') : '出場なし';
   }
-
   function renderAlumni() {
     const minAB = CONFIG.stats.minAtBatsForAverage;
     const filters = [['all', 'すべて'], ['genius', '天才'], ['reinc', '転生'], ['twoway', '二刀流'], ['pro', 'プロ入り'], ['three', '3割打者'], ['watched', '注目だった選手'], ['helper', '助っ人']];
@@ -2254,20 +2956,22 @@
       const talent = a.talent === 'genius'
         ? '<span class="tag genius">' + (a.geniusBust ? '天才(開花せず)' : '天才') + '</span>' : '';
       const subKeys = a.twoWay ? [] : Core.ALL_KEYS.filter((k) => a.mainKeys.indexOf(k) < 0);
-      const ini = Core.avgOf(a.initialAbilities, a.mainKeys);
-      const fin = Core.avgOf(a.finalAbilities, a.mainKeys);
+      const ini = a.initialRating;
+      const fin = a.rating;
       const gl = Core.formatBestGrowth(Core.growthSinceEntry(a, a.mainKeys));
       html += '<div class="player">' + starBtn(a) + '<details data-open="a' + a.id + '"' + detailsOpen('a' + a.id)
         + ' style="display:inline-block;width:calc(100% - 32px);vertical-align:top"><summary><span class="pname">' + esc(a.name) + '</span>'
-        + posTag(a.position) + talent + extraTags(a, true)
+        + posTag(a.position) + talent + extraTags(a, true) + (a.cappedOut ? '<span class="capped">頭打ち</span>' : '')
         + ' <span class="small">→ ' + esc(a.career) + '</span>'
-        + '<div class="small">総合 ' + ini + ' → ' + fin + ' <b style="color:var(--win)">(' + (fin - ini >= 0 ? '+' : '') + (Math.round((fin - ini) * 10) / 10) + ')</b>'
+        + '<div class="small">総合値 ' + ini + ' → <span class="rt">' + fin + '</span>' + ratingBadge(fin)
+        + ' <b style="color:var(--win)">(' + (fin - ini >= 0 ? '+' : '') + (fin - ini) + ')</b>'
         + (gl ? ' / 一番伸びた:' + esc(gl) : '') + '</div>'
         + '<div class="small">' + alumniStatLine(a) + '</div></summary>'
         + '<div class="small">育成方針:' + esc(a.policyLabel || Core.policyLabelByKey(a.policy))
         + ' / 才能:' + Core.TALENT_LABEL[a.talent] + (a.geniusBust ? '(開花せず)' : '')
         + ' / 転生の型:' + esc(Core.reincarnationName(a.reincarnation))
         + (a.twoWay ? ' / 二刀流' : '')
+        + (a.limitBreaks ? ' / 限界突破 ' + a.limitBreaks + '回' : '')
         + (a.originalPosition && a.originalPosition !== a.position ? ' / 入学時:' + Core.POSITION_LABEL[a.originalPosition] : '')
         + (a.origin === 'initial' ? ' / 就任時の部員' : '') + (a.helper ? ' / 助っ人' : '') + '</div>'
         + '<div class="small">通算成績:' + alumniStatLine(a) + '</div>'
@@ -2289,6 +2993,8 @@
     return '<div class="card"><h2>ゲーム情報</h2><div class="small">シード:' + state.seed
       + '<br>転生の型の判明:' + rv(CONFIG.reincarnationReveal) + '(config.js の reincarnationReveal で切替)'
       + '<br>二刀流の判明:' + rv(CONFIG.twoWayReveal) + '(config.js の twoWayReveal で切替)'
+      + '<br>重要な通知が出た月で止まる:' + (CONFIG.autoStop.enabled ? 'はい' : 'いいえ') + '(config.js の autoStop で切替)'
+      + '<br>方針を見直せる月:' + CONFIG.policyReviewMonths.join('月・') + '月(config.js の policyReviewMonths)'
       + '<br>セーブは自動(このブラウザの localStorage。データ形式 v' + state.version + ')</div></div>'
       + '<div class="card"><h2>リセット</h2><div class="small">シードを入れると同じ展開を再現できます(空欄ならランダム)。</div>'
       + '<input type="text" id="seedInput" inputmode="numeric" placeholder="シード(任意の数字)">'
@@ -2304,6 +3010,7 @@
   }
 
   // ---------- 操作 ----------
+  function afterAdvance() { save(); render(); window.scrollTo(0, 0); }
   document.querySelector('nav').addEventListener('click', (e) => {
     const t = e.target.dataset && e.target.dataset.tab;
     if (t) { tab = t; render(); window.scrollTo(0, 0); }
@@ -2311,10 +3018,18 @@
   document.getElementById('main').addEventListener('toggle', (e) => {
     const key = e.target.dataset && e.target.dataset.open;
     if (!key) return;
+    if (key === 'pol-new') {
+      if (e.target.open) openDetails.delete('pol-new-closed'); else openDetails.add('pol-new-closed');
+      return;
+    }
     if (e.target.open) openDetails.add(key); else openDetails.delete(key);
   }, true);
   document.getElementById('main').addEventListener('change', (e) => {
-    if (e.target.dataset.pid) draftPolicies[e.target.dataset.pid] = e.target.value;
+    if (e.target.id === 'autoTarget') { autoTarget = e.target.value; return; }
+    if (e.target.dataset.pid) {
+      draftPolicies[e.target.dataset.pid] = e.target.value;
+      render();
+    }
   });
   document.getElementById('main').addEventListener('click', (e) => {
     const id = e.target.id;
@@ -2339,25 +3054,33 @@
       return;
     }
     if (id === 'btnAuto') {
+      // おまかせ:新入生のみ(見直しの月は選び直しが必要な選手のみ)/ 全員
       for (const p of state.pendingRecruits) draftPolicies[p.id] = Core.autoPolicy(p);
+      for (const p of HighSchool.reviewablePlayers(state)) {
+        if (autoTarget === 'all' || p.needsPolicy) draftPolicies[p.id] = Core.autoPolicy(p);
+      }
       render();
-    } else if (id === 'btnEnroll') {
-      HighSchool.confirmEnrollment(state, draftPolicies);
+    } else if (id === 'btnPolicy') {
+      HighSchool.confirmPolicies(state, draftPolicies);
       clearDraft();
-      save(); render(); window.scrollTo(0, 0);
-    } else if (id === 'btnNext') {
-      HighSchool.advanceToNextStop(state);
-      save(); render(); window.scrollTo(0, 0);
+      // 決めた月の続き(入学の結果、冬合宿など)はボタンで進める
+      afterAdvance();
+    } else if (id === 'btnNextEvent') {
+      HighSchool.advanceToNextEvent(state);
+      afterAdvance();
+    } else if (id === 'btnNextMonth') {
+      HighSchool.advanceMonth(state);
+      afterAdvance();
     } else if (id === 'btnApril') {
       HighSchool.advanceToApril(state);
-      save(); render(); window.scrollTo(0, 0);
+      afterAdvance();
     } else if (id === 'btnReset') {
       if (confirm('セーブデータを消して、最初からやり直しますか?')) {
         startNew(document.getElementById('seedInput').value.trim());
         tab = 'home'; render();
       }
-    } else if (e.target.dataset && e.target.dataset.af) {
-      alumniFilter = e.target.dataset.af; render();
+    } else if (ds.af) {
+      alumniFilter = ds.af; render();
     }
   });
 

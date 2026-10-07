@@ -3,8 +3,9 @@
 //   使い方: node sim.js [年数] [シード] [方針]
 //     年数 : 既定 50
 //     シード: 既定 12345(同じシードなら同じ結果になる)
-//     方針 : auto(能力から自動。画面の「おまかせ」と同じ。既定)/ balance / random
+//     方針 : auto(能力から自動。画面の「おまかせ(全員)」と同じ。既定)/ balance / random
 //   例: node sim.js 200 42 random
+//   画面の「次のイベントまで」と同じ進め方で、方針の選択はすべて自動で行う。
 // =============================================================
 'use strict';
 
@@ -15,42 +16,57 @@ const years = parseInt(process.argv[2] || '50', 10);
 const seed = parseInt(process.argv[3] || '12345', 10);
 const policyMode = process.argv[4] || 'auto';
 
-// sim 内で方針を選ぶための乱数(ゲーム本体の乱数とは別)
-const pickRng = new Core.Rng(seed ^ 0x9e3779b9);
-
-function choosePolicy(p) {
-  const list = Core.POLICIES[Core.policySetOf(p)];
-  if (policyMode === 'balance') return list[list.length - 1].key;
-  if (policyMode === 'random') return pickRng.pick(list).key;
-  return Core.autoPolicy(p);
+// 1回分のシミュレーション
+function runSim(sd) {
+  const pickRng = new Core.Rng(sd ^ 0x9e3779b9); // sim 内で方針を選ぶための乱数(ゲーム本体の乱数とは別)
+  const choose = (p) => {
+    const list = Core.POLICIES[Core.policySetOf(p)];
+    if (policyMode === 'balance') return list[list.length - 1].key;
+    if (policyMode === 'random') return pickRng.pick(list).key;
+    return Core.autoPolicy(p);
+  };
+  const state = HighSchool.newGame({ seed: sd });
+  while (state.stats.years < years) {
+    if (state.awaiting) {
+      const policies = {};
+      for (const p of state.pendingRecruits) policies[p.id] = choose(p);
+      // 在校生:auto は全員を見直す(おまかせ「全員」)。それ以外は選び直しが必要な選手だけ
+      for (const p of HighSchool.reviewablePlayers(state)) {
+        if (policyMode === 'auto' || p.needsPolicy) policies[p.id] = choose(p);
+      }
+      HighSchool.confirmPolicies(state, policies);
+      continue;
+    }
+    HighSchool.advanceToNextEvent(state);
+  }
+  return state;
 }
 
-// ---------- 実行 ----------
-const state = HighSchool.newGame({ seed: seed });
-while (state.stats.years < years) {
-  const policies = {};
-  for (const p of state.pendingRecruits) policies[p.id] = choosePolicy(p);
-  HighSchool.confirmEnrollment(state, policies);
-  HighSchool.advanceToApril(state);
-}
+const state = runSim(seed);
 
 // ---------- 集計 ----------
 const S = state.stats;
 const pct = (n, d) => (d ? (n / d * 100).toFixed(2) + '%' : '-');
 const avg = (arr) => (arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : NaN);
+const f0 = (v) => (Number.isNaN(v) ? '-' : v.toFixed(0));
 const f1 = (v) => (Number.isNaN(v) ? '-' : v.toFixed(1));
+const quant = (arr, q) => {
+  if (!arr.length) return NaN;
+  const b = arr.slice().sort((x, y) => x - y);
+  return b[Math.min(b.length - 1, Math.floor(q * b.length))];
+};
 const out = [];
 const warnings = [];
 const warn = (msg) => warnings.push(msg);
 const log = (s) => out.push(s === undefined ? '' : s);
-const mainOverall = (a) => Core.avgOf(a.finalAbilities, a.mainKeys);
-const mainMax = (a) => Core.maxAbility(a.finalAbilities, a.mainKeys);
+const pad = (s, n) => (String(s) + ' '.repeat(n)).slice(0, n);
+const padL = (s, n) => String(s).padStart(n);
 
 log('==============================================');
 log(' 野球ガチャ育成ゲーム 検証 (シード ' + seed + ' / ' + years + '年 / 方針 ' + policyMode + ')');
 log('==============================================');
 
-// 出現率
+// ---------- 新入生 ----------
 log('');
 log('■ 新入生の才能(新入生 ' + S.recruits + '人)');
 log('  天才   : ' + S.genius + '人 (' + pct(S.genius, S.recruits) + ')  設定 ' + (CONFIG.talent.geniusRate * 100) + '%');
@@ -59,7 +75,150 @@ log('    内訳: ' + Object.keys(CONFIG.reincarnationTypes)
   .map((k) => CONFIG.reincarnationTypes[k].name + ' ' + (S.reincarnationByType[k] || 0)).join(' / '));
 log('  二刀流 : ' + S.twoWay + '人 (' + pct(S.twoWay, S.recruits) + ')  設定 ' + (CONFIG.talent.twoWayRate * 100) + '%');
 
-// 部員数の推移
+log('');
+log('■ 入学時の総合値');
+log('  区分          人数    平均   最小   最大');
+for (const g of ['通常', '天才', '転生', '天才かつ転生']) {
+  const r = S.recruitRatings.filter((x) => x.g === g).map((x) => x.r);
+  if (!r.length) { log('  ' + pad(g, 12) + padL(0, 5)); continue; }
+  log('  ' + pad(g, 12) + padL(r.length, 5) + '   ' + padL(f0(avg(r)), 5) + '  ' + padL(Math.min.apply(null, r), 5) + '  ' + padL(Math.max.apply(null, r), 5));
+}
+{
+  const tw = S.recruitRatings.filter((x) => x.tw).map((x) => x.r);
+  log('  ' + pad('二刀流(再掲)', 12) + padL(tw.length, 5) + (tw.length ? '   ' + padL(f0(avg(tw)), 5) + '  ' + padL(Math.min.apply(null, tw), 5) + '  ' + padL(Math.max.apply(null, tw), 5) : ''));
+  const normal = S.recruitRatings.filter((x) => x.g === '通常').map((x) => x.r);
+  log('  通常のうち 120以上: ' + pct(normal.filter((r) => r >= 120).length, normal.length));
+}
+
+// ---------- 卒業生 ----------
+const grads = state.alumni.filter((a) => a.origin === 'recruit');
+const starterRatio = (a) => (a.teamGames ? a.starts / a.teamGames : 0);
+const isNormal = (a) => !a.reincarnation && !(a.talent === 'genius' && !a.geniusBust);
+const groups = {
+  通常: grads.filter(isNormal),
+  スタメン中心: grads.filter((a) => isNormal(a) && starterRatio(a) >= 0.6),
+  控え中心: grads.filter((a) => isNormal(a) && starterRatio(a) <= 0.2),
+  '天才(開花)': grads.filter((a) => a.talent === 'genius' && !a.geniusBust && !a.reincarnation),
+  転生: grads.filter((a) => a.reincarnation && !(a.talent === 'genius' && !a.geniusBust)),
+  天才かつ転生: grads.filter((a) => a.reincarnation && a.talent === 'genius' && !a.geniusBust),
+  二刀流: grads.filter((a) => a.twoWay),
+};
+log('');
+log('■ 卒業時の総合値(卒業生 ' + grads.length + '人。スタメン中心=出場機会の6割以上、控え中心=2割以下)');
+log('  区分            人数    平均   50%点   90%点   99%点    最大   3年間の増加');
+for (const g of Object.keys(groups)) {
+  const list = groups[g];
+  const r = list.map((a) => a.rating);
+  log('  ' + pad(g, 14) + padL(list.length, 5) + '   ' + padL(f0(avg(r)), 5) + '   ' + padL(list.length ? quant(r, 0.5) : '-', 5)
+    + '   ' + padL(list.length ? quant(r, 0.9) : '-', 5) + '   ' + padL(list.length ? quant(r, 0.99) : '-', 5)
+    + '   ' + padL(list.length ? Math.max.apply(null, r) : '-', 5) + '   ' + padL(list.length ? '+' + f0(avg(list.map((a) => a.rating - a.initialRating))) : '-', 6));
+}
+const over500 = grads.filter((a) => a.rating > 500).length;
+const over600 = grads.filter((a) => a.rating > 600).length;
+const over100 = grads.filter((a) => a.mainKeys.some((k) => a.finalAbilities[k] > 100)).length;
+log('  総合値500超: ' + pct(over500, grads.length) + '  /  600超: ' + pct(over600, grads.length) + '(目安 1%以下)');
+log('  100を超えた項目を持つ卒業生: ' + pct(over100, grads.length));
+
+// 頭打ち・限界突破
+{
+  const normal = groups['通常'];
+  const capped = normal.filter((a) => a.cappedOut).length;
+  const broke = grads.filter((a) => a.limitBreaks > 0);
+  log('');
+  log('■ 成長限界');
+  log('  卒業時に頭打ちだった通常の選手: ' + pct(capped, normal.length));
+  log('  限界突破の発生: ' + S.limitBreak.count + '回(' + f1(S.limitBreak.count / S.years * 10) + '回/10年)'
+    + '  突破した卒業生の卒業時の総合値 平均 ' + f0(avg(broke.map((a) => a.rating))));
+}
+
+// 成長の内訳
+{
+  const sum = { practice: 0, camp: 0, exp: 0 };
+  for (const a of grads) for (const k of Object.keys(sum)) sum[k] += a.growthBy[k] || 0;
+  const tot = sum.practice + sum.camp + sum.exp;
+  log('');
+  log('■ 成長の内訳(目安 練習4割・合宿2割・試合経験値4割)');
+  log('  練習 ' + pct(sum.practice, tot) + ' / 合宿 ' + pct(sum.camp, tot) + ' / 試合経験値 ' + pct(sum.exp, tot));
+  for (const g of ['スタメン中心', '控え中心']) {
+    const list = groups[g];
+    const f = (key) => f0(avg(list.map((a) => a.growthBy[key] / a.mainKeys.length * CONFIG.ratingMultiplier)));
+    log('  ' + pad(g, 12) + ' 総合値換算: 練習 +' + f('practice') + ' / 合宿 +' + f('camp') + ' / 試合経験値 +' + f('exp')
+      + '   経験値の累計 平均 ' + f0(avg(list.map((a) => a.expTotal))));
+  }
+  const C = S.camp;
+  log('  合宿1回あたり +' + (C.points / C.events).toFixed(2) + '(能力値の合計)  大きく伸びる ' + pct(C.big, C.events)
+    + ' / 少し伸びる ' + pct(C.small, C.events) + ' / 変化なし ' + pct(C.none, C.events));
+  log('  練習試合: ' + S.practiceGames.played + '試合 勝率 ' + pct(S.practiceGames.won, S.practiceGames.played));
+  if (tot) {
+    if (sum.exp / tot < 0.3) warn('試合経験値の割合が小さい(' + pct(sum.exp, tot) + ')。→ growth.exp.growthPerExp を上げる');
+    if (sum.exp / tot > 0.5) warn('試合経験値の割合が大きい(' + pct(sum.exp, tot) + ')。→ growth.exp.growthPerExp / capVsPractice を下げる');
+    if (sum.camp / tot < 0.12 || sum.camp / tot > 0.28) warn('合宿の割合が目安(2割)から外れています(' + pct(sum.camp, tot) + ')。→ growth.camp.points を調整');
+  }
+}
+
+// 100超の能力の寄与
+{
+  const O = S.overCap;
+  log('');
+  log('■ 100を超えた能力の寄与(夏の大会で100超の選手がいた ' + O.n + '回)');
+  if (O.n) {
+    log('  割り引かない場合との差: チームの強さ ' + f1(O.strengthDiff / O.n) + ' / 平均的な相手への勝率 ' + (O.winDiff / O.n * 100).toFixed(2) + 'ポイント'
+      + '(overCapWeight ' + CONFIG.overCapWeight + ')');
+    if (O.winDiff / O.n > 0.05) warn('100超の能力を割り引かないと勝率が大きく変わります。今の割引で十分か確認 → overCapWeight');
+  } else {
+    log('  該当なし');
+  }
+}
+
+// 指導力
+{
+  const L = S.leadershipByYear;
+  log('');
+  log('■ 指導力(年度末のLv)');
+  for (let i = 0; i < L.length; i += 20) log('  ' + L.slice(i, i + 20).map((v, j) => (i + j + 1) + ':' + v).join(' '));
+  const reach = (lv, arr) => { const i = arr.findIndex((v) => v >= lv); return i < 0 ? null : i + 1; };
+  // 到達年数の分布は、シードを変えて10回ぶん集める
+  const r5 = [];
+  const r10 = [];
+  const titles = { summer: [], autumn: [] };
+  for (let i = 0; i < 10; i++) {
+    const st = i === 0 ? state : runSim(seed + i);
+    r5.push(reach(5, st.stats.leadershipByYear));
+    r10.push(reach(10, st.stats.leadershipByYear));
+    for (const k of ['summer', 'autumn']) titles[k].push(st.stats.tournaments[k].champion / st.stats.tournaments[k].played);
+  }
+  const fmtReach = (arr) => arr.map((v) => (v == null ? '未到達' : v + '年')).join(' / ');
+  log('  Lv5 に到達した年(10シード): ' + fmtReach(r5));
+  log('  Lv10に到達した年(10シード): ' + fmtReach(r10));
+  // Lv別の、3年間の増加(通常の選手。入学時の指導力Lvで分ける)
+  const normal = groups['通常'];
+  const bands = [[1, 3], [4, 6], [7, 10]];
+  log('  入学時の指導力Lv別の、通常の選手の3年間の増加: ' + bands.map((b) => {
+    const list = normal.filter((a) => a.lvAtEntry >= b[0] && a.lvAtEntry <= b[1]);
+    return 'Lv' + b[0] + '-' + b[1] + ' +' + f0(avg(list.map((a) => a.rating - a.initialRating))) + '(' + list.length + '人)';
+  }).join(' / '));
+  log('  地区優勝率(10シードの平均): 夏 ' + (avg(titles.summer) * 100).toFixed(1) + '% / 秋 ' + (avg(titles.autumn) * 100).toFixed(1) + '%');
+  const done10 = r10.filter((v) => v != null);
+  if (years >= 50 && done10.length && avg(done10) < 15) warn('指導力のLv10到達が早すぎます。→ leadership.needPerLv を上げる');
+  const lvGain = bands.map((b) => avg(normal.filter((a) => a.lvAtEntry >= b[0] && a.lvAtEntry <= b[1]).map((a) => a.rating - a.initialRating)));
+  if (!Number.isNaN(lvGain[0]) && !Number.isNaN(lvGain[2]) && lvGain[2] - lvGain[0] > 60) warn('指導力の効果が大きすぎます。→ leadership.monthlyMultMax / campBigBonusMax を下げる');
+  for (const k of ['summer', 'autumn']) {
+    const r = avg(titles[k]);
+    const name = CONFIG.tournaments[k].name;
+    if (r < 0.08) warn(name + 'の優勝率が低い(' + (r * 100).toFixed(1) + '%)。→ tournaments.' + k + '.oppBase を下げる');
+    if (r > 0.25) warn(name + 'の優勝率が高い(' + (r * 100).toFixed(1) + '%)。→ tournaments.' + k + '.oppBase を上げる');
+  }
+}
+
+// 方針の見直し・操作回数
+log('');
+log('■ 操作');
+log('  在校生の方針を変更した割合: ' + pct(S.policyReview.changed, S.policyReview.reviewed) + '(見直しの対象 のべ' + S.policyReview.reviewed + '人)');
+log('  1年生の天才・転生が夏の大会でスタメン: ' + S.freshmanSpecial.starting + '人 / 在籍 ' + S.freshmanSpecial.onRoster + '人');
+log('  「次のイベントまで」で止まる回数: 1年あたり ' + (S.stops / S.years).toFixed(1) + '回(目安 6〜8回)');
+if (S.stops / S.years < 5 || S.stops / S.years > 9) warn('止まる回数が目安から外れています。→ stopKinds / autoStop.minImportance を見直す');
+
+// ---------- 部員・守備区分 ----------
 log('');
 log('■ 部員数の推移(4月の入部・コンバート後。年:部員数(新入生))');
 const R = S.rosterByYear;
@@ -69,257 +228,75 @@ for (let i = 0; i < R.length; i += 10) {
 const mem = R.map((r) => r.members);
 log('  部員数 平均 ' + f1(avg(mem)) + ' / 最小 ' + Math.min.apply(null, mem) + ' / 最大 ' + Math.max.apply(null, mem)
   + '   新入生 平均 ' + f1(avg(R.map((r) => r.newcomers))));
-log('  前年夏の強さ別の新入生の平均人数:');
-const buckets = {};
-for (const r of R) {
-  if (r.strength == null) continue;
-  const b = Math.floor(r.strength / 5) * 5;
-  (buckets[b] = buckets[b] || []).push(r.newcomers);
-}
-for (const b of Object.keys(buckets).map(Number).sort((x, y) => x - y)) {
-  log('    強さ ' + b + '〜' + (b + 4) + ' : ' + f1(avg(buckets[b])) + '人 (' + buckets[b].length + '年)');
-}
-
-// 守備区分の偏り
-log('');
-log('■ 守備区分の偏り(年度始め)');
-log('  投手0〜1人の年: コンバート前 ' + S.shortageBefore.P01 + '年 (' + pct(S.shortageBefore.P01, S.years) + ') → 後 '
-  + S.shortageAfter.P01 + '年 (' + pct(S.shortageAfter.P01, S.years) + ')');
-log('  捕手0人の年   : コンバート前 ' + S.shortageBefore.C0 + '年 (' + pct(S.shortageBefore.C0, S.years) + ') → 後 '
-  + S.shortageAfter.C0 + '年 (' + pct(S.shortageAfter.C0, S.years) + ')');
-
-// コンバート
+log('  投手0〜1人の年: コンバート前 ' + S.shortageBefore.P01 + '年 → 後 ' + S.shortageAfter.P01 + '年 / 捕手0人の年: 前 ' + S.shortageBefore.C0 + '年 → 後 ' + S.shortageAfter.C0 + '年');
 const CV = S.conversion;
-log('');
-log('■ コンバート');
-log('  提案 ' + CV.attempts + '回 / 成功 ' + CV.success + '回 (成功率 ' + pct(CV.success, CV.attempts) + ') / 野手→投手 ' + CV.fielderToPitcher + '回');
-
-// 副能力の判明
+log('  コンバート 提案 ' + CV.attempts + '回 / 成功 ' + CV.success + '回 (' + pct(CV.success, CV.attempts) + ') / 野手→投手 ' + CV.fielderToPitcher + '回');
 const SR = S.subReveal;
-log('');
-log('■ 副能力の判明');
-log('  判明した選手 ' + SR.count + '人(野手が登板 ' + SR.fielderPitched + ' / 投手が野手で出場 ' + SR.pitcherFielded + ')'
-  + '  判明した側の能力の平均 ' + f1(avg(SR.values)));
-
-// 助っ人
-log('');
-log('■ 人数割れ(助っ人加入)');
-log('  発生 ' + S.helper.years + '年 / ' + S.years + '年 (' + pct(S.helper.years, S.years) + ')  助っ人のべ ' + S.helper.total + '人');
-
-// 卒業時の能力(開始時からいた選手と助っ人は除外)
-const grads = state.alumni.filter((a) => a.origin === 'recruit');
-const groupOf = (a) => {
-  if (a.twoWay) return '二刀流';
-  if (a.reincarnation) return '転生';
-  if (a.talent === 'genius') return a.geniusBust ? '天才(不発)' : '天才(開花)';
-  return '通常';
-};
-const groups = { 通常: [], '天才(開花)': [], '天才(不発)': [], 転生: [], 二刀流: [] };
-for (const a of grads) groups[groupOf(a)].push(a);
-
-log('');
-log('■ 卒業時の最終能力(卒業生 ' + grads.length + '人。総合は本職側の平均、二刀流は両側の平均)');
-log('  区分        人数   総合平均  入学時総合  最高能力平均');
-for (const g of Object.keys(groups)) {
-  const list = groups[g];
-  const fin = avg(list.map(mainOverall));
-  const ini = avg(list.map((a) => Core.avgOf(a.initialAbilities, a.mainKeys)));
-  const mx = avg(list.map(mainMax));
-  log('  ' + (g + '        ').slice(0, 10) + String(list.length).padStart(5) + '   ' + f1(fin).padStart(6)
-    + '    ' + f1(ini).padStart(6) + '      ' + f1(mx).padStart(6));
-}
-const allOverall = grads.map(mainOverall);
-log('  全体の総合平均: ' + f1(avg(allOverall)));
+log('  副能力が判明 ' + SR.count + '人(野手が登板 ' + SR.fielderPitched + ' / 投手が野手で出場 ' + SR.pitcherFielded + ')');
+log('  助っ人の加入 ' + S.helper.years + '年 / ' + S.years + '年 (' + pct(S.helper.years, S.years) + ')');
+if (S.helper.years / S.years > 0.3) warn('助っ人の加入が多すぎます。→ newcomers.base を上げる / strengthPivot を下げる');
+if (avg(mem) > CONFIG.newcomers.rosterCap * 0.95) warn('部員数がほぼ常に上限です。→ newcomers.strengthPivot を上げる');
 
 // 二刀流
 log('');
 log('■ 二刀流');
 if (groups['二刀流'].length) {
   for (const a of groups['二刀流']) {
-    log('  ' + a.name + ' 投手系 ' + Core.avgOf(a.finalAbilities, Core.PITCH_KEYS) + ' / 野手系 '
-      + Core.avgOf(a.finalAbilities, Core.BAT_KEYS) + ' / 方針 ' + a.policyLabel + ' → ' + a.career);
+    const r = Core.ratingSides(a);
+    log('  ' + a.name + ' 投手 ' + r.pitch + ' / 野手 ' + r.bat + '(入学時 ' + a.initialRating + ')方針 ' + a.policyLabel + ' → ' + a.career);
   }
 } else {
   log('  この期間の卒業生に二刀流はいませんでした。');
 }
-const PS = S.pitcherSlot;
-log('  夏の大会のエース枠の強さへの寄与: 二刀流 ' + f1(avg(PS.twoWay)) + '(' + PS.twoWay.length + '回) / 通常の投手 '
-  + f1(avg(PS.normal)) + '(' + PS.normal.length + '回)');
-// 出現が稀なので、同じ条件で生成した選手どうしでも比べる
+
+// 簡易成績
 {
-  const rng = new Core.Rng(seed);
-  const N = 2000;
-  const cmp = { twoWay: [], normal: [] };
-  for (const tw of [true, false]) {
-    for (let i = 0; i < N; i++) {
-      const p = Core.createPlayer(rng, { id: i, year: 1, forceTwoWay: tw, position: 'P' });
-      p.twoWayRevealed = true;
-      const slots = [{ pos: 'P', player: p, apt: Core.effectiveAptitude(p, 'P') }];
-      cmp[tw ? 'twoWay' : 'normal'].push(Core.evaluateLineup(slots).pitcherSlotValue);
-    }
-  }
-  log('  入学時の比較(各' + N + '人を生成): エース枠の寄与 二刀流 ' + f1(avg(cmp.twoWay)) + ' / 通常の投手 ' + f1(avg(cmp.normal)));
-}
-
-// 能力ごとの平均(本職側)
-log('');
-log('■ 本職側の能力の卒業時平均(入学時 → 卒業時)');
-for (const pos of Core.POSITIONS) {
-  const list = grads.filter((a) => a.position === pos && !a.twoWay);
-  const keys = Core.sideKeys(Core.sideOf(pos));
-  const parts = keys.map((k) => Core.ABILITY_LABEL[k] + ' ' + f1(avg(list.map((a) => a.initialAbilities[k])))
-    + '→' + f1(avg(list.map((a) => a.finalAbilities[k]))));
-  log('  ' + Core.POSITION_LABEL[pos] + '(' + list.length + '人): ' + parts.join(' / '));
-}
-
-// 分布
-function histogram(values, label) {
-  const b = new Array(11).fill(0);
-  for (const v of values) b[Math.min(10, Math.floor(v / 10))]++;
+  const B = S.batting;
+  const teamAvg = B.ab ? B.h / B.ab : NaN;
+  const minAB = CONFIG.stats.minAtBatsForAverage;
+  const career = (a) => a.stats.career;
+  const hitters = state.alumni.filter((a) => !a.helper && career(a).ab >= minAB);
+  const avgs = hitters.map((a) => Core.battingAverage(career(a)));
+  const fmt3 = (v) => (Number.isNaN(v) ? '-' : v.toFixed(3).replace(/^0/, ''));
   log('');
-  log('■ ' + label + 'の分布');
-  const max = Math.max.apply(null, b);
-  for (let i = 0; i <= 10; i++) {
-    if (!b[i]) continue;
-    const range = i === 10 ? '   100' : String(i * 10).padStart(3) + '-' + String(i * 10 + 9).padStart(2);
-    log('  ' + range + ' : ' + String(b[i]).padStart(4) + ' ' + '#'.repeat(Math.max(1, Math.round(b[i] / max * 40))));
-  }
+  log('■ 簡易成績(大会のみ)');
+  log('  チーム打率 ' + fmt3(teamAvg) + '  通算' + minAB + '打数以上 ' + hitters.length + '人: 平均 ' + fmt3(avg(avgs))
+    + ' / 最大 ' + fmt3(avgs.length ? Math.max.apply(null, avgs) : NaN) + ' / .300以上 ' + pct(avgs.filter((v) => v >= 0.3).length, avgs.length));
+  if (teamAvg < 0.23) warn('チーム打率が低すぎます(' + fmt3(teamAvg) + ')。→ stats.hit.base を上げる / stats.hit.pivot を下げる');
+  if (teamAvg > 0.28) warn('チーム打率が高すぎます(' + fmt3(teamAvg) + ')。→ stats.hit.base を下げる / stats.hit.pivot を上げる');
 }
-histogram(allOverall, '卒業時の総合');
-const maxVals = grads.map(mainMax);
-histogram(maxVals, '卒業時の最高能力');
-const maxed = maxVals.filter((v) => v >= 100).length;
-log('  最高能力が100に達した卒業生: ' + maxed + '人 (' + pct(maxed, grads.length) + ')');
 
 // 進路
 log('');
 log('■ 進路');
 const careers = {};
 for (const a of grads) careers[a.career] = (careers[a.career] || 0) + 1;
-for (const path of CONFIG.career.paths) {
-  const n = careers[path.label] || 0;
-  log('  ' + path.label + ': ' + n + '人 (' + pct(n, grads.length) + ')');
-}
-
-// 成長(入学時 → 卒業時。本職側。開始時からいた選手と助っ人は除く)
-{
-  const rows = grads.map((a) => {
-    let total = 0;
-    let best = -Infinity;
-    for (const k of a.mainKeys) {
-      const d = a.finalAbilities[k] - a.initialAbilities[k];
-      total += d;
-      if (d > best) best = d;
-    }
-    // 卒業時に一番高い能力が、入学時からどれだけ伸びたか
-    const topKey = a.mainKeys.reduce((x, k) => (a.finalAbilities[k] > a.finalAbilities[x] ? k : x), a.mainKeys[0]);
-    return { g: groupOf(a), total: total, best: best, top: a.finalAbilities[topKey] - a.initialAbilities[topKey] };
-  });
-  log('');
-  log('■ 入学時 → 卒業時の増分(本職側)');
-  log('  区分        人数   能力の合計   一番伸びた項目   卒業時の最高項目');
-  for (const g of ['全体'].concat(Object.keys(groups))) {
-    const list = g === '全体' ? rows : rows.filter((r) => r.g === g);
-    if (!list.length) continue;
-    log('  ' + (g + '        ').slice(0, 10) + String(list.length).padStart(5) + '   ' + ('+' + f1(avg(list.map((r) => r.total)))).padStart(8)
-      + '       ' + ('+' + f1(avg(list.map((r) => r.best)))).padStart(7) + '          ' + ('+' + f1(avg(list.map((r) => r.top)))).padStart(7));
-  }
-  const bestAvg = avg(rows.map((r) => r.best));
-  if (bestAvg < 15) warn('3年間で一番伸びた項目の平均が小さい(+' + f1(bestAvg) + '、目安+15〜25)。→ camp.points を上げる / camp.outcomeRates.normal の big を上げる / camp.otherWeight を下げる');
-  if (bestAvg > 25) warn('3年間で一番伸びた項目の平均が大きい(+' + f1(bestAvg) + '、目安+15〜25)。→ camp.points を下げる / camp.efficiency.max を下げる');
-}
-// 合宿ごと
-{
-  const C = S.camp;
-  log('');
-  log('■ 合宿ごと(のべ ' + C.events + '人回)');
-  log('  1回あたりの増分の平均 +' + (C.points / C.events).toFixed(2)
-    + '  /  大きく伸びる ' + pct(C.big, C.events) + ' / 少し伸びる ' + pct(C.small, C.events) + ' / 変化なし ' + pct(C.none, C.events));
-}
-
-// 簡易成績
-const B = S.batting;
-const teamAvg = B.ab ? B.h / B.ab : NaN;
-const minAB = CONFIG.stats.minAtBatsForAverage;
-const careerOf = (a) => a.stats.career;
-const qualified = state.alumni.filter((a) => !a.helper && careerOf(a).ab >= minAB);
-const qual3 = qualified.filter((a) => Core.battingAverage(careerOf(a)) >= 0.3).length;
-// 分布は打数 distMinAB 以上で見る(大会だけでは通算100打数に届きにくいため)
-const distMinAB = 30;
-const hitters = state.alumni.filter((a) => !a.helper && careerOf(a).ab >= distMinAB);
-const avgs = hitters.map((a) => Core.battingAverage(careerOf(a)));
-const abs = state.alumni.filter((a) => !a.helper).map((a) => careerOf(a).ab);
-const fmt3 = (v) => (Number.isNaN(v) ? '-' : v.toFixed(3).replace(/^0/, ''));
-log('');
-log('■ 簡易成績(大会のみ)');
-log('  チーム全体の打率: ' + fmt3(teamAvg) + '(' + B.h + '安打 / ' + B.ab + '打数、' + B.games + '試合)');
-log('  卒業生の通算打数: 最大 ' + Math.max.apply(null, abs) + '  /  ' + minAB + '打数以上 ' + qualified.length + '人(うち3割打者 ' + qual3 + '人)');
-log('  通算' + distMinAB + '打数以上の卒業生 ' + hitters.length + '人: 打率 平均 ' + fmt3(avg(avgs))
-  + ' / 最大 ' + fmt3(Math.max.apply(null, avgs)) + ' / .300以上 ' + pct(avgs.filter((v) => v >= 0.3).length, avgs.length));
-{
-  const b = {};
-  for (const v of avgs) { const k = Math.floor(v * 20) / 20; b[k] = (b[k] || 0) + 1; }
-  const max = Math.max.apply(null, Object.values(b));
-  for (const k of Object.keys(b).map(Number).sort((x, y) => x - y)) {
-    log('    ' + fmt3(k) + '-' + fmt3(k + 0.049) + ' : ' + String(b[k]).padStart(4) + ' ' + '#'.repeat(Math.max(1, Math.round(b[k] / max * 30))));
-  }
-}
-const allBat = state.alumni.filter((a) => !a.helper && careerOf(a).pa > 0);
-const hrs = allBat.map((a) => careerOf(a).hr);
-const rbis = allBat.map((a) => careerOf(a).rbi);
-log('  通算本塁打(打席のある卒業生 ' + allBat.length + '人): 平均 ' + f1(avg(hrs)) + ' / 最大 ' + Math.max.apply(null, hrs));
-log('  通算打点: 平均 ' + f1(avg(rbis)) + ' / 最大 ' + Math.max.apply(null, rbis));
-const pitchers = state.alumni.filter((a) => !a.helper && careerOf(a).outs >= 27 * 3);
-const eras = pitchers.map((a) => Core.earnedRunAverage(careerOf(a)));
-log('  通算防御率(3試合以上登板 ' + pitchers.length + '人): 平均 ' + (eras.length ? avg(eras).toFixed(2) : '-'));
-log('  打順別の1試合あたり平均打席数: ' + [1, 2, 3, 4, 5, 6, 7, 8, 9]
-  .map((n) => n + '番 ' + (B.games ? (B.paByOrder[n] / B.games).toFixed(2) : '-')).join(' / '));
+log('  ' + CONFIG.career.paths.map((p) => p.label + ' ' + pct(careers[p.label] || 0, grads.length)).join(' / '));
 
 // 大会
 log('');
-log('■ 大会(簡易版。スタメン編成による強さ)');
+log('■ 大会(このシード)');
 log('  平均チーム強さ: ' + f1(S.teamStrengthSum / S.teamStrengthCount));
 for (const key of ['summer', 'autumn']) {
   const t = S.tournaments[key];
-  log('  ' + CONFIG.tournaments[key].name + ': 優勝 ' + t.champion + '/' + t.played + ' (' + pct(t.champion, t.played) + ')'
-    + '  平均勝利数 ' + f1(t.roundsWon / t.played));
-}
-log('  甲子園・スカウト・逃した魚・チャンス能力: フェーズ2以降で集計');
-
-// ---------- 調整コメント ----------
-const gRate = S.genius / S.recruits;
-if (S.recruits >= 200 && Math.abs(gRate - CONFIG.talent.geniusRate) > CONFIG.talent.geniusRate * 0.5) {
-  warn('天才の出現率が設定から大きくずれています(サンプル不足の可能性あり)。年数を増やして確認 → talent.geniusRate');
-}
-const normalAvg = avg(groups['通常'].map(mainOverall));
-const geniusAvg = avg(groups['天才(開花)'].map(mainOverall));
-if (normalAvg < 36) warn('通常選手の卒業時総合が低すぎます(' + f1(normalAvg) + ')。→ camp.points を上げる / camp.outcomeRates.normal の big を上げる');
-if (normalAvg > 65) warn('通常選手の卒業時総合が高すぎます(' + f1(normalAvg) + ')。→ camp.points を下げる / initialAbility.mean を下げる');
-if (!Number.isNaN(geniusAvg) && geniusAvg - normalAvg < 6) warn('開花した天才と通常の差が小さい(' + f1(geniusAvg - normalAvg) + ')。→ camp.geniusPointMult / outcomeRates.genius を上げる');
-if (!Number.isNaN(geniusAvg) && geniusAvg - normalAvg > 30) warn('開花した天才が強すぎる(差 ' + f1(geniusAvg - normalAvg) + ')。→ camp.geniusPointMult を下げる');
-if (maxed / grads.length > 0.15) warn('最高能力100の卒業生が多すぎます。→ camp.softCap を強める / camp.points を下げる');
-const proN = careers[CONFIG.career.paths[0].label] || 0;
-if (proN / grads.length > 0.15) warn('プロ入りが多すぎます(' + pct(proN, grads.length) + ')。→ career.paths のプロの min を上げる');
-if (proN === 0 && grads.length >= 100) warn('プロ入りが0人です。→ career.paths のプロの min を下げる');
-for (const key of ['summer', 'autumn']) {
-  const t = S.tournaments[key];
-  const r = t.champion / t.played;
-  if (r < 0.05) warn(CONFIG.tournaments[key].name + 'の優勝率が低すぎます(' + pct(t.champion, t.played) + ')。→ tournaments.' + key + '.oppBase を下げる / teamStrength の重みを見直す');
-  if (r > 0.5) warn(CONFIG.tournaments[key].name + 'の優勝率が高すぎます(' + pct(t.champion, t.played) + ')。→ tournaments.' + key + '.oppBase を上げる');
-}
-if (S.helper.years / S.years > 0.3) warn('助っ人の加入が多すぎます(' + pct(S.helper.years, S.years) + ')。→ newcomers.base / newcomers.min を上げる');
-if (avg(mem) > CONFIG.newcomers.rosterCap * 0.95) warn('部員数がほぼ常に上限です。→ newcomers.base / perStrength を下げる');
-if (S.shortageAfter.P01 / S.years > 0.2) warn('投手不足の年が多い。→ positionRates.P / positionDeficit.P を上げる');
-if (S.shortageAfter.C0 / S.years > 0.1) warn('捕手不在の年が多い。→ positionRates.C / positionDeficit.C を上げる');
-if (CV.attempts && CV.success / CV.attempts < 0.3) warn('コンバートの成功率が低い。→ conversion.successBase を上げる');
-if (S.twoWay > 0 && S.recruits >= 1000 && Math.abs(S.twoWay / S.recruits - CONFIG.talent.twoWayRate) > CONFIG.talent.twoWayRate) {
-  warn('二刀流の出現率が設定から大きくずれています。→ talent.twoWayRate');
+  log('  ' + CONFIG.tournaments[key].name + ': 優勝 ' + t.champion + '/' + t.played + ' (' + pct(t.champion, t.played) + ')  平均勝利数 ' + f1(t.roundsWon / t.played));
 }
 
-if (teamAvg < 0.23) warn('チーム打率が低すぎます(' + fmt3(teamAvg) + ')。→ stats.hit.base を上げる / stats.hit.pivot を下げる');
-if (teamAvg > 0.28) warn('チーム打率が高すぎます(' + fmt3(teamAvg) + ')。→ stats.hit.base を下げる / stats.hit.perContact を下げる');
-if (qualified.length === 0) warn('通算' + minAB + '打数に届く選手がいないため、名鑑の「3割打者」は空になります。→ stats.minAtBatsForAverage を下げる(例:30〜40。フェーズ2で試合数が増えれば戻せる)');
-if (avgs.length >= 20 && avgs.filter((v) => v >= 0.3).length / avgs.length > 0.35) warn('3割打者が多すぎます。→ stats.hit.perContact を下げる');
+// ---------- 目安との比較 ----------
+{
+  const n = avg(groups['通常'].map((a) => a.rating));
+  if (n < 250) warn('通常の選手の卒業時が低い(平均 ' + f0(n) + '、目安 250〜300)。→ growth.monthly.amount / growth.camp.points を上げる');
+  if (n > 300) warn('通常の選手の卒業時が高い(平均 ' + f0(n) + '、目安 250〜300)。→ growth.monthly.amount / growth.exp.growthPerExp を下げる');
+  const st = avg(groups['スタメン中心'].map((a) => a.rating));
+  const be = avg(groups['控え中心'].map((a) => a.rating));
+  if (!Number.isNaN(st) && !Number.isNaN(be) && st - be < 60) warn('スタメン中心と控え中心の差が小さい(' + f0(st - be) + ')。→ growth.exp.growthPerExp / capVsPractice を上げる、bench / practiceSub を下げる');
+  const ge = avg(groups['天才(開花)'].map((a) => a.rating));
+  if (ge < 420 || ge > 560) warn('天才(開花)の卒業時が目安(平均480)から外れています(' + f0(ge) + ')。→ growth.talentMult.genius');
+  const re = avg(groups['転生'].map((a) => a.rating));
+  if (re < 460 || re > 600) warn('転生の卒業時が目安(平均520)から外れています(' + f0(re) + ')。→ growth.talentMult.reincarnation');
+  if (over600 / grads.length > 0.01) warn('総合値600超が1%を超えています。→ growth.talentMult / growth.special.*.hardExp');
+}
+
 log('');
 log('# ---- 調整のヒント ----');
 if (!warnings.length) log('# 極端な数値は見つかりませんでした。');
