@@ -1,5 +1,5 @@
 // =============================================================
-// build-play.js : index.html に config.js と logic.js を埋め込んだ
+// build-play.js : index.html に config.js・benchmark.js・logic.js を埋め込んだ
 //                 単一ファイル版 play.html を作る
 //   使い方: node build-play.js
 //   config.js / logic.js / index.html を直したら、実行し直すこと。
@@ -13,7 +13,7 @@ const dir = __dirname;
 const read = (f) => fs.readFileSync(path.join(dir, f), 'utf8');
 
 let html = read('index.html');
-for (const file of ['config.js', 'logic.js']) {
+for (const file of ['config.js', 'benchmark.js', 'logic.js']) {
   const tag = '<script src="' + file + '"></script>';
   if (!html.includes(tag)) throw new Error('index.html に ' + tag + ' が見つかりません');
   // </script> が中身に含まれていると途中で閉じてしまうので念のため確認

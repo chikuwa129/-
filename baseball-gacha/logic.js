@@ -2,15 +2,21 @@
 // logic.js : ゲームロジック(DOM 非依存)
 //   - Core       : 乱数・選手生成・成長・適性・編成・記録。高校版/プロ版で共通に使う部分
 //   - HighSchool : 高校版の進行(月カレンダー、入部、コンバート、大会、卒業、指導力)
+//   - Generation : 世代の基準(benchmark.js)と比べた「同世代の上位○%」とラベル
+//   - Tuning     : 調整画面の上書き設定(config.js の値を差し替える)
+//   - Persist    : 保存・読み込み・リセット(localStorage と同じ形のオブジェクトを渡す)
+//   - Sim        : 画面なしの自動実行と集計(sim.js と調整画面の試し計算が共用)
 // ブラウザでは window.Logic、Node.js では module.exports で使う。
 // =============================================================
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('./config.js'));
+    let bench = null;
+    try { bench = require('./benchmark.js'); } catch (e) { bench = null; }
+    module.exports = factory(require('./config.js'), bench);
   } else {
-    root.Logic = factory(root.CONFIG);
+    root.Logic = factory(root.CONFIG, root.BENCHMARK || null);
   }
-})(typeof self !== 'undefined' ? self : this, function (CONFIG) {
+})(typeof self !== 'undefined' ? self : this, function (CONFIG, BENCHMARK) {
   'use strict';
 
   // ===========================================================
@@ -183,10 +189,6 @@
     }
     return ratingOfKeys(p.initialAbilities, sideKeys(sideOf(p.originalPosition || p.position)));
   }
-  function ratingLabel(r) {
-    for (const x of CONFIG.ratingLabels) if (r >= x.min) return x.label;
-    return '';
-  }
   // 旧来の「総合」(能力の平均)。内部の比較用
   function overall(p) {
     if (p.twoWay) return round1((avgOf(p.abilities, PITCH_KEYS) + avgOf(p.abilities, BAT_KEYS)) / 2);
@@ -197,12 +199,15 @@
   }
 
   // 100を超えた分を割り引いた、試合・成績用の能力値
-  let overCapWeight = CONFIG.overCapWeight;
-  function effAbility(v) { return v <= 100 ? v : 100 + (v - 100) * overCapWeight; }
+  let overCapOverride = null; // 検証用に一時的に差し替える値(null なら設定値)
+  function effAbility(v) {
+    const w = overCapOverride != null ? overCapOverride : CONFIG.overCapWeight;
+    return v <= 100 ? v : 100 + (v - 100) * w;
+  }
   function withOverCapWeight(w, fn) {
-    const prev = overCapWeight;
-    overCapWeight = w;
-    try { return fn(); } finally { overCapWeight = prev; }
+    const prev = overCapOverride;
+    overCapOverride = w;
+    try { return fn(); } finally { overCapOverride = prev; }
   }
 
   function policySetOf(p) { return isTwoWayKnown(p) ? 'twoWay' : mainSide(p); }
@@ -890,6 +895,79 @@
     return paByOrder;
   }
 
+  // ---------- 世代の基準(同世代の上位○%) ----------
+  // 世代の基準:学年×月ごとの総合値の分布(p50〜p99.9)。benchmark.js(組み込み)か、調整画面で再計算したもの
+  let benchmark = BENCHMARK;
+  let benchmarkSource = BENCHMARK ? 'builtin' : 'none';
+  function setBenchmark(b, source) {
+    benchmark = b || BENCHMARK;
+    benchmarkSource = b ? (source || 'custom') : (BENCHMARK ? 'builtin' : 'none');
+  }
+  function getBenchmark() { return benchmark; }
+  function getBenchmarkSource() { return benchmarkSource; }
+  const BENCH_POINTS = [['p50', 50], ['p90', 10], ['p97', 3], ['p99', 1], ['p999', 0.1]];
+  // 総合値 r が、分布の行 row の「上位○%」か(p50 未満は null)。分位点の間は対数で補間する
+  function topPercentOf(r, row) {
+    if (!row || r < row.p50) return null;
+    let top = null;
+    for (let i = 0; i < BENCH_POINTS.length - 1; i++) {
+      const a = BENCH_POINTS[i];
+      const b = BENCH_POINTS[i + 1];
+      const va = row[a[0]];
+      const vb = row[b[0]];
+      if (r >= va && r <= vb) {
+        const f = vb > va ? (r - va) / (vb - va) : 1;
+        top = Math.exp(Math.log(a[1]) + f * (Math.log(b[1]) - Math.log(a[1])));
+        break;
+      }
+    }
+    if (top == null) {
+      // p99.9 より上:最後の区間の傾きで外挿する
+      const v99 = row.p99;
+      const v999 = row.p999;
+      const f = v999 > v99 ? (r - v999) / (v999 - v99) : 1;
+      top = Math.max(0.001, 0.1 * Math.exp(-f * Math.log(10)));
+    }
+    return top;
+  }
+  function labelForTop(top) {
+    const L = CONFIG.labelTop;
+    if (top == null) return '';
+    if (top <= L.beyond) return '規格外';
+    if (top <= L.monster) return '怪物級';
+    if (top <= L.excellent) return '逸材';
+    if (top <= L.promising) return '有望';
+    return '';
+  }
+  function formatTop(top) {
+    if (top == null) return '';
+    return top < 0.1 ? top.toFixed(2) + '%' : top < 1 ? top.toFixed(1) + '%' : top < 10 ? top.toFixed(1) + '%' : Math.round(top) + '%';
+  }
+  // 選手の「同世代の上位○%」とラベル(表示だけに使う。勝敗や成長には影響しない)
+  //   二刀流は投手側・野手側の高い方。引退後の3年生・卒業生は 3年3月 の基準で判定する(呼ぶ側で grade=3, month=3)
+  //   フェーズ4で、他校の選手にも同じ関数を使う
+  function getGenerationRank(player, grade, month) {
+    if (!benchmark) return null;
+    const row = benchmark.rows[grade + '-' + month];
+    const r = rating(player);
+    const top = topPercentOf(r, row);
+    if (top == null) return null;
+    return { rating: r, top: top, label: labelForTop(top) };
+  }
+  // 世代の基準の作成に関わる設定のハッシュ(基準が古いかどうかの判定用)
+  function benchmarkConfigHash() {
+    const src = JSON.stringify({ rating: CONFIG.rating, growth: CONFIG.growth, statCap: CONFIG.statCap, limitBreak: CONFIG.limitBreak, coach: CONFIG.baselineCoachLv });
+    let h = 0x811c9dc5;
+    for (let i = 0; i < src.length; i++) {
+      h ^= src.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return ('00000000' + h.toString(16)).slice(-8);
+  }
+  function isBenchmarkStale() {
+    return !!benchmark && benchmark.hash !== benchmarkConfigHash();
+  }
+
   const Core = {
     Rng: Rng,
     PITCH_KEYS: PITCH_KEYS,
@@ -920,7 +998,6 @@
     ratingSides: ratingSides,
     ratingOfKeys: ratingOfKeys,
     initialRating: initialRating,
-    ratingLabel: ratingLabel,
     overall: overall,
     maxAbility: maxAbility,
     effAbility: effAbility,
@@ -973,6 +1050,19 @@
     plateAppearances: plateAppearances,
     plateAppearance: plateAppearance,
     recordGameStats: recordGameStats,
+  };
+
+  const Generation = {
+    setBenchmark: setBenchmark,
+    getBenchmark: getBenchmark,
+    getBenchmarkSource: getBenchmarkSource,
+    topPercentOf: topPercentOf,
+    labelForTop: labelForTop,
+    formatTop: formatTop,
+    getGenerationRank: getGenerationRank,
+    configHash: benchmarkConfigHash,
+    isStale: isBenchmarkStale,
+    POINTS: BENCH_POINTS,
   };
 
   // ===========================================================
@@ -1071,8 +1161,8 @@
       twoWay: 0,
       recruitRatings: [],      // { g: 区分, r: 入学時の総合値 }
       tournaments: {
-        summer: { played: 0, champion: 0, roundsWon: 0 },
-        autumn: { played: 0, champion: 0, roundsWon: 0 },
+        summer: { played: 0, champion: 0, runnerUp: 0, best4: 0, roundsWon: 0 },
+        autumn: { played: 0, champion: 0, runnerUp: 0, best4: 0, roundsWon: 0 },
       },
       teamStrengthSum: 0,
       teamStrengthCount: 0,
@@ -1105,7 +1195,7 @@
   }
 
   // ---------- 指導力 ----------
-  function leadershipNeed(lv) { return CONFIG.leadership.needPerLv * lv; }
+  function leadershipNeed(lv) { return Math.max(1, Math.ceil(CONFIG.leadership.needPerLv * lv)); }
   function leadershipMonthlyMult(lv) {
     const L = CONFIG.leadership;
     return 1 + (L.monthlyMultMax - 1) * (lv - 1) / (L.maxLv - 1);
@@ -1116,7 +1206,7 @@
   }
   function gainLeadership(state, n, reason) {
     const L = state.leadership;
-    if (L.lv >= CONFIG.leadership.maxLv || n <= 0) return;
+    if (state.fixedCoachLv || L.lv >= CONFIG.leadership.maxLv || n <= 0) return; // 世代の基準づくりでは指導力を固定
     L.exp += n;
     while (L.lv < CONFIG.leadership.maxLv && L.exp >= leadershipNeed(L.lv)) {
       L.exp -= leadershipNeed(L.lv);
@@ -1234,7 +1324,9 @@
       carryCards: [],        // 次の月のまとめに載せる結果(入学の結果など)
       monthNotices: [],
       reputation: null,
-      leadership: { lv: 1, exp: 0 },
+      leadership: { lv: opts.fixedCoachLv || 1, exp: 0 },
+      fixedCoachLv: opts.fixedCoachLv || null,
+      overrides: opts.overrides || {},   // このゲームを作ったときの上書き設定(調整画面)
       stats: emptyStats(),
     };
 
@@ -1715,8 +1807,8 @@
     } else {
       const runnerUp = wins + 1 === T.rounds;
       resultText = T.name + ' ' + (wins === 0 ? '初戦敗退' : (runnerUp ? '準優勝' : wins + '勝で敗退'));
-      if (runnerUp) gainLeadership(state, G.runnerUp, T.name + '準優勝');
-      else if (wins + 2 === T.rounds) gainLeadership(state, G.best4, T.name + 'ベスト4');
+      if (runnerUp) { st.runnerUp++; gainLeadership(state, G.runnerUp, T.name + '準優勝'); }
+      else if (wins + 2 === T.rounds) { st.best4++; gainLeadership(state, G.best4, T.name + 'ベスト4'); }
     }
     lines.splice(1, 0, { text: resultText, cls: champion ? 'special' : 'summary' });
     pushLog(state, resultText, 3);
@@ -1857,7 +1949,8 @@
   };
 
   // 1か月を進める。月のまとめ { type:'month', ... } を返す
-  function processMonth(state) {
+  //   observer(state, 月) … 検証用。その月の成長のあと(年度末の前)に呼ばれる。乱数は使わないこと
+  function processMonth(state, observer) {
     if (state.awaiting) return null;
     const c = CAL[state.month];
     const mev = {
@@ -1879,6 +1972,8 @@
       const g = runMonthlyGrowth(state, rng);
       mev.grown = g.grown;
       mev.watchLines = g.watchLines;
+      checkGenerationMilestones(state, c.month);
+      if (observer) observer(state, c.month);
       for (const t of types) if (t.kind === 'yearEnd') runEvent(t);
     });
     // 通知:重要度の高い順に上限まで
@@ -1893,6 +1988,22 @@
     return mev;
   }
 
+  // 初めて同世代の上位(怪物級以上)に入った選手に印を付ける。注目選手(★)だけ通知する
+  function checkGenerationMilestones(state, monthNum) {
+    if (!benchmark) return;
+    for (const p of state.players) {
+      if (p.helper || p.reachedMonster) continue;
+      const r = getGenerationRank(p, p.retired ? 3 : p.grade, p.retired ? 3 : monthNum);
+      if (r && r.top <= CONFIG.labelTop.monster) {
+        p.reachedMonster = true;
+        if (p.watched) {
+          addEvent(state, { player: p, importance: 3, cls: 'special',
+            text: p.name + 'が同世代の上位' + formatTop(r.top) + '(' + r.label + ')に到達した!' });
+        }
+      }
+    }
+  }
+
   // 1か月だけ進める
   function advanceMonth(state) {
     const mev = processMonth(state);
@@ -1900,10 +2011,10 @@
     return state.lastEvents;
   }
   // 次のイベント(入学・合宿・大会・年度末、または重要な通知)のある月まで進める
-  function advanceToNextEvent(state) {
+  function advanceToNextEvent(state, observer) {
     const out = [];
     while (!state.awaiting) {
-      const mev = processMonth(state);
+      const mev = processMonth(state, observer);
       out.push(mev);
       if (mev.stop) break;
     }
@@ -1948,5 +2059,365 @@
     teamStrength: (state) => calcTeamStrength(state.players),
   };
 
-  return { CONFIG: CONFIG, Core: Core, HighSchool: HighSchool };
+  // ===========================================================
+  // 調整画面の上書き設定(Tuning)
+  // ===========================================================
+  const DEFAULTS = JSON.parse(JSON.stringify(CONFIG));
+  function getPath(obj, path) {
+    return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
+  }
+  function setPath(obj, path, value) {
+    const ks = path.split('.');
+    let o = obj;
+    for (let i = 0; i < ks.length - 1; i++) o = o[ks[i]];
+    o[ks[ks.length - 1]] = value;
+  }
+  // 上書き設定 { path: 値 } を CONFIG に反映する(調整できる値だけ。指定のない値は初期値に戻す)
+  function applyOverrides(overrides) {
+    overrides = overrides || {};
+    for (const m of CONFIG.paramMeta) {
+      const v = overrides[m.path];
+      setPath(CONFIG, m.path, typeof v === 'number' && isFinite(v) ? v : getPath(DEFAULTS, m.path));
+    }
+  }
+  // 一時的に別の上書き設定で fn を実行する(試し計算用。終わったら元に戻す)
+  function withOverrides(overrides, restore, fn) {
+    applyOverrides(overrides);
+    try { return fn(); } finally { applyOverrides(restore); }
+  }
+  // 進行中のゲームに使う設定:ゲームを作ったときの上書き + 表示だけに使う値は今の上書き
+  function effectiveOverrides(gameOverrides, pending) {
+    const out = Object.assign({}, gameOverrides || {});
+    for (const m of CONFIG.paramMeta) {
+      if (!m.displayOnly) continue;
+      if (pending && pending[m.path] != null) out[m.path] = pending[m.path];
+      else delete out[m.path];
+    }
+    return out;
+  }
+  function overridesToText(overrides) {
+    return CONFIG.paramMeta.filter((m) => overrides && overrides[m.path] != null)
+      .map((m) => m.path + ' = ' + overrides[m.path]).join('\n');
+  }
+  const Tuning = {
+    DEFAULTS: DEFAULTS,
+    getPath: getPath,
+    defaultValue: (path) => getPath(DEFAULTS, path),
+    currentValue: (path) => getPath(CONFIG, path),
+    applyOverrides: applyOverrides,
+    withOverrides: withOverrides,
+    effectiveOverrides: effectiveOverrides,
+    overridesToText: overridesToText,
+  };
+
+  // ===========================================================
+  // 保存・リセット(Persist)
+  //   storage は localStorage と同じ形(getItem / setItem / removeItem / key / length)
+  // ===========================================================
+  const KEYS = {
+    save: CONFIG.storagePrefix + 'v' + CONFIG.saveVersion + '_save',
+    overrides: CONFIG.storagePrefix + 'tune_overrides',
+    benchmark: CONFIG.storagePrefix + 'tune_benchmark',
+    lastTrial: CONFIG.storagePrefix + 'tune_lastTrial',
+  };
+  function readJson(storage, key) {
+    try {
+      const raw = storage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+  function writeJson(storage, key, value) {
+    try { storage.setItem(key, JSON.stringify(value)); return true; } catch (e) { return false; }
+  }
+  function saveGame(storage, state) { return writeJson(storage, KEYS.save, state); }
+  function loadGame(storage) {
+    const s = readJson(storage, KEYS.save);
+    return s && s.version === CONFIG.saveVersion ? s : null;
+  }
+  function loadOverrides(storage) { return readJson(storage, KEYS.overrides) || {}; }
+  function saveOverrides(storage, ov) { return writeJson(storage, KEYS.overrides, ov || {}); }
+  // 新しいゲームを作る:今の上書き設定を、このゲームの設定として固定する
+  function startGame(storage, seed) {
+    const ov = loadOverrides(storage);
+    applyOverrides(ov);
+    const state = newGame({ seed: seed, overrides: ov });
+    saveGame(storage, state);
+    return state;
+  }
+  // 「同じシードでやり直す」
+  function resetSameSeed(storage, state) { return startGame(storage, state.seed); }
+  // 「新しいシードで始める」(seed を省くとランダム)
+  function resetNewSeed(storage, seed) { return startGame(storage, seed); }
+  // 「セーブを完全に消す」:このゲームの保存データ(bbgacha_ で始まるキー)をすべて消して、初期状態から
+  function wipeAll(storage, seed) {
+    const keys = [];
+    try {
+      for (let i = 0; i < storage.length; i++) {
+        const k = storage.key(i);
+        if (k && k.indexOf(CONFIG.storagePrefix) === 0) keys.push(k);
+      }
+      for (const k of keys) storage.removeItem(k);
+    } catch (e) { /* 保存できない環境 */ }
+    setBenchmark(null);
+    applyOverrides({});
+    const state = newGame({ seed: seed });
+    saveGame(storage, state);
+    return state;
+  }
+  // 起動時:?reset=1 なら全部消す。そうでなければ読み込み(なければ新規)
+  function startup(storage, search) {
+    const reset = /[?&]reset=1(&|$)/.test(search || '');
+    if (reset) return { state: wipeAll(storage), reset: true };
+    const custom = readJson(storage, KEYS.benchmark);
+    if (custom) setBenchmark(custom, 'custom');
+    const saved = loadGame(storage);
+    if (saved) {
+      applyOverrides(effectiveOverrides(saved.overrides, loadOverrides(storage)));
+      return { state: saved, reset: false };
+    }
+    return { state: startGame(storage), reset: false };
+  }
+  const Persist = {
+    KEYS: KEYS,
+    readJson: readJson,
+    writeJson: writeJson,
+    saveGame: saveGame,
+    loadGame: loadGame,
+    loadOverrides: loadOverrides,
+    saveOverrides: saveOverrides,
+    startGame: startGame,
+    resetSameSeed: resetSameSeed,
+    resetNewSeed: resetNewSeed,
+    wipeAll: wipeAll,
+    startup: startup,
+  };
+
+  // ===========================================================
+  // 自動実行と集計(Sim)。sim.js と調整画面の試し計算で共用する
+  // ===========================================================
+  // 方針の選択(auto:新入生と在校生の全員をおまかせ / balance / random)
+  function makeChooser(seed, mode) {
+    const pickRng = new Rng(seed ^ 0x9e3779b9); // ゲーム本体の乱数とは別
+    return (p) => {
+      const list = POLICIES[policySetOf(p)];
+      if (mode === 'balance') return list[list.length - 1].key;
+      if (mode === 'random') return pickRng.pick(list).key;
+      return autoPolicy(p);
+    };
+  }
+  // 1シードを1年ずつ進めるランナー。opts: { seed, years, policyMode, fixedCoachLv, observer }
+  function createSeedRunner(opts) {
+    const choose = makeChooser(opts.seed, opts.policyMode || 'auto');
+    const state = newGame({ seed: opts.seed, fixedCoachLv: opts.fixedCoachLv });
+    return {
+      state: state,
+      done: () => state.stats.years >= opts.years,
+      stepYear: () => {
+        const target = state.stats.years + 1;
+        while (state.stats.years < target) {
+          if (state.awaiting) {
+            const pol = {};
+            for (const p of state.pendingRecruits) pol[p.id] = choose(p);
+            for (const p of reviewablePlayers(state)) {
+              if ((opts.policyMode || 'auto') === 'auto' || p.needsPolicy) pol[p.id] = choose(p);
+            }
+            confirmPolicies(state, pol);
+            continue;
+          }
+          advanceToNextEvent(state, opts.observer);
+        }
+      },
+    };
+  }
+  // 自校の在校生のラベルの割合(毎月の観測)
+  function labelObserver(acc) {
+    return (state, month) => {
+      if (!benchmark) return;
+      for (const p of state.players) {
+        if (p.helper) continue;
+        const r = getGenerationRank(p, p.retired ? 3 : p.grade, p.retired ? 3 : month);
+        acc.total++;
+        if (r && r.top <= CONFIG.labelTop.promising) acc.promising++;
+        if (r && r.top <= CONFIG.labelTop.monster) acc.monster++;
+      }
+    };
+  }
+  // 複数シードの実行を、少しずつ進められる形にする(画面が固まらないように)
+  //   opts: { seeds: [..], years, policyMode }。step() を呼ぶたびに1年進む
+  function createRunner(opts) {
+    const labels = { total: 0, promising: 0, monster: 0 };
+    const runners = [];
+    let idx = 0;
+    const totalSteps = opts.seeds.length * opts.years;
+    let done = 0;
+    return {
+      labels: labels,
+      progress: () => done / totalSteps,
+      finished: () => idx >= opts.seeds.length,
+      step: () => {
+        if (idx >= opts.seeds.length) return true;
+        if (!runners[idx]) runners[idx] = createSeedRunner({ seed: opts.seeds[idx], years: opts.years, policyMode: opts.policyMode, observer: labelObserver(labels) });
+        const r = runners[idx];
+        r.stepYear();
+        done++;
+        if (r.done()) idx++;
+        return idx >= opts.seeds.length;
+      },
+      states: () => runners.map((r) => r.state),
+    };
+  }
+  function quantile(sorted, q) {
+    if (!sorted.length) return NaN;
+    return sorted[Math.min(sorted.length - 1, Math.floor(q * (sorted.length - 1)))];
+  }
+  function mean_(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : NaN; }
+  // 卒業生の区分
+  function gradGroups(grads) {
+    const starterRatio = (a) => (a.teamGames ? a.starts / a.teamGames : 0);
+    const bloom = (a) => a.talent === 'genius' && !a.geniusBust;
+    const isNormal = (a) => !a.reincarnation && !bloom(a);
+    return {
+      normal: grads.filter(isNormal),
+      starter: grads.filter((a) => isNormal(a) && starterRatio(a) >= 0.6),
+      bench: grads.filter((a) => isNormal(a) && starterRatio(a) <= 0.2),
+      genius: grads.filter((a) => bloom(a) && !a.reincarnation),
+      reinc: grads.filter((a) => a.reincarnation && !bloom(a)),
+      both: grads.filter((a) => a.reincarnation && bloom(a)),
+      twoWay: grads.filter((a) => a.twoWay),
+    };
+  }
+  // 結果の集計(目安と比べる項目)
+  function analyze(states, labels) {
+    const grads = [];
+    let years = 0;
+    let limitBreaks = 0;
+    const sum = { practice: 0, camp: 0, exp: 0 };
+    const titles = { summer: [], autumn: [] };
+    const reach = { lv5: [], lv10: [] };
+    for (const st of states) {
+      years += st.stats.years;
+      limitBreaks += st.stats.limitBreak.count;
+      for (const a of st.alumni) if (a.origin === 'recruit') grads.push(a);
+      for (const k of ['summer', 'autumn']) {
+        const t = st.stats.tournaments[k];
+        if (t.played) titles[k].push(t.champion / t.played);
+      }
+      const L = st.stats.leadershipByYear;
+      const f = (lv) => { const i = L.findIndex((v) => v >= lv); return i < 0 ? null : i + 1; };
+      reach.lv5.push(f(5));
+      reach.lv10.push(f(10));
+    }
+    for (const a of grads) for (const k of Object.keys(sum)) sum[k] += (a.growthBy && a.growthBy[k]) || 0;
+    const tot = sum.practice + sum.camp + sum.exp;
+    const g = gradGroups(grads);
+    const avgR = (list) => mean_(list.map((a) => a.rating));
+    // 指導力:Lv10 に最も早く届いたシード(強い年が続いたチーム)の、Lv5・Lv10 の到達年
+    let strong = -1;
+    reach.lv10.forEach((v, i) => { if (v != null && (strong < 0 || v < reach.lv10[strong])) strong = i; });
+    if (strong < 0) reach.lv5.forEach((v, i) => { if (v != null && (strong < 0 || v < reach.lv5[strong])) strong = i; });
+    return {
+      grads: grads.length,
+      years: years,
+      normalGrad: avgR(g.normal),
+      starterGrad: avgR(g.starter),
+      benchGrad: avgR(g.bench),
+      geniusGrad: avgR(g.genius),
+      reincGrad: avgR(g.reinc),
+      bothGrad: avgR(g.both),
+      counts: { normal: g.normal.length, starter: g.starter.length, bench: g.bench.length, genius: g.genius.length, reinc: g.reinc.length, both: g.both.length },
+      over500: grads.length ? grads.filter((a) => a.rating > 500).length / grads.length : NaN,
+      over600: grads.length ? grads.filter((a) => a.rating > 600).length / grads.length : NaN,
+      cappedShare: g.normal.length ? g.normal.filter((a) => a.cappedOut).length / g.normal.length : NaN,
+      limitBreaks: years ? limitBreaks / years * 10 : NaN,
+      sharePractice: tot ? sum.practice / tot : NaN,
+      shareCamp: tot ? sum.camp / tot : NaN,
+      shareExp: tot ? sum.exp / tot : NaN,
+      lv5Years: strong >= 0 ? reach.lv5[strong] : null,
+      lv10Years: strong >= 0 ? reach.lv10[strong] : null,
+      lvReach: reach,
+      summerTitle: mean_(titles.summer),
+      autumnTitle: mean_(titles.autumn),
+      promisingUp: labels && labels.total ? labels.promising / labels.total : NaN,
+      monsterUp: labels && labels.total ? labels.monster / labels.total : NaN,
+    };
+  }
+  // 目安との比較:✓ 範囲内 / △ 目安の±20%以内 / ✕ それ以外 / − データなし(該当する選手がいない、未到達など)
+  function judgeValue(v, t) {
+    if (v == null || Number.isNaN(v)) return '−';
+    const lo = t.min != null ? t.min : -Infinity;
+    const hi = t.max != null ? t.max : Infinity;
+    if (v >= lo && v <= hi) return '✓';
+    if (v >= lo * 0.8 && v <= hi * 1.2) return '△';
+    return '✕';
+  }
+  function judge(metrics) {
+    return Object.keys(CONFIG.targets).map((key) => {
+      const t = CONFIG.targets[key];
+      return { key: key, label: t.label, value: metrics[key], target: t, verdict: judgeValue(metrics[key], t), tune: t.tune };
+    });
+  }
+  function formatMetric(v, t) {
+    if (v == null || Number.isNaN(v)) return '-';
+    if (t && t.pct) return (v * 100).toFixed(1) + '%';
+    return Math.abs(v) >= 10 ? String(Math.round(v)) : (Math.round(v * 10) / 10).toString();
+  }
+  function formatTarget(t) {
+    const f = (v) => formatMetric(v, t);
+    if (t.min != null && t.max != null) return f(t.min) + '〜' + f(t.max);
+    if (t.max != null) return f(t.max) + '以下';
+    return f(t.min) + '以上';
+  }
+
+  // 世代の基準をつくる(標準的な学校:指導力固定・おまかせ)。step() で1年ずつ進む
+  function createBenchmarkRunner(opts) {
+    opts = Object.assign({ seeds: CONFIG.benchmarkRuns.seeds, years: CONFIG.benchmarkRuns.years, burnIn: CONFIG.benchmarkRuns.burnIn, coachLv: CONFIG.baselineCoachLv, seedBase: 1000 }, opts || {});
+    const samples = {};
+    const observer = (state, month) => {
+      if (state.stats.years < opts.burnIn) return;
+      for (const p of state.players) {
+        if (p.helper) continue;
+        const grade = p.retired ? 3 : p.grade;
+        const key = grade + '-' + month;
+        (samples[key] = samples[key] || []).push(rating(p));
+      }
+    };
+    const total = opts.seeds * opts.years;
+    let done = 0;
+    let i = 0;
+    let cur = null;
+    return {
+      progress: () => done / total,
+      finished: () => i >= opts.seeds,
+      step: () => {
+        if (i >= opts.seeds) return true;
+        if (!cur) cur = createSeedRunner({ seed: opts.seedBase + i, years: opts.years, policyMode: 'auto', fixedCoachLv: opts.coachLv, observer: observer });
+        cur.stepYear();
+        done++;
+        if (cur.done()) { i++; cur = null; }
+        return i >= opts.seeds;
+      },
+      result: () => {
+        const rows = {};
+        for (const key of Object.keys(samples)) {
+          const v = samples[key].slice().sort((a, b) => a - b);
+          rows[key] = { n: v.length, p50: quantile(v, 0.5), p90: quantile(v, 0.9), p97: quantile(v, 0.97), p99: quantile(v, 0.99), p999: quantile(v, 0.999) };
+        }
+        return { hash: benchmarkConfigHash(), runs: { seeds: opts.seeds, years: opts.years, burnIn: opts.burnIn }, coachLv: opts.coachLv, rows: rows };
+      },
+    };
+  }
+  const Sim = {
+    createSeedRunner: createSeedRunner,
+    createRunner: createRunner,
+    createBenchmarkRunner: createBenchmarkRunner,
+    analyze: analyze,
+    gradGroups: gradGroups,
+    judge: judge,
+    judgeValue: judgeValue,
+    formatMetric: formatMetric,
+    formatTarget: formatTarget,
+    quantile: quantile,
+  };
+
+  return { CONFIG: CONFIG, Core: Core, HighSchool: HighSchool, Generation: Generation, Tuning: Tuning, Persist: Persist, Sim: Sim };
 });

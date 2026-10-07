@@ -8,8 +8,10 @@
   const CONFIG = {
     // ---- 基本 ----
     schoolName: '白樺高校',        // 自校の名前(架空)
-    saveKey: 'bbgacha_save',       // localStorage のキー
-    saveVersion: 5,                // セーブデータの形式。違うバージョンのセーブは初期化する
+    // 保存キーは「ゲーム名_」で始める(リセットでまとめて消せるように)。
+    //   ゲームのセーブ:bbgacha_v{saveVersion}_save / 調整画面:bbgacha_tune_*
+    storagePrefix: 'bbgacha_',
+    saveVersion: 6,                // セーブデータの形式。違うバージョンのセーブは初期化する
     logLimit: 300,                 // 出来事ログの保存件数
 
     // ---- カレンダー(4月始まり) ----
@@ -81,12 +83,11 @@
     // 総合値 = 本職側の見える能力の平均 × ratingMultiplier(整数に丸める。上限なし)
     ratingMultiplier: 5,
     // 総合値の横に出すラベル(上から順に判定)
-    ratingLabels: [
-      { min: 400, label: '規格外' },
-      { min: 200, label: '怪物級' },
-      { min: 160, label: '逸材' },
-      { min: 120, label: '有望' },
-    ],
+    // ラベルは「世代の基準」(benchmark.js)と比べた「同世代の上位○%」で決める(表示だけに使う)
+    labelTop: { beyond: 0.1, monster: 1, excellent: 3, promising: 10 },
+    // 世代の基準の作り方(node tools/build-benchmark.js)
+    baselineCoachLv: 3,            // 標準的な学校の指導力(変化させない)
+    benchmarkRuns: { seeds: 20, years: 50, burnIn: 3 },
     // 能力の項目上限
     statCap: { normal: 100, special: 150 },     // special = 開花した天才 または 転生
     // 100を超えた分の寄与の割引(試合の勝率・チームの強さ・成績の確率)
@@ -176,18 +177,18 @@
         maxMult: 3,                // 倍率を掛け合わせた上限
         consumeRate: 0.5,          // 毎月、貯まった経験値のこの割合を成長に変換
         carryMax: 30,              // 持ち越せる経験値の上限
-        growthPerExp: 1.8,        // 消費した経験値1あたりの成長量(能力値)
+        growthPerExp: 1.9,        // 消費した経験値1あたりの成長量(能力値)
         capVsPractice: 3,          // 試合経験値による成長は、練習による成長(期待値)の最大この倍
       },
 
       // (4) 成長限界(通常の選手・開花しない天才)
       limit: {
-        mean: 405, sd: 32, min: 340, max: 470,   // 総合値換算
-        rareRate: 0.03, rareMin: 480, rareMax: 500,
+        mean: 350, sd: 30, min: 290, max: 430,   // 総合値換算
+        rareRate: 0.03, rareMin: 440, rareMax: 480,
         focusBonus: 15,            // 特化した項目の実効上限 = 平均 + focusBonus(最大100)
         jitter: 4,                 // 項目ごとの実効上限のばらつき
         zone: 14,                  // 実効上限のこの手前から成長が鈍る(能力値)
-        cappedRatio: 0.97,         // 総合値が限界のこの割合以上で「頭打ち」
+        cappedRatio: 0.94,         // 総合値が限界のこの割合以上で「頭打ち」
       },
       // 天才・転生(成長限界なし):100までは緩やかに、100を超えると強く鈍る
       special: {
@@ -201,7 +202,7 @@
     // ---- (5) 指導力 ----
     leadership: {
       maxLv: 10,
-      needPerLv: 5,                // Lv n → n+1 に必要な経験値 = needPerLv × n
+      needPerLv: 1.5,                // Lv n → n+1 に必要な経験値 = needPerLv × n(小数は切り上げ)
       gains: { champion: 3, runnerUp: 2, best4: 1, pro: 2 },
       monthlyMultMax: 1.4,         // Lv10 での月ごとの成長確率の倍率(Lv1 で 1.0)
       campBigBonusMax: 0.10,       // Lv10 での合宿「大きく伸びる」確率の加算
@@ -321,6 +322,29 @@
     },
     growthTopN: 3,
 
+    // ---- 目安(sim.js と調整画面の試し計算で、結果と比べる) ----
+    //   min / max:範囲。max だけなら上限。判定は ✓ 範囲内 / △ 目安の±20%以内 / ✕ それ以外
+    targets: {
+      normalGrad:   { min: 250, max: 300, label: '通常の卒業時の総合値(平均)', tune: 'growth.monthly.amount / growth.camp.points / growth.exp.growthPerExp' },
+      starterGrad:  { min: 330, max: 400, label: 'スタメン中心の卒業時', tune: 'growth.exp.growthPerExp / growth.exp.capVsPractice' },
+      benchGrad:    { min: 220, max: 260, label: '控え中心の卒業時', tune: 'growth.monthly.amount / growth.exp.bench / growth.exp.practiceSub' },
+      geniusGrad:   { min: 480, max: 520, label: '天才(開花)の卒業時', tune: 'growth.talentMult.genius / rating.genius' },
+      reincGrad:    { min: 520, max: 560, label: '転生の卒業時', tune: 'growth.talentMult.reincarnation / rating.reincarnation' },
+      bothGrad:     { min: 560, max: 650, label: '天才かつ転生の卒業時', tune: 'growth.talentMult.both / growth.special.both' },
+      over600:      { max: 0.01, label: '総合値600超の割合', pct: true, tune: 'growth.talentMult / growth.special.*.hardExp' },
+      cappedShare:  { min: 0.10, max: 0.20, label: '通常の3年生の頭打ちの割合', pct: true, tune: 'growth.limit.mean / growth.limit.cappedRatio' },
+      limitBreaks:  { min: 1, max: 3, label: '限界突破(10年あたり)', tune: 'limitBreak.chance / limitBreak.threshold' },
+      sharePractice: { min: 0.32, max: 0.48, label: '成長の内訳:練習', pct: true, tune: 'growth.monthly.amount' },
+      shareCamp:    { min: 0.12, max: 0.28, label: '成長の内訳:合宿', pct: true, tune: 'growth.camp.points' },
+      shareExp:     { min: 0.32, max: 0.48, label: '成長の内訳:試合経験値', pct: true, tune: 'growth.exp.growthPerExp' },
+      lv5Years:     { min: 5, max: 10, label: '指導力Lv5までの年数(Lv10が最も早いシード)', tune: 'leadership.needPerLv' },
+      lv10Years:    { min: 15, max: 30, label: '指導力Lv10までの年数(最も早いシード)', tune: 'leadership.needPerLv' },
+      summerTitle:  { min: 0.10, max: 0.20, label: '夏の地区優勝率', pct: true, tune: 'tournaments.summer.oppBase' },
+      autumnTitle:  { min: 0.10, max: 0.20, label: '秋の地区優勝率', pct: true, tune: 'tournaments.autumn.oppBase' },
+      promisingUp:  { min: 0.10, max: 0.25, label: 'ラベル:有望以上の割合(在校生)', pct: true, tune: 'labelTop / 世代の基準の再計算' },
+      monsterUp:    { min: 0.01, max: 0.04, label: 'ラベル:怪物級以上の割合(在校生)', pct: true, tune: 'labelTop / 世代の基準の再計算' },
+    },
+
     // ---- 試合 ----
     match: {
       scale: 6,
@@ -333,8 +357,8 @@
     // ---- 大会(簡易版。フェーズ2で本格的なトーナメントに置き換える) ----
     // 相手校の強さはチームの強さと同じ尺度
     tournaments: {
-      summer: { name: '夏の地区大会', rounds: 5, oppBase: 44, oppStep: 2.5, oppSd: 6 },
-      autumn: { name: '秋の地区大会', rounds: 4, oppBase: 35, oppStep: 2.5, oppSd: 6 },
+      summer: { name: '夏の地区大会', rounds: 5, oppBase: 41, oppStep: 2.5, oppSd: 6 },
+      autumn: { name: '秋の地区大会', rounds: 4, oppBase: 33, oppStep: 2.5, oppSd: 6 },
     },
     opponentNames: [
       '青葉台', '桜ヶ丘', '北斗学園', '南陵', '東雲', '西園寺学院', '若葉', '朝霧',
@@ -359,6 +383,109 @@
       helperLabel: '元の部活に戻った',
     },
   };
+
+  // ---- 調整画面に出すパラメータ(group と1行の説明) ----
+  //   path は CONFIG の中の場所(配列は .0 / .1)。displayOnly は表示だけに使う値(進行中のゲームにも即時に反映)
+  CONFIG.paramGroups = [
+    { id: 'rating', label: '初期能力の分布' },
+    { id: 'cap', label: '能力の項目上限と100超の割引' },
+    { id: 'growth', label: '成長(練習・合宿・試合経験値)' },
+    { id: 'limit', label: '成長限界と限界突破' },
+    { id: 'lead', label: '指導力' },
+    { id: 'label', label: 'ラベルと世代の基準' },
+    { id: 'strength', label: 'チームの強さ・他校の強さ' },
+    { id: 'tourney', label: '大会' },
+  ];
+  CONFIG.paramMeta = [
+    ['rating.normal.mean', 'rating', '通常の新入生の総合値の平均'],
+    ['rating.normal.sd', 'rating', '通常の新入生の総合値のばらつき'],
+    ['rating.normal.min', 'rating', '通常の新入生の総合値の下限'],
+    ['rating.normal.max', 'rating', '通常の新入生の総合値の上限(上位枠を除く)'],
+    ['rating.normal.highRate', 'rating', '通常の新入生が上位枠(120〜160)になる確率'],
+    ['rating.normal.highMin', 'rating', '上位枠の総合値の下限'],
+    ['rating.normal.highMax', 'rating', '上位枠の総合値の上限'],
+    ['rating.genius.min', 'rating', '天才の新入生の総合値の下限'],
+    ['rating.genius.max', 'rating', '天才の新入生の総合値の上限'],
+    ['rating.reincarnation.min', 'rating', '転生の新入生の総合値の下限'],
+    ['rating.reincarnation.max', 'rating', '転生の新入生の総合値の上限'],
+    ['rating.geniusReincarnationMax', 'rating', '天才かつ転生の新入生の総合値の上限'],
+    ['rating.keySd', 'rating', '項目ごとの能力のばらつき'],
+    ['statCap.normal', 'cap', '通常の選手の能力の項目上限'],
+    ['statCap.special', 'cap', '天才(開花)・転生の能力の項目上限'],
+    ['overCapWeight', 'cap', '100を超えた分の、試合・成績への寄与の割合'],
+    ['growth.monthly.chance', 'growth', '練習:1人1か月の成長確率'],
+    ['growth.monthly.amount.0', 'growth', '練習:1回の成長量の下限(能力値の合計)'],
+    ['growth.monthly.amount.1', 'growth', '練習:1回の成長量の上限(能力値の合計)'],
+    ['growth.monthly.retiredMult', 'growth', '練習:引退後の3年生の成長確率の倍率'],
+    ['growth.camp.outcomeRates.normal.big', 'growth', '合宿:通常の選手が「大きく伸びる」確率'],
+    ['growth.camp.outcomeRates.normal.small', 'growth', '合宿:通常の選手が「少し伸びる」確率'],
+    ['growth.camp.outcomeRates.genius.big', 'growth', '合宿:天才(開花)が「大きく伸びる」確率'],
+    ['growth.camp.points.big.0', 'growth', '合宿:「大きく伸びる」の成長量の下限'],
+    ['growth.camp.points.big.1', 'growth', '合宿:「大きく伸びる」の成長量の上限'],
+    ['growth.camp.points.small.0', 'growth', '合宿:「少し伸びる」の成長量の下限'],
+    ['growth.camp.points.small.1', 'growth', '合宿:「少し伸びる」の成長量の上限'],
+    ['growth.exp.starter', 'growth', '経験値:スタメンで出場した試合'],
+    ['growth.exp.bench', 'growth', '経験値:ベンチ入りのみの試合'],
+    ['growth.exp.practiceStarter', 'growth', '経験値:練習試合でスタメン'],
+    ['growth.exp.practiceSub', 'growth', '経験値:練習試合で出場した控え'],
+    ['growth.exp.winMult', 'growth', '経験値:勝った試合の倍率'],
+    ['growth.exp.maxMult', 'growth', '経験値:倍率を掛け合わせた上限'],
+    ['growth.exp.consumeRate', 'growth', '経験値:毎月、成長に変える割合'],
+    ['growth.exp.carryMax', 'growth', '経験値:持ち越せる上限'],
+    ['growth.exp.growthPerExp', 'growth', '経験値1あたりの成長量(能力値)'],
+    ['growth.exp.capVsPractice', 'growth', '経験値による成長は、練習の期待値の何倍まで'],
+    ['growth.talentMult.genius', 'growth', '天才(開花)の成長の倍率'],
+    ['growth.talentMult.reincarnation', 'growth', '転生の成長の倍率'],
+    ['growth.talentMult.both', 'growth', '天才かつ転生の成長の倍率'],
+    ['growth.otherWeight', 'growth', '特化方針で、選んでいない能力の伸びやすさ'],
+    ['growth.efficiency.slope', 'growth', '元々高い能力ほど伸びやすい度合い'],
+    ['growth.limit.mean', 'limit', '成長限界(総合値)の平均'],
+    ['growth.limit.sd', 'limit', '成長限界のばらつき'],
+    ['growth.limit.min', 'limit', '成長限界の下限'],
+    ['growth.limit.max', 'limit', '成長限界の上限(まれな枠を除く)'],
+    ['growth.limit.rareRate', 'limit', '成長限界がまれな高い枠になる確率'],
+    ['growth.limit.rareMin', 'limit', 'まれな枠の成長限界の下限'],
+    ['growth.limit.rareMax', 'limit', 'まれな枠の成長限界の上限'],
+    ['growth.limit.focusBonus', 'limit', '特化した項目の実効上限の上乗せ'],
+    ['growth.limit.zone', 'limit', '実効上限のこの手前から成長が鈍る(能力値)'],
+    ['growth.limit.cappedRatio', 'limit', '限界のこの割合以上で「頭打ち」'],
+    ['growth.special.solo.soft', 'limit', '天才・転生:100までの鈍り方'],
+    ['growth.special.solo.hardExp', 'limit', '天才・転生:100を超えてからの鈍り方'],
+    ['growth.special.both.soft', 'limit', '天才かつ転生:100までの鈍り方'],
+    ['growth.special.both.hardExp', 'limit', '天才かつ転生:100を超えてからの鈍り方'],
+    ['limitBreak.threshold', 'limit', '限界突破の対象(限界のこの割合以上)'],
+    ['limitBreak.chance', 'limit', '限界突破:毎月の確率'],
+    ['limitBreak.bigWinBonus', 'limit', '限界突破:決勝で勝った月の加算'],
+    ['limitBreak.leadershipBonus', 'limit', '限界突破:指導力が高いときの加算'],
+    ['limitBreak.gain.0', 'limit', '限界突破:限界の上昇の下限'],
+    ['limitBreak.gain.1', 'limit', '限界突破:限界の上昇の上限'],
+    ['leadership.needPerLv', 'lead', 'Lv n → n+1 の必要経験値 = この値 × n'],
+    ['leadership.monthlyMultMax', 'lead', 'Lv10での練習の成長確率の倍率'],
+    ['leadership.campBigBonusMax', 'lead', 'Lv10での合宿「大きく伸びる」の加算'],
+    ['leadership.gains.champion', 'lead', '地区大会優勝で得る経験値'],
+    ['leadership.gains.runnerUp', 'lead', '地区大会準優勝で得る経験値'],
+    ['leadership.gains.best4', 'lead', '地区大会ベスト4で得る経験値'],
+    ['leadership.gains.pro', 'lead', 'プロ入り1人で得る経験値'],
+    ['labelTop.promising', 'label', '「有望」:同世代の上位○%以内', true],
+    ['labelTop.excellent', 'label', '「逸材」:同世代の上位○%以内', true],
+    ['labelTop.monster', 'label', '「怪物級」:同世代の上位○%以内', true],
+    ['labelTop.beyond', 'label', '「規格外」:同世代の上位○%以内', true],
+    ['baselineCoachLv', 'label', '世代の基準を作るときの指導力Lv', true],
+    ['benchmarkRuns.seeds', 'label', '世代の基準:シードの数', true],
+    ['benchmarkRuns.years', 'label', '世代の基準:1シードの年数', true],
+    ['teamStrength.pitchWeight', 'strength', 'チームの強さ:投手の比重'],
+    ['teamStrength.fieldWeight', 'strength', 'チームの強さ:野手の比重'],
+    ['teamStrength.pitcherBatWeight', 'strength', 'チームの強さ:投手の打撃の比重'],
+    ['match.scale', 'strength', '強さの差がこの値で勝率約73%'],
+    ['practiceGames.oppMean', 'strength', '練習試合の相手の強さの平均'],
+    ['newcomers.strengthPivot', 'strength', '新入生の人数:基準になるチームの強さ'],
+    ['tournaments.summer.oppBase', 'tourney', '夏の地区大会:1回戦の相手の強さ'],
+    ['tournaments.summer.oppStep', 'tourney', '夏の地区大会:1回戦ごとの相手の強さの上昇'],
+    ['tournaments.summer.oppSd', 'tourney', '夏の地区大会:相手の強さのばらつき'],
+    ['tournaments.autumn.oppBase', 'tourney', '秋の地区大会:1回戦の相手の強さ'],
+    ['tournaments.autumn.oppStep', 'tourney', '秋の地区大会:1回戦ごとの相手の強さの上昇'],
+    ['tournaments.autumn.oppSd', 'tourney', '秋の地区大会:相手の強さのばらつき'],
+  ].map((x) => ({ path: x[0], group: x[1], desc: x[2], displayOnly: !!x[3] }));
 
   if (typeof module === 'object' && module.exports) module.exports = CONFIG;
   else root.CONFIG = CONFIG;

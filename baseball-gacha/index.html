@@ -124,6 +124,26 @@
   .autosel { display: flex; gap: 6px; align-items: center; font-size: 13px; }
   .autosel select { width: auto; margin: 0; padding: 6px; }
   .btn.small { padding: 10px 6px; font-size: 14px; }
+  nav button { font-size: 13px; }
+  .gen { font-size: 10px; color: var(--sub); margin-left: 3px; white-space: nowrap; }
+  .warnbox { background: #fff3cd; border: 1px solid #e6c56a; color: #7a5a00; border-radius: 8px; padding: 8px 10px; font-size: 13px; margin: 8px 0; }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal { background: #fff; border-radius: 10px; padding: 16px; max-width: 420px; width: 100%; }
+  .modal p { margin: 0 0 12px; font-size: 15px; }
+  table.tune { border-collapse: collapse; width: 100%; font-size: 12px; }
+  table.tune th, table.tune td { border-bottom: 1px dotted #ddd; padding: 3px 4px; text-align: left; vertical-align: top; }
+  table.tune td.num, table.tune th.num { text-align: right; white-space: nowrap; }
+  table.tune input { width: 5.5em; padding: 3px; font-size: 13px; border: 1px solid var(--line); border-radius: 4px; text-align: right; }
+  table.tune tr.mod td { background: #fff6dc; }
+  table.tune .desc { color: var(--sub); font-size: 11px; display: block; }
+  table.tune .path { font-family: ui-monospace, monospace; font-size: 10px; color: #999; display: block; word-break: break-all; }
+  .vd { font-weight: bold; } .vd.ok { color: var(--win); } .vd.mid { color: #b07d00; } .vd.ng { color: var(--lose); }
+  .minibtn { padding: 3px 8px; font-size: 12px; border: 1px solid var(--line); background: #fff; border-radius: 6px; }
+  .progress { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; margin: 6px 0; }
+  .progress i { display: block; height: 100%; background: var(--accent); }
+  textarea.copy { width: 100%; height: 6em; font-size: 12px; font-family: ui-monospace, monospace; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; margin: 6px 0; }
+  .row select { width: auto; margin: 0; padding: 6px; }
 </style>
 </head>
 <body>
@@ -136,12 +156,14 @@
       <button data-tab="roster">選手一覧</button>
       <button data-tab="alumni">名鑑</button>
       <button data-tab="settings">設定</button>
+      <button data-tab="tune">調整</button>
     </nav>
   </header>
   <main id="main"></main>
 </div>
 
 <script src="config.js"></script>
+<script src="benchmark.js"></script>
 <script src="logic.js"></script>
 <script>
 (function () {
@@ -153,7 +175,7 @@
       + '単一ファイル版の play.html を開いてください。</div></div>';
     return;
   }
-  const { CONFIG, Core, HighSchool } = window.Logic;
+  const { CONFIG, Core, HighSchool, Generation, Tuning, Persist, Sim } = window.Logic;
   let state = null;
   let tab = 'home';
   let alumniFilter = 'all';
@@ -163,22 +185,41 @@
   const draftPolicies = {};      // 方針の選択画面で選択中の方針
 
   // ---------- セーブ / ロード ----------
-  function save() {
-    try { localStorage.setItem(CONFIG.saveKey, JSON.stringify(state)); } catch (e) { /* 保存できなくても遊べる */ }
-  }
-  function load() {
+  // localStorage が使えない環境(一部のプレビュー)では、メモリ上の保存で代用する
+  const storage = (function () {
     try {
-      const raw = localStorage.getItem(CONFIG.saveKey);
-      if (raw) return JSON.parse(raw);
-    } catch (e) { /* 壊れたセーブは無視 */ }
-    return null;
-  }
+      const t = '__bbgacha_test__';
+      window.localStorage.setItem(t, '1');
+      window.localStorage.removeItem(t);
+      return window.localStorage;
+    } catch (e) {
+      const m = new Map();
+      return {
+        getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k),
+        key: (i) => Array.from(m.keys())[i] || null, get length() { return m.size; }, memory: true,
+      };
+    }
+  })();
+  let modal = null;              // 確認のダイアログ { text, action }
+  let trial = { running: false, progress: 0, result: null, label: '' };   // 試し計算
+  let benchJob = { running: false, progress: 0 };                          // 世代の基準の再計算
+  let copyText = null;
+  let pending = Persist.loadOverrides(storage);                            // 調整画面の上書き設定(次のゲームから)
+  function save() { Persist.saveGame(storage, state); }
   function clearDraft() { for (const k of Object.keys(draftPolicies)) delete draftPolicies[k]; }
-  function startNew(seed) {
-    state = HighSchool.newGame(seed !== '' && seed != null ? { seed: Number(seed) } : {});
+  // 画面のメモリ上の状態をすべて初期化する(リセットの後)
+  function resetUiState() {
+    tab = 'home';
+    alumniFilter = 'all';
+    autoTarget = 'new';
+    pendingWatchId = null;
+    openDetails.clear();
     clearDraft();
-    save();
+    modal = null;
+    copyText = null;
   }
+  // 進行中のゲームに使う設定(作ったときの上書き + 表示だけに使う値は今の上書き)
+  function applyGameConfig() { Tuning.applyOverrides(Tuning.effectiveOverrides(state.overrides, pending)); }
 
   // ---------- 表示ヘルパー ----------
   function esc(s) {
@@ -202,20 +243,33 @@
     }
     return abilGrid(Core.sideKeys(Core.sideOf(p.position)), abilities, base);
   }
-  // 総合値とラベル(二刀流は投手側・野手側の両方)
-  function ratingBadge(r) {
-    const label = Core.ratingLabel(r);
-    if (!label) return '';
-    const cls = r >= 400 ? ' r400' : r >= 200 ? ' r200' : '';
-    return '<span class="rlabel' + cls + '">' + label + '</span>';
+  // 同世代の上位○%(世代の基準と比べる)。卒業生・引退後の3年生は3年3月、入学前は1年4月の基準
+  function genRank(p) {
+    const isAlumni = !!p.finalAbilities;
+    const pendingNew = state.pendingRecruits.indexOf(p) >= 0;
+    const grade = isAlumni || p.retired ? 3 : pendingNew ? 1 : p.grade;
+    const month = isAlumni || p.retired ? 3 : pendingNew ? 4 : HighSchool.CALENDAR[state.month].month;
+    return Generation.getGenerationRank(p, grade, month);
+  }
+  // ラベルと「同世代 上位○%」(p50 より下は何も出さない)
+  function ratingBadge(p) {
+    const r = genRank(p);
+    if (!r) return '';
+    const cls = r.label === '規格外' ? ' r400' : r.label === '怪物級' ? ' r200' : '';
+    return (r.label ? '<span class="rlabel' + cls + '">' + r.label + '</span>' : '')
+      + '<span class="gen">同世代 上位' + Generation.formatTop(r.top) + '</span>';
   }
   function ratingHtml(p) {
     if (Core.isTwoWayKnown(p) || (p.finalAbilities && p.twoWay)) {
       const s = Core.ratingSides(p);
-      return '総合値 投<span class="rt">' + s.pitch + '</span>/打<span class="rt">' + s.bat + '</span>' + ratingBadge(Math.max(s.pitch, s.bat));
+      return '総合値 投<span class="rt">' + s.pitch + '</span>/打<span class="rt">' + s.bat + '</span>' + ratingBadge(p);
     }
     const r = p.finalAbilities ? p.rating : Core.rating(p);
-    return '総合値 <span class="rt">' + r + '</span>' + ratingBadge(r);
+    return '総合値 <span class="rt">' + r + '</span>' + ratingBadge(p);
+  }
+  function staleWarning() {
+    if (!Generation.getBenchmark()) return '<div class="warnbox">世代の基準(benchmark.js)がありません。ラベルは表示されません。</div>';
+    return Generation.isStale() ? '<div class="warnbox">⚠ 世代の基準が古い可能性があります(再計算してください。調整タブ)</div>' : '';
   }
   function posTag(pos) { return '<span class="tag ' + pos + '">' + Core.POSITION_LABEL[pos] + '</span>'; }
   function extraTags(p, isAlumni) {
@@ -410,7 +464,7 @@
       } else {
         const l = careerOf(p);
         const r = p ? Core.rating(p) : null;
-        const rCol = '<td class="num">' + (r == null ? '-' : r + ratingBadge(r)) + '</td>';
+        const rCol = '<td class="num">' + (r == null ? '-' : r + (p ? ratingBadge(p) : '')) + '</td>';
         if (isP) {
           if (s.twoWay) name += '<div class="small">' + batText(l) + '</div>';
           cols = rCol + '<td class="num" colspan="3">' + pitchText(l) + '</td>';
@@ -531,7 +585,7 @@
   }
 
   function renderHome() {
-    let html = renderMonthBand() + renderWatchChooser();
+    let html = renderMonthBand() + staleWarning() + renderWatchChooser();
     const evs = state.lastEvents || [];
     if (state.awaiting === 'policy') {
       html += renderMonths(evs);
@@ -641,7 +695,7 @@
         + ' style="display:inline-block;width:calc(100% - 32px);vertical-align:top"><summary><span class="pname">' + esc(a.name) + '</span>'
         + posTag(a.position) + talent + extraTags(a, true) + (a.cappedOut ? '<span class="capped">頭打ち</span>' : '')
         + ' <span class="small">→ ' + esc(a.career) + '</span>'
-        + '<div class="small">総合値 ' + ini + ' → <span class="rt">' + fin + '</span>' + ratingBadge(fin)
+        + '<div class="small">総合値 ' + ini + ' → <span class="rt">' + fin + '</span>' + ratingBadge(a)
         + ' <b style="color:var(--win)">(' + (fin - ini >= 0 ? '+' : '') + (fin - ini) + ')</b>'
         + (gl ? ' / 一番伸びた:' + esc(gl) : '') + '</div>'
         + '<div class="small">' + alumniStatLine(a) + '</div></summary>'
@@ -668,23 +722,229 @@
 
   function renderSettings() {
     const rv = (v) => (v === 'enrollment' ? '入学時' : '最初の合宿');
-    return '<div class="card"><h2>ゲーム情報</h2><div class="small">シード:' + state.seed
-      + '<br>転生の型の判明:' + rv(CONFIG.reincarnationReveal) + '(config.js の reincarnationReveal で切替)'
-      + '<br>二刀流の判明:' + rv(CONFIG.twoWayReveal) + '(config.js の twoWayReveal で切替)'
-      + '<br>重要な通知が出た月で止まる:' + (CONFIG.autoStop.enabled ? 'はい' : 'いいえ') + '(config.js の autoStop で切替)'
-      + '<br>方針を見直せる月:' + CONFIG.policyReviewMonths.join('月・') + '月(config.js の policyReviewMonths)'
-      + '<br>セーブは自動(このブラウザの localStorage。データ形式 v' + state.version + ')</div></div>'
-      + '<div class="card"><h2>リセット</h2><div class="small">シードを入れると同じ展開を再現できます(空欄ならランダム)。</div>'
-      + '<input type="text" id="seedInput" inputmode="numeric" placeholder="シード(任意の数字)">'
-      + '<div class="btns"><button class="btn danger" id="btnReset">セーブを消して最初から</button></div></div>';
+    return '<div class="card"><h2>ゲーム情報</h2><div class="small">現在のシード:<b>' + state.seed + '</b>'
+      + '<br>セーブのバージョン:<b>v' + state.version + '</b>(保存キー ' + esc(Persist.KEYS.save) + ')'
+      + (storage.memory ? '<br>⚠ この画面では保存が使えないため、ページを閉じると消えます' : '')
+      + '<br>このゲームの上書き設定:' + (Object.keys(state.overrides || {}).length ? Object.keys(state.overrides).length + '件(調整タブ)' : 'なし')
+      + '<br>転生の型の判明:' + rv(CONFIG.reincarnationReveal) + ' / 二刀流の判明:' + rv(CONFIG.twoWayReveal)
+      + '<br>重要な通知が出た月で止まる:' + (CONFIG.autoStop.enabled ? 'はい' : 'いいえ')
+      + ' / 方針を見直せる月:' + CONFIG.policyReviewMonths.join('月・') + '月</div></div>'
+      + '<div class="card"><h2>リセット</h2>'
+      + '<div class="small">どのリセットも、4月の入学画面から始まります。調整タブで変えた値は、ここで始めるゲームから使われます。</div>'
+      + '<div class="btns"><button class="btn sub small" id="btnResetSame">同じシードでやり直す</button></div>'
+      + '<div class="row"><input type="text" id="seedInput" inputmode="numeric" placeholder="シード(空欄ならランダム)" style="flex:1">'
+      + '<button class="btn sub small" id="btnResetNew" style="flex:0 0 auto">新しいシードで始める</button></div>'
+      + '<div class="btns"><button class="btn danger small" id="btnWipe">セーブを完全に消す</button></div>'
+      + '<div class="small">「セーブを完全に消す」は、このゲームの保存データ(調整タブの設定・試し計算の記録・再計算した基準を含む)をすべて消します。'
+      + 'URLの末尾に ?reset=1 を付けて開いても同じです。</div></div>';
+  }
+
+  // ---------- 調整タブ ----------
+  function fmtVal(v) { return typeof v === 'number' ? String(Math.round(v * 10000) / 10000) : String(v); }
+  function renderTuneParams() {
+    const mod = Object.keys(pending).length;
+    let html = '<div class="card"><h2>(1) 設定値</h2>'
+      + '<div class="small">変更は<b>次の新しいゲーム</b>から有効です(設定タブのリセットで始める)。ラベルの閾値と世代の基準の値(★)は表示だけに使うので、すぐ反映します。</div>'
+      + '<div class="row"><button class="minibtn" id="btnTuneResetAll">すべて初期値に戻す</button>'
+      + '<button class="minibtn" id="btnTuneCopy">設定をテキストでコピー</button><span class="small">変更済み ' + mod + '件</span></div>';
+    if (copyText != null) {
+      html += '<textarea class="copy" id="copyArea" readonly>' + esc(copyText || '(変更済みのパラメータはありません)') + '</textarea>'
+        + '<div class="small">コピーできない環境では、上の枠を長押し(または全選択)してコピーしてください。</div>';
+    }
+    for (const g of CONFIG.paramGroups) {
+      const list = CONFIG.paramMeta.filter((m) => m.group === g.id);
+      const n = list.filter((m) => pending[m.path] != null).length;
+      const key = 'tune-' + g.id;
+      html += '<details data-open="' + key + '"' + detailsOpen(key) + '><summary><b>' + esc(g.label) + '</b>'
+        + (n ? ' <span class="small">変更 ' + n + '件</span>' : '') + '</summary><div class="scroll"><table class="tune">'
+        + '<tr><th>名前</th><th class="num">値</th><th class="num">初期値</th><th></th></tr>'
+        + list.map((m) => {
+          const def = Tuning.defaultValue(m.path);
+          const val = pending[m.path] != null ? pending[m.path] : def;
+          const changed = pending[m.path] != null;
+          return '<tr class="' + (changed ? 'mod' : '') + '"><td>' + (changed ? '● ' : '') + esc(m.desc) + (m.displayOnly ? ' ★' : '')
+            + '<span class="path">' + esc(m.path) + '</span></td>'
+            + '<td class="num"><input type="number" step="any" data-tune="' + esc(m.path) + '" value="' + esc(fmtVal(val)) + '"></td>'
+            + '<td class="num">' + esc(fmtVal(def)) + '</td>'
+            + '<td>' + (changed ? '<button class="minibtn" data-tunereset="' + esc(m.path) + '">戻す</button>' : '') + '</td></tr>';
+        }).join('') + '</table></div></details>';
+    }
+    return html + '</div>';
+  }
+  function statsRow(list) {
+    if (!list.length) return { n: 0, avg: '-', min: '-', max: '-' };
+    const r = list.map((p) => Core.rating(p));
+    return { n: r.length, avg: Math.round(r.reduce((a, b) => a + b, 0) / r.length), min: Math.min.apply(null, r), max: Math.max.apply(null, r) };
+  }
+  function renderTuneState() {
+    const players = state.players.filter((p) => !p.helper);
+    const monthNum = HighSchool.CALENDAR[state.month].month;
+    const bench = Generation.getBenchmark();
+    let html = '<div class="card"><h2>(2) 現在の状態(' + esc(HighSchool.formatYear(state.year) + ' ' + HighSchool.monthLabel(state.month)) + ')</h2>';
+    html += '<div class="scroll"><table class="tune"><tr><th>学年</th><th class="num">人数</th><th class="num">平均</th><th class="num">最小</th><th class="num">最大</th>'
+      + '<th class="num">基準p50</th><th class="num">p90</th><th class="num">p99</th></tr>';
+    for (const g of [1, 2, 3]) {
+      const list = players.filter((p) => p.grade === g);
+      const st = statsRow(list);
+      const gm = g === 3 && list.some((p) => p.retired) ? 3 : monthNum;
+      const row = bench && bench.rows[g + '-' + (g === 3 && list.length && list.every((p) => p.retired) ? 3 : monthNum)];
+      html += '<tr><td>' + g + '年' + (gm === 3 && monthNum !== 3 ? '(引退後)' : '') + '</td><td class="num">' + st.n + '</td><td class="num">' + st.avg + '</td><td class="num">' + st.min
+        + '</td><td class="num">' + st.max + '</td><td class="num">' + (row ? row.p50 : '-') + '</td><td class="num">' + (row ? row.p90 : '-') + '</td><td class="num">' + (row ? row.p99 : '-') + '</td></tr>';
+    }
+    html += '</table></div>';
+    // ラベル別の人数と、同世代の上位10人
+    const ranked = players.map((p) => ({ p: p, r: genRank(p) })).filter((x) => x.r);
+    const cnt = { 規格外: 0, 怪物級: 0, 逸材: 0, 有望: 0 };
+    for (const x of ranked) if (cnt[x.r.label] != null) cnt[x.r.label]++;
+    html += '<div class="sublabel">ラベル別の人数(在校生 ' + players.length + '人)</div><div class="small">'
+      + Object.keys(cnt).map((k) => k + ' ' + cnt[k] + '人').join(' / ') + '</div>';
+    ranked.sort((a, b) => a.r.top - b.r.top);
+    html += '<div class="sublabel">同世代の上位(10人)</div><div class="lines">' + ranked.slice(0, 10).map((x) =>
+      '<div class="small">' + esc(x.p.name) + '(' + x.p.grade + '年・' + Core.POSITION_SHORT[x.p.position] + ')総合値 ' + Core.rating(x.p)
+      + ' → 同世代 上位' + Generation.formatTop(x.r.top) + (x.r.label ? ' ' + x.r.label : '') + '</div>').join('') + '</div>';
+    const capped = players.filter((p) => Core.isCappedOut(p)).length;
+    const over = players.filter((p) => Core.growthKeys(p).some((k) => p.abilities[k] > 100)).length;
+    const g = players.filter((p) => p.talent === 'genius').length;
+    const re = players.filter((p) => p.reincarnation).length;
+    const tw = players.filter((p) => p.twoWay).length;
+    const L = state.leadership;
+    html += '<div class="sublabel">そのほか</div><div class="small">頭打ち ' + capped + '人 / 100を超えた能力を持つ ' + over + '人'
+      + '<br>天才 ' + g + '人・転生 ' + re + '人・二刀流 ' + tw + '人(隠れた才能を含む)'
+      + '<br>指導力 Lv.' + L.lv + (L.lv < CONFIG.leadership.maxLv ? '(次のLvまで ' + L.exp + '/' + HighSchool.leadershipNeed(L.lv) + ')' : '(最大)');
+    const sum = { practice: 0, camp: 0, exp: 0 };
+    for (const x of players.concat(state.alumni)) for (const k of Object.keys(sum)) sum[k] += (x.growthBy && x.growthBy[k]) || 0;
+    const tot = sum.practice + sum.camp + sum.exp;
+    if (tot) html += '<br>これまでの成長の内訳:練習 ' + Math.round(sum.practice / tot * 100) + '% / 合宿 ' + Math.round(sum.camp / tot * 100) + '% / 試合経験値 ' + Math.round(sum.exp / tot * 100) + '%';
+    for (const k of ['summer', 'autumn']) {
+      const t = state.stats.tournaments[k];
+      html += '<br>' + CONFIG.tournaments[k].name + ':' + t.played + '回 優勝 ' + t.champion + ' / 準優勝 ' + (t.runnerUp || 0) + ' / ベスト4 ' + (t.best4 || 0);
+    }
+    return html + '</div></div>';
+  }
+  function verdictCls(v) { return v === '✓' ? 'ok' : v === '△' ? 'mid' : v === '−' ? '' : 'ng'; }
+  function renderTuneTrial() {
+    const last = Persist.readJson(storage, Persist.KEYS.lastTrial);
+    let html = '<div class="card"><h2>(3) この設定で試す</h2>'
+      + '<div class="small">調整中の設定(未保存の変更を含む)で、sim.js と同じ計算をこの画面の中で行います。進行中のゲームには影響しません。</div>'
+      + '<div class="row">年数 <select id="trialYears">' + [10, 30, 50].map((y) => '<option' + (y === 30 ? ' selected' : '') + '>' + y + '</option>').join('') + '</select>'
+      + 'シード <select id="trialSeeds"><option>1</option><option selected>3</option></select>'
+      + '<button class="btn small" id="btnTrial" style="flex:0 0 auto"' + (trial.running || benchJob.running ? ' disabled' : '') + '>この設定で試す</button></div>';
+    if (trial.running) html += '<div class="small">' + esc(trial.label) + '</div><div class="progress"><i style="width:' + Math.round(trial.progress * 100) + '%"></i></div>';
+    const res = trial.result || (last && last.current);
+    const prev = trial.result ? (last && last.previous) : (last && last.previous);
+    if (res) {
+      html += '<div class="small">結果:' + esc(res.label) + '</div><div class="scroll"><table class="tune"><tr><th>項目</th><th class="num">結果</th><th class="num">目安</th><th>判定</th><th class="num">前回との差</th></tr>'
+        + Object.keys(CONFIG.targets).map((k) => {
+          const t = CONFIG.targets[k];
+          const v = res.metrics[k];
+          const vd = Sim.judgeValue(v, t);
+          let diff = '';
+          if (prev && prev.metrics && prev.metrics[k] != null && v != null && !Number.isNaN(v)) {
+            const d = v - prev.metrics[k];
+            diff = (d > 0 ? '+' : '') + Sim.formatMetric(d, t);
+            if (Math.abs(d) < 1e-9) diff = '±0';
+          }
+          return '<tr><td>' + esc(t.label) + '</td><td class="num">' + Sim.formatMetric(v, t) + '</td><td class="num">' + esc(Sim.formatTarget(t)) + '</td>'
+            + '<td class="vd ' + verdictCls(vd) + '">' + vd + '</td><td class="num">' + diff + '</td></tr>';
+        }).join('') + '</table></div>';
+      if (prev) html += '<div class="small">前回:' + esc(prev.label) + '</div>';
+    }
+    return html + '</div>';
+  }
+  function renderTuneBench() {
+    const b = Generation.getBenchmark();
+    const src = Generation.getBenchmarkSource();
+    const stale = Tuning.withOverrides(pending, Tuning.effectiveOverrides(state.overrides, pending), () => Generation.isStale());
+    let html = '<div class="card"><h2>(4) 世代の基準</h2>'
+      + '<div class="small">使用中:' + (src === 'custom' ? '再計算した基準' : src === 'builtin' ? '組み込みの基準(benchmark.js)' : 'なし')
+      + (b ? '(' + b.runs.seeds + 'シード × ' + b.runs.years + '年、指導力Lv' + b.coachLv + '、ハッシュ ' + b.hash + ')' : '') + '</div>';
+    const staleGame = Generation.isStale();
+    if (!b) html += '<div class="warnbox">世代の基準がありません。再計算してください。</div>';
+    else if (stale) html += '<div class="warnbox">⚠ 世代の基準が古い可能性があります(調整中の設定と、基準を作ったときの設定が違います)。再計算してください。</div>';
+    else html += '<div class="small">✓ 調整中の設定と一致しています。</div>';
+    if (b && staleGame) html += '<div class="small">※ 進行中のゲームの設定とは違う基準です(ホームにも注意が出ます)。新しいゲームを始めると一致します。</div>';
+    html += '<div class="row"><button class="btn small" id="btnBench" style="flex:0 0 auto"' + (trial.running || benchJob.running ? ' disabled' : '') + '>世代の基準を再計算</button>'
+      + (src === 'custom' ? '<button class="minibtn" id="btnBenchBuiltin">組み込みの基準に戻す</button>' : '') + '</div>';
+    if (benchJob.running) html += '<div class="progress"><i style="width:' + Math.round(benchJob.progress * 100) + '%"></i></div>';
+    return html + '<div class="small">再計算には、調整中の設定を使います(' + CONFIG.benchmarkRuns.seeds + 'シード × ' + CONFIG.benchmarkRuns.years + '年)。</div></div>';
+  }
+  function renderTune() {
+    return renderTuneParams() + renderTuneState() + renderTuneTrial() + renderTuneBench();
+  }
+
+  // 少しずつ実行する(画面が固まらないように)。step() が true を返したら終わり
+  function runChunked(stepFn, onProgress, onDone) {
+    const tick = () => {
+      const t0 = Date.now();
+      let finished = false;
+      while (!finished && Date.now() - t0 < 30) finished = stepFn();
+      onProgress();
+      if (finished) onDone(); else setTimeout(tick, 0);
+    };
+    setTimeout(tick, 0);
+  }
+  function startTrial() {
+    const years = Number(document.getElementById('trialYears').value);
+    const nSeeds = Number(document.getElementById('trialSeeds').value);
+    const seeds = Array.from({ length: nSeeds }, (_, i) => 1 + i);
+    const gameOv = Tuning.effectiveOverrides(state.overrides, pending);
+    const label = years + '年 × ' + nSeeds + 'シード / 変更 ' + Object.keys(pending).length + '件';
+    let runner = null;
+    trial = { running: true, progress: 0, result: null, label: label + ' を計算中…' };
+    render();
+    runChunked(
+      () => Tuning.withOverrides(pending, gameOv, () => {
+        if (!runner) runner = Sim.createRunner({ seeds: seeds, years: years, policyMode: 'auto' });
+        return runner.step();
+      }),
+      () => { trial.progress = runner ? runner.progress() : 0; updateProgressOnly(); },
+      () => {
+        const metrics = Tuning.withOverrides(pending, gameOv, () => Sim.analyze(runner.states(), runner.labels));
+        const last = Persist.readJson(storage, Persist.KEYS.lastTrial);
+        const cur = { label: label + '(' + new Date().toLocaleString() + ')', metrics: metrics, overrides: Object.assign({}, pending) };
+        Persist.writeJson(storage, Persist.KEYS.lastTrial, { current: cur, previous: last && last.current ? last.current : null });
+        trial = { running: false, progress: 1, result: cur, label: '' };
+        render();
+      });
+  }
+  function startBenchmark() {
+    const gameOv = Tuning.effectiveOverrides(state.overrides, pending);
+    let runner = null;
+    benchJob = { running: true, progress: 0 };
+    render();
+    runChunked(
+      () => Tuning.withOverrides(pending, gameOv, () => {
+        if (!runner) runner = Sim.createBenchmarkRunner();
+        return runner.step();
+      }),
+      () => { benchJob.progress = runner ? runner.progress() : 0; updateProgressOnly(); },
+      () => {
+        const b = Tuning.withOverrides(pending, gameOv, () => runner.result());
+        Persist.writeJson(storage, Persist.KEYS.benchmark, b);
+        Generation.setBenchmark(b, 'custom');
+        benchJob = { running: false, progress: 1 };
+        render();
+      });
+  }
+  // 進捗バーだけを更新する(入力中の値を消さないように)
+  function updateProgressOnly() {
+    if (tab !== 'tune') return;
+    const bars = document.querySelectorAll('.progress i');
+    const v = trial.running ? trial.progress : benchJob.progress;
+    bars.forEach((b) => { b.style.width = Math.round(v * 100) + '%'; });
+  }
+  function renderModal() {
+    if (!modal) return '';
+    return '<div class="modal-bg"><div class="modal"><p>' + esc(modal.text) + '</p>'
+      + '<div class="btns"><button class="btn sub small" id="modalCancel">やめる</button><button class="btn danger small" id="modalOk">' + esc(modal.ok || 'はい') + '</button></div></div></div>';
   }
 
   function render() {
     renderHeader();
     document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
     const main = document.getElementById('main');
-    main.innerHTML = tab === 'home' ? renderHome() : tab === 'roster' ? renderRoster()
-      : tab === 'alumni' ? renderAlumni() : renderSettings();
+    main.innerHTML = (tab === 'home' ? renderHome() : tab === 'roster' ? renderRoster()
+      : tab === 'alumni' ? renderAlumni() : tab === 'tune' ? renderTune() : renderSettings()) + renderModal();
   }
 
   // ---------- 操作 ----------
@@ -704,6 +964,17 @@
   }, true);
   document.getElementById('main').addEventListener('change', (e) => {
     if (e.target.id === 'autoTarget') { autoTarget = e.target.value; return; }
+    if (e.target.dataset.tune) {
+      // 調整:初期値と同じなら上書きを外す
+      const path = e.target.dataset.tune;
+      const v = Number(e.target.value);
+      if (!Number.isFinite(v)) { render(); return; }
+      if (v === Tuning.defaultValue(path)) delete pending[path]; else pending[path] = v;
+      Persist.saveOverrides(storage, pending);
+      applyGameConfig(); // 表示だけに使う値は、すぐ反映
+      render();
+      return;
+    }
     if (e.target.dataset.pid) {
       draftPolicies[e.target.dataset.pid] = e.target.value;
       render();
@@ -752,19 +1023,70 @@
     } else if (id === 'btnApril') {
       HighSchool.advanceToApril(state);
       afterAdvance();
-    } else if (id === 'btnReset') {
-      if (confirm('セーブデータを消して、最初からやり直しますか?')) {
-        startNew(document.getElementById('seedInput').value.trim());
-        tab = 'home'; render();
-      }
+    } else if (id === 'btnResetSame') {
+      // 確認は画面の中に出す(プレビューなど、confirm() が使えない環境でも動くように)
+      modal = { text: '同じシード(' + state.seed + ')で、最初からやり直しますか?', ok: 'やり直す', action: () => { state = Persist.resetSameSeed(storage, state); } };
+      render();
+    } else if (id === 'btnResetNew') {
+      const v = document.getElementById('seedInput').value.trim();
+      const seed = v === '' ? null : Number(v);
+      if (v !== '' && !Number.isFinite(seed)) { modal = { text: 'シードは数字で入れてください。', ok: 'OK', action: () => {} }; render(); return; }
+      modal = { text: (seed == null ? 'ランダムなシード' : 'シード ' + seed) + 'で、新しく始めますか?', ok: '始める', action: () => { state = Persist.resetNewSeed(storage, seed); } };
+      render();
+    } else if (id === 'btnWipe') {
+      modal = { text: 'このゲームの保存データ(調整タブの設定などを含む)をすべて消して、初期状態に戻しますか?', ok: '完全に消す',
+        action: () => { state = Persist.wipeAll(storage); pending = {}; trial = { running: false, progress: 0, result: null, label: '' }; } };
+      render();
+    } else if (id === 'modalOk' && modal) {
+      const act = modal.action;
+      resetUiState();
+      act();
+      applyGameConfig();
+      save();
+      render();
+      window.scrollTo(0, 0);
+    } else if (id === 'modalCancel') {
+      modal = null; render();
+    } else if (id === 'btnTuneResetAll') {
+      pending = {};
+      Persist.saveOverrides(storage, pending);
+      applyGameConfig();
+      render();
+    } else if (ds.tunereset) {
+      delete pending[ds.tunereset];
+      Persist.saveOverrides(storage, pending);
+      applyGameConfig();
+      render();
+    } else if (id === 'btnTuneCopy') {
+      copyText = Tuning.overridesToText(pending);
+      render();
+      const ta = document.getElementById('copyArea');
+      try {
+        if (navigator.clipboard && copyText) navigator.clipboard.writeText(copyText).catch(() => {});
+        if (ta) { ta.select(); document.execCommand('copy'); }
+      } catch (err) { /* 手でコピーしてもらう */ }
+    } else if (id === 'btnTrial') {
+      startTrial();
+    } else if (id === 'btnBench') {
+      startBenchmark();
+    } else if (id === 'btnBenchBuiltin') {
+      try { storage.removeItem(Persist.KEYS.benchmark); } catch (err) { /* なし */ }
+      Generation.setBenchmark(null);
+      render();
     } else if (ds.af) {
       alumniFilter = ds.af; render();
     }
   });
 
-  // 古い形式のセーブは互換を取らずに初期化する
-  state = load();
-  if (!state || state.version !== CONFIG.saveVersion) startNew();
+  // 起動:?reset=1 なら保存データをすべて消して初期状態から。古い形式のセーブは互換を取らずに初期化する
+  const boot = Persist.startup(storage, window.location.search);
+  state = boot.state;
+  if (boot.reset) {
+    pending = {};
+    try { window.history.replaceState(null, '', window.location.pathname); } catch (e) { /* 書き換えられない環境 */ }
+  }
+  pending = Persist.loadOverrides(storage);
+  applyGameConfig();
   render();
 })();
 </script>

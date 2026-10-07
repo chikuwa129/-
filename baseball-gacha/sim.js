@@ -10,39 +10,19 @@
 'use strict';
 
 const Logic = require('./logic.js');
-const { CONFIG, Core, HighSchool } = Logic;
+const { CONFIG, Core, Generation, Sim } = Logic;
 
 const years = parseInt(process.argv[2] || '50', 10);
 const seed = parseInt(process.argv[3] || '12345', 10);
 const policyMode = process.argv[4] || 'auto';
+const SEEDS = 10; // 目安との比較・指導力の到達年・優勝率は、シードを変えて10回ぶん集計する
 
-// 1回分のシミュレーション
-function runSim(sd) {
-  const pickRng = new Core.Rng(sd ^ 0x9e3779b9); // sim 内で方針を選ぶための乱数(ゲーム本体の乱数とは別)
-  const choose = (p) => {
-    const list = Core.POLICIES[Core.policySetOf(p)];
-    if (policyMode === 'balance') return list[list.length - 1].key;
-    if (policyMode === 'random') return pickRng.pick(list).key;
-    return Core.autoPolicy(p);
-  };
-  const state = HighSchool.newGame({ seed: sd });
-  while (state.stats.years < years) {
-    if (state.awaiting) {
-      const policies = {};
-      for (const p of state.pendingRecruits) policies[p.id] = choose(p);
-      // 在校生:auto は全員を見直す(おまかせ「全員」)。それ以外は選び直しが必要な選手だけ
-      for (const p of HighSchool.reviewablePlayers(state)) {
-        if (policyMode === 'auto' || p.needsPolicy) policies[p.id] = choose(p);
-      }
-      HighSchool.confirmPolicies(state, policies);
-      continue;
-    }
-    HighSchool.advanceToNextEvent(state);
-  }
-  return state;
-}
-
-const state = runSim(seed);
+// 自動実行(調整画面の試し計算と同じ処理)。方針は auto=新入生も在校生も全員おまかせ
+const runner = Sim.createRunner({ seeds: Array.from({ length: SEEDS }, (_, i) => seed + i), years: years, policyMode: policyMode });
+while (!runner.step()) { /* 1年ずつ進める */ }
+const states = runner.states();
+const state = states[0]; // くわしい内訳は、最初のシードで表示する
+const metrics = Sim.analyze(states, runner.labels);
 
 // ---------- 集計 ----------
 const S = state.stats;
@@ -63,8 +43,24 @@ const pad = (s, n) => (String(s) + ' '.repeat(n)).slice(0, n);
 const padL = (s, n) => String(s).padStart(n);
 
 log('==============================================');
-log(' 野球ガチャ育成ゲーム 検証 (シード ' + seed + ' / ' + years + '年 / 方針 ' + policyMode + ')');
+log(' 野球ガチャ育成ゲーム 検証 (シード ' + seed + '〜' + (seed + SEEDS - 1) + ' / ' + years + '年 / 方針 ' + policyMode + ')');
 log('==============================================');
+if (!Generation.getBenchmark()) log('!! 世代の基準(benchmark.js)がありません。node tools/build-benchmark.js で作ってください');
+else if (Generation.isStale()) log('!! 世代の基準が古い可能性があります(設定のハッシュ ' + Generation.configHash() + ' / 基準 ' + Generation.getBenchmark().hash + ')。node tools/build-benchmark.js で作り直してください');
+
+// ---------- 目安との比較 ----------
+const judged = Sim.judge(metrics);
+log('');
+log('■ 目安との比較(' + SEEDS + 'シードの合計。✓ 範囲内 / △ 目安の±20%以内 / ✕ それ以外 / − データなし)');
+for (const j of judged) {
+  log('  ' + j.verdict + ' ' + pad(j.label, 26) + padL(Sim.formatMetric(j.value, j.target), 8) + '   目安 ' + Sim.formatTarget(j.target));
+}
+log('  (参考)総合値500超 ' + Sim.formatMetric(metrics.over500, { pct: true }) + ' / 卒業生 ' + metrics.grads + '人'
+  + ' / 人数 通常' + metrics.counts.normal + ' スタメン中心' + metrics.counts.starter + ' 控え中心' + metrics.counts.bench
+  + ' 天才' + metrics.counts.genius + ' 転生' + metrics.counts.reinc + ' 天才かつ転生' + metrics.counts.both);
+const fmtReach = (arr) => arr.map((v) => (v == null ? '未到達' : v + '年')).join(' / ');
+log('  指導力 Lv5 到達(シードごと): ' + fmtReach(metrics.lvReach.lv5));
+log('  指導力 Lv10到達(シードごと): ' + fmtReach(metrics.lvReach.lv10));
 
 // ---------- 新入生 ----------
 log('');
@@ -177,19 +173,6 @@ log('  100を超えた項目を持つ卒業生: ' + pct(over100, grads.length));
   log('■ 指導力(年度末のLv)');
   for (let i = 0; i < L.length; i += 20) log('  ' + L.slice(i, i + 20).map((v, j) => (i + j + 1) + ':' + v).join(' '));
   const reach = (lv, arr) => { const i = arr.findIndex((v) => v >= lv); return i < 0 ? null : i + 1; };
-  // 到達年数の分布は、シードを変えて10回ぶん集める
-  const r5 = [];
-  const r10 = [];
-  const titles = { summer: [], autumn: [] };
-  for (let i = 0; i < 10; i++) {
-    const st = i === 0 ? state : runSim(seed + i);
-    r5.push(reach(5, st.stats.leadershipByYear));
-    r10.push(reach(10, st.stats.leadershipByYear));
-    for (const k of ['summer', 'autumn']) titles[k].push(st.stats.tournaments[k].champion / st.stats.tournaments[k].played);
-  }
-  const fmtReach = (arr) => arr.map((v) => (v == null ? '未到達' : v + '年')).join(' / ');
-  log('  Lv5 に到達した年(10シード): ' + fmtReach(r5));
-  log('  Lv10に到達した年(10シード): ' + fmtReach(r10));
   // Lv別の、3年間の増加(通常の選手。入学時の指導力Lvで分ける)
   const normal = groups['通常'];
   const bands = [[1, 3], [4, 6], [7, 10]];
@@ -197,17 +180,8 @@ log('  100を超えた項目を持つ卒業生: ' + pct(over100, grads.length));
     const list = normal.filter((a) => a.lvAtEntry >= b[0] && a.lvAtEntry <= b[1]);
     return 'Lv' + b[0] + '-' + b[1] + ' +' + f0(avg(list.map((a) => a.rating - a.initialRating))) + '(' + list.length + '人)';
   }).join(' / '));
-  log('  地区優勝率(10シードの平均): 夏 ' + (avg(titles.summer) * 100).toFixed(1) + '% / 秋 ' + (avg(titles.autumn) * 100).toFixed(1) + '%');
-  const done10 = r10.filter((v) => v != null);
-  if (years >= 50 && done10.length && avg(done10) < 15) warn('指導力のLv10到達が早すぎます。→ leadership.needPerLv を上げる');
   const lvGain = bands.map((b) => avg(normal.filter((a) => a.lvAtEntry >= b[0] && a.lvAtEntry <= b[1]).map((a) => a.rating - a.initialRating)));
   if (!Number.isNaN(lvGain[0]) && !Number.isNaN(lvGain[2]) && lvGain[2] - lvGain[0] > 60) warn('指導力の効果が大きすぎます。→ leadership.monthlyMultMax / campBigBonusMax を下げる');
-  for (const k of ['summer', 'autumn']) {
-    const r = avg(titles[k]);
-    const name = CONFIG.tournaments[k].name;
-    if (r < 0.08) warn(name + 'の優勝率が低い(' + (r * 100).toFixed(1) + '%)。→ tournaments.' + k + '.oppBase を下げる');
-    if (r > 0.25) warn(name + 'の優勝率が高い(' + (r * 100).toFixed(1) + '%)。→ tournaments.' + k + '.oppBase を上げる');
-  }
 }
 
 // 方針の見直し・操作回数
@@ -282,19 +256,26 @@ for (const key of ['summer', 'autumn']) {
   log('  ' + CONFIG.tournaments[key].name + ': 優勝 ' + t.champion + '/' + t.played + ' (' + pct(t.champion, t.played) + ')  平均勝利数 ' + f1(t.roundsWon / t.played));
 }
 
-// ---------- 目安との比較 ----------
-{
-  const n = avg(groups['通常'].map((a) => a.rating));
-  if (n < 250) warn('通常の選手の卒業時が低い(平均 ' + f0(n) + '、目安 250〜300)。→ growth.monthly.amount / growth.camp.points を上げる');
-  if (n > 300) warn('通常の選手の卒業時が高い(平均 ' + f0(n) + '、目安 250〜300)。→ growth.monthly.amount / growth.exp.growthPerExp を下げる');
-  const st = avg(groups['スタメン中心'].map((a) => a.rating));
-  const be = avg(groups['控え中心'].map((a) => a.rating));
-  if (!Number.isNaN(st) && !Number.isNaN(be) && st - be < 60) warn('スタメン中心と控え中心の差が小さい(' + f0(st - be) + ')。→ growth.exp.growthPerExp / capVsPractice を上げる、bench / practiceSub を下げる');
-  const ge = avg(groups['天才(開花)'].map((a) => a.rating));
-  if (ge < 420 || ge > 560) warn('天才(開花)の卒業時が目安(平均480)から外れています(' + f0(ge) + ')。→ growth.talentMult.genius');
-  const re = avg(groups['転生'].map((a) => a.rating));
-  if (re < 460 || re > 600) warn('転生の卒業時が目安(平均520)から外れています(' + f0(re) + ')。→ growth.talentMult.reincarnation');
-  if (over600 / grads.length > 0.01) warn('総合値600超が1%を超えています。→ growth.talentMult / growth.special.*.hardExp');
+// 卒業時の「同世代の上位○%」(3年3月の基準と比べる)
+if (Generation.getBenchmark()) {
+  const all = [];
+  for (const st of states) for (const a of st.alumni) if (a.origin === 'recruit') all.push(a);
+  const tops = all.map((a) => {
+    const r = Generation.getGenerationRank(a, 3, 3);
+    return r ? r.top : 100;
+  });
+  const L = CONFIG.labelTop;
+  const bands = [['規格外(上位' + L.beyond + '%以内)', 0, L.beyond], ['怪物級(〜' + L.monster + '%)', L.beyond, L.monster],
+    ['逸材(〜' + L.excellent + '%)', L.monster, L.excellent], ['有望(〜' + L.promising + '%)', L.excellent, L.promising],
+    ['上位' + L.promising + '〜50%', L.promising, 50], ['上位50%より下', 50, 1000]];
+  log('');
+  log('■ 卒業時の「同世代の上位○%」(' + SEEDS + 'シードの卒業生 ' + all.length + '人)');
+  log('  ' + bands.map((b) => b[0] + ' ' + pct(tops.filter((t) => t > b[1] && t <= b[2]).length + (b[1] === 0 ? tops.filter((t) => t === 0).length : 0), tops.length)).join(' / '));
+}
+
+// ---------- 目安から外れた項目(✕)----------
+for (const j of judged) {
+  if (j.verdict === '✕') warn('✕ ' + j.label + ' = ' + Sim.formatMetric(j.value, j.target) + '(目安 ' + Sim.formatTarget(j.target) + ')→ ' + j.tune);
 }
 
 log('');
