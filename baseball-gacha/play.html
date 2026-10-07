@@ -186,10 +186,18 @@
   .polline .bw { font-size: 11px; color: var(--sub); }
   .undo { font-size: 12px; margin: 2px 0; }
   .ml3 div { font-size: 13px; padding: 1px 0; }
+  .pvals { display: flex; flex-wrap: wrap; gap: 0 10px; font-size: 13px; color: var(--sub); line-height: 1.5; }
+  .pvals span { white-space: nowrap; }
+  .pvals b { color: var(--ink); font-size: 14px; }
+  .pvals b.gold { color: #b8860b; }
+  .pvals .sd { font-size: 11px; color: var(--accent); font-weight: bold; }
+  .polhead { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
+  .polhead .info { flex: 1 1 0; min-width: 0; font-size: 13px; }
+  .polhead { flex-wrap: nowrap; }
   .pflex { display: flex; align-items: flex-start; gap: 2px; }
   .pflex > .star { margin-top: 5px; }
   .pflex > .grow { flex: 1; min-width: 0; }
-  .polcard select { max-width: 100%; }
+  .polhead select { width: auto; flex: 0 1 auto; max-width: 48%; margin: 0; padding: 4px; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -3800,10 +3808,15 @@
   })();
   let modal = null;              // 確認のダイアログ { text, action }
   // 表示の詳しさ(最小 / 標準 / 詳細)と、折りたたみの開閉の記憶(パネルごと)。リセットで消える
+  const UI_FORMAT = 2;   // 開閉の記憶の形式(パネルの構成を変えたら上げる。違う形式の記憶は使わない)
   let uiPrefs = loadUiPrefs();
   function loadUiPrefs() {
-    const u = Persist.readJson(storage, Persist.KEYS.ui) || {};
-    return { level: u.level || CONFIG.display.defaultLevel, open: u.open || {}, polSort: u.polSort || 'need', polFilter: u.polFilter || 'all' };
+    let u = Persist.readJson(storage, Persist.KEYS.ui) || {};
+    if (u.fmt !== UI_FORMAT) {   // 古い形式の記憶は消す
+      try { storage.removeItem(Persist.KEYS.ui); } catch (e) { /* なし */ }
+      u = {};
+    }
+    return { fmt: UI_FORMAT, level: u.level || CONFIG.display.defaultLevel, open: u.open || {}, polSort: u.polSort || 'need', polFilter: u.polFilter || 'all' };
   }
   function saveUi() { Persist.writeJson(storage, Persist.KEYS.ui, uiPrefs); }
   // 開いているか:個別に開閉した記憶 → 表示の詳しさ(詳細=全部 / 標準=panelDefaults / 最小=閉じる)→ defaultOpen
@@ -3824,7 +3837,7 @@
   }
 
   // 共通部品:能力の詳細(項目ごとの現在値・入学時からの増減・前回の見直しからの増減・横棒・印)
-  //   options:{ policy }(▲ の計算に使う方針。省くと今の方針)。二刀流は投手系と野手系を分けて出す
+  //   options:{ detail(true で補助情報つき), policy(▲ の計算に使う方針。省くと今の方針) }。二刀流は投手系と野手系を分けて出す
   function lastReviewAbilities(p) {
     if (!p.mlog) return null;
     const cur = HighSchool.monthSerial(state.year, state.month);
@@ -3835,15 +3848,27 @@
     }
     return null;
   }
+  // 既定:項目ごとの現在値を数字だけで(100超えだけ金色)。方針を選ぶのに必要なので折りたたまない
+  function statSides(p) {
+    return Core.isTwoWayKnown(p) || (p.finalAbilities && p.twoWay) ? [Core.PITCH_KEYS, Core.BAT_KEYS] : [Core.sideKeys(Core.sideOf(p.position))];
+  }
   function renderPlayerStatsCompact(p, options) {
     options = options || {};
+    if (!options.detail) {
+      const a = p.finalAbilities || p.abilities;
+      const fmt = (v) => (growthView.decimal ? Core.round1(v).toFixed(1) : String(Math.round(v)));
+      const sides = statSides(p);
+      return sides.map((keys) => '<div class="pvals">' + (sides.length > 1 ? '<span class="sd">' + (keys === Core.PITCH_KEYS ? '投' : '打') + '</span>' : '')
+        + keys.map((k) => '<span>' + Core.ABILITY_LABEL[k] + ' <b' + (a[k] > 100 ? ' class="gold"' : '') + '>' + fmt(a[k]) + '</b></span>').join('') + '</div>').join('');
+    }
+    // 詳細:入学時から・前回の見直しからの増減、最高・最低・▲・壁の印、横棒、判明している副能力
     const a = p.finalAbilities || p.abilities;
     const dec = growthView.decimal;
     const fmt = (v) => (dec ? Core.round1(v).toFixed(1) : String(Math.round(v)));
     const dlt = (v) => { const r = dec ? Core.round1(v) : Math.round(v); return r === 0 ? '±0' : (r > 0 ? '+' : '') + (dec ? r.toFixed(1) : r); };
     const prev = p.finalAbilities ? null : lastReviewAbilities(p);
     const weights = p.finalAbilities ? {} : Core.policyWeightMap(options.policy != null && options.policy !== p.policy ? Object.assign({}, p, { policy: options.policy }) : p);
-    const sides = Core.isTwoWayKnown(p) || (p.finalAbilities && p.twoWay) ? [Core.PITCH_KEYS, Core.BAT_KEYS] : [Core.sideKeys(Core.sideOf(p.position))];
+    const sides = statSides(p);
     const item = (k, keys, sub) => {
       const v = a[k];
       const vals = keys.map((x) => a[x]);
@@ -4318,29 +4343,29 @@
   function polCard(p, isNew) {
     const draft = draftPolicies[p.id];
     const changed = !isNew && draft != null && draft !== p.policy;
-    const summary = '<span class="polline"><span class="pname">' + esc(p.name) + '</span>' + posTag(p.position) + extraTags(p)
+    // 1行目:名前・守備区分・ラベル・総合値・同世代の上位%・学年・⚠ と、方針のプルダウン
+    let html = '<div class="polhead"><span class="info">' + starBtn(p) + '<span class="pname">' + esc(p.name) + '</span>' + posTag(p.position) + extraTags(p)
       + ' <span class="small">' + ratingHtml(p) + ' ・ ' + (isNew ? '新入生' : p.grade + '年') + '</span>'
-      + (Core.isCappedOut(p) ? '<span class="capped">頭打ち</span>' : '')
-      + (p.needsPolicy ? ' <span class="needpol">⚠選び直し</span>' : '')
-      + '<br><span class="bw">' + bestWorst(p) + '</span></span>';
-    let after = '';
+      + (p.needsPolicy ? ' <span class="needpol">⚠選び直し</span>' : '') + '</span>' + policySelect(p) + '</div>';
+    // 2行目以降:項目ごとの現在値(方針を選ぶのに必要なので、常に表示)
+    html += renderPlayerStatsCompact(p);
     if (isNew) {
-      after += '<div class="impress">' + esc(impression(p)) + '</div>';
+      html += '<div class="impress">' + esc(impression(p)) + '</div>';
       if (p.reincarnation && p.reincarnationRevealed) {
-        after += '<div class="reveal">……!? この新入生、ただ者ではない。<br>【' + esc(Core.reincarnationName(p.reincarnation)) + '】の転生者だ!</div>';
+        html += '<div class="reveal">……!? この新入生、ただ者ではない。<br>【' + esc(Core.reincarnationName(p.reincarnation)) + '】の転生者だ!</div>';
       }
-      if (p.twoWay && p.twoWayRevealed) after += '<div class="reveal">投げても打っても本職級……! <br>【二刀流】の素質を持っている!</div>';
+      if (p.twoWay && p.twoWayRevealed) html += '<div class="reveal">投げても打っても本職級……! <br>【二刀流】の素質を持っている!</div>';
     }
-    if (p.needsPolicy) after += '<div class="needpol">⚠ 本職が変わったため方針がバランスに戻りました。選び直してください</div>';
-    after += '<div class="row">' + starBtn(p) + policySelect(p) + '</div>';
+    if (p.needsPolicy) html += '<div class="needpol">⚠ 本職が変わったため方針がバランスに戻りました。選び直してください</div>';
     if (changed) {
-      after += '<div class="undo">変更:' + esc(policyLabelOf(p, p.policy)) + ' → <b>' + esc(policyLabelOf(p, draft)) + '</b> '
+      html += '<div class="undo">変更:' + esc(policyLabelOf(p, p.policy)) + ' → <b>' + esc(policyLabelOf(p, draft)) + '</b> '
         + '<button class="minibtn" data-undo="' + p.id + '">元に戻す</button></div>';
     }
+    // 補助情報(増減・最高/最低・▲・壁・横棒・副能力)は「詳しく」
     const pol = draft != null ? draft : p.policy;
-    return '<div class="polcard' + (changed ? ' changed' : '') + '">'
-      + renderCollapsible('pol:' + p.id, summary, () => renderPlayerStatsCompact(p, { policy: pol }),
-        { defaultOpen: !!p.needsPolicy, forceOpen: changed, after: after }) + '</div>';
+    html += renderCollapsible('pold:' + p.id, '<span class="small">増減・伸びやすい項目(▲)など</span>',
+      () => renderPlayerStatsCompact(p, { detail: true, policy: pol }) + '<div class="small">' + bestWorst(p) + (Core.isCappedOut(p) ? ' / 頭打ち' : '') + '</div>');
+    return '<div class="polcard' + (changed ? ' changed' : '') + '">' + html + '</div>';
   }
   // 在校生の並べ替えと絞り込み
   function polList() {
@@ -4360,7 +4385,7 @@
   function polControls(ids) {
     const chip = (key, label) => '<button class="chip' + (uiPrefs.polFilter === key ? ' on' : '') + '" data-polf="' + key + '">' + label + '</button>';
     const opt = (v, l) => '<option value="' + v + '"' + (uiPrefs.polSort === v ? ' selected' : '') + '>' + l + '</option>';
-    return '<div class="row"><button class="minibtn" data-polall="open" data-ids="' + ids.join(',') + '">全員の能力を開く</button>'
+    return '<div class="row"><button class="minibtn" data-polall="open" data-ids="' + ids.join(',') + '">全員の詳しくを開く</button>'
       + '<button class="minibtn" data-polall="close" data-ids="' + ids.join(',') + '">閉じる</button>'
       + '<span class="small">並べ替え</span><select id="polSort">' + opt('need', '要選び直し先頭') + opt('rating', '総合値') + opt('grade', '学年') + '</select></div>'
       + '<div class="row">' + chip('all', '全員') + chip('g3', '3年') + chip('g2', '2年') + chip('g1', '1年')
@@ -4380,11 +4405,11 @@
         + '<div class="nc">今年の入部希望者は <b>' + n + '人</b>' + (info.capped ? '(部員数の上限のため絞った)' : '') + '</div>'
         + (info.trend ? '<div class="small">今年の新入生の傾向:<b>' + esc(info.trend) + '</b></div>' : '')
         + renderCollapsible('pol-help', '<span class="small">方針の選び方</span>', () => '<div class="small">特化:◎の能力がよく伸び、他はほとんど伸びない。バランス:全体が少しずつ伸びる。'
-          + '名前の行を押すと能力の詳細(▲ は今の方針で伸びやすい項目)。総合値 = 本職側の能力の平均 × 5。'
+          + '「詳しく」を押すと増減や印が出ます(▲ は選んでいる方針で伸びやすい項目)。総合値 = 本職側の能力の平均 × 5。'
           + (info.strength != null ? '前年夏のチームの強さ ' + info.strength + '。' : '') + '</div>');
       if (!n) html += '<div class="small">今年は新入生がいません。</div>';
       const recruits = state.pendingRecruits;
-      if (n) html += '<div class="row"><button class="minibtn" data-polall="open" data-ids="' + recruits.map((p) => p.id).join(',') + '">新入生の能力を開く</button>'
+      if (n) html += '<div class="row"><button class="minibtn" data-polall="open" data-ids="' + recruits.map((p) => p.id).join(',') + '">新入生の詳しくを開く</button>'
         + '<button class="minibtn" data-polall="close" data-ids="' + recruits.map((p) => p.id).join(',') + '">閉じる</button></div>';
       html += recruits.map((p) => polCard(p, true)).join('') + '</div>';
     } else {
@@ -4551,14 +4576,14 @@
     const summary = '<span class="pname">' + esc(p.name) + '</span>' + growthLabel(p) + ' '
       + '<span class="small">' + (p.helper ? '' : p.grade + '年') + '</span>' + posTag(p.position) + extraTags(p)
       + (capped ? '<span class="capped">頭打ち</span>' : '') + (p.needsPolicy ? ' <span class="needpol">⚠</span>' : '')
-      + '<div class="small">' + ratingHtml(p) + ' / ' + statBrief(p) + '</div>';
+      + '<div class="small">' + ratingHtml(p) + ' / ' + statBrief(p) + '</div>' + renderPlayerStatsCompact(p);
     return '<div class="player pflex">' + starBtn(p) + '<div class="grow">' + renderCollapsible('p:' + p.id, summary, () => {
       let d = '<div class="small">方針:' + esc(Core.policyLabel(p)) + (p.needsPolicy ? ' <span class="needpol">⚠選び直し</span>' : '')
         + ' / 試合 ' + p.record.games + '(' + p.record.wins + '勝)'
         + (p.originalPosition !== p.position ? ' / 元:' + Core.POSITION_LABEL[p.originalPosition] : '')
         + ' / 入学時の総合値 ' + Core.initialRating(p) + (p.limitBreaks ? ' / 限界突破 ' + p.limitBreaks + '回' : '')
         + ' / 試合経験値 ' + int(p.exp) + '(累計 ' + int(p.expTotal) + ')</div>'
-        + renderPlayerStatsCompact(p) + aptLine(p);
+        + renderPlayerStatsCompact(p, { detail: true }) + aptLine(p);
       if (!Core.isSubKnown(p) && !Core.isTwoWayKnown(p)) d += '<div class="sublabel">副能力:未判明(本職でない役割で出場すると分かる)</div>';
       d += renderCollapsible('pchart:' + p.id, '<span class="small">能力の推移(グラフ)</span>', () => growthChart(p, keys))
         + renderCollapsible('pstat:' + p.id, '<span class="small">成績</span>', () => statTable(p))
@@ -4585,7 +4610,7 @@
     }
     const helpers = state.players.filter((p) => p.helper);
     if (helpers.length) html += '<div class="card"><h2>助っ人(' + helpers.length + '人)</h2>' + helpers.map(playerCard).join('') + '</div>';
-    html += '<div class="small">名前の行を押すと、能力の詳細・適性が開きます。推移・成績・履歴はその中でさらに開けます。隠れた才能と成長限界は表示されません。</div>';
+    html += '<div class="small">名前の行を押すと、増減や印のついた能力の詳細・適性が開きます。推移・成績・履歴はその中でさらに開けます。隠れた才能と成長限界は表示されません。</div>';
     return html;
   }
 
@@ -4642,7 +4667,7 @@
         + (a.origin === 'pre' ? ' / 就任時の部員' : '') + (a.helper ? ' / 助っ人' : '') + '</div>'
         + '<div class="small">チーム成績:試合 ' + a.record.games + '(' + a.record.wins + '勝)'
         + (a.record.titles.length ? ' / ' + esc(a.record.titles.join('、')) : '') + '</div>'
-        + renderPlayerStatsCompact(a)
+        + renderPlayerStatsCompact(a, { detail: true })
         + renderCollapsible('achart:' + a.id, '<span class="small">能力の推移(グラフ)</span>', () => growthChart(a, a.mainKeys))
         + renderCollapsible('astat:' + a.id, '<span class="small">成績</span>', () => statTable(a))
         + renderCollapsible('ahist:' + a.id, '<span class="small">学期ごとの能力と成長履歴</span>', () => snapTable(a.mainKeys, a.snapshots)
@@ -4972,7 +4997,7 @@
     if (ds.undo) { delete draftPolicies[ds.undo]; render(); return; }
     if (ds.polf) { uiPrefs.polFilter = ds.polf; saveUi(); render(); return; }
     if (ds.polall) {
-      for (const pid of (ds.ids || '').split(',').filter(Boolean)) uiPrefs.open['pol:' + pid] = ds.polall === 'open';
+      for (const pid of (ds.ids || '').split(',').filter(Boolean)) uiPrefs.open['pold:' + pid] = ds.polall === 'open';
       saveUi(); render(); return;
     }
     if (id === 'btnAuto') {
