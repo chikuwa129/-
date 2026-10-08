@@ -364,7 +364,7 @@
 
     // ---- 新入部員モード(hero.html / play-hero.html)。数値はすべて仮の値。育成監督モードでは使わない ----
     heroMode: {
-      saveVersion: 2,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2 に)
+      saveVersion: 3,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3)
       seedSalt: 0x4e52b1d3,         // このモード専用の乱数(引き直し・主人公の作成・物語の文面・転向と再起の抽選)
       rerollMax: 2,                 // 新入部員の一覧の引き直しの回数
       stopOnStory: true,            // 主人公の山場の物語で、自動進行を止める
@@ -382,6 +382,7 @@
       },
       rival: {
         candidateCount: 5,          // ライバルを選び直す一覧の人数
+        revealAtGraduation: true,   // 卒業のときに、ライバルの素質を明かす
         swapMonths: 2,              // 総合値の順位の入れ替わりを、物語にするまでの連続の月数
       },
       contest: {
@@ -413,6 +414,9 @@
         maxPitches: 4,              // 球種の数の上限
         pitchMax: 7,                // 1球種の変化量の上限
       },
+      // 練習試合で途中出場したときの、主人公の成績の抽選(成績用の乱数。大会の通算には含めない)
+      practiceSub: { paMin: 1, paExtraRate: 0.5, reliefInnings: 1, reliefRunRate: 0.3 },
+      watchMax: 2,                  // 気になる選手の上限(主人公とライバルは別枠)
       // 先発の投球回(このモードの成績だけ。得点・勝敗は変えない)
       stamina: {
         enabled: true,              // false で、従来どおり先発はすべて完投として記録(テスト用)
@@ -746,6 +750,12 @@
     ['heroMode.display.newPitchRate', 'hero', '総変化量が増えたとき、新しい球種を覚える確率'],
     ['heroMode.display.maxPitches', 'hero', '球種の数の上限'],
     ['heroMode.display.pitchMax', 'hero', '1球種の変化量の上限'],
+    ['heroMode.practiceSub.paMin', 'hero', '練習試合の途中出場:打席の最小数'],
+    ['heroMode.practiceSub.paExtraRate', 'hero', '練習試合の途中出場:もう1打席立つ確率'],
+    ['heroMode.practiceSub.reliefInnings', 'hero', '練習試合の途中出場:投手の登板の回数'],
+    ['heroMode.practiceSub.reliefRunRate', 'hero', '練習試合の途中出場:投手が1点取られる確率'],
+    ['heroMode.watchMax', 'hero', '気になる選手の上限(主人公とライバルは別枠)'],
+    ['heroMode.rival.revealAtGraduation', 'hero', '卒業のときに、ライバルの素質を明かす(オン/オフ)'],
     ['heroMode.stamina.enabled', 'hero', '先発の投球回をスタミナで決める(オン/オフ)'],
     ['heroMode.stamina.base', 'hero', '先発の投球回の基準(base + スタミナ ÷ perPoint)'],
     ['heroMode.stamina.perPoint', 'hero', '先発の投球回:スタミナ何ごとに1回か'],

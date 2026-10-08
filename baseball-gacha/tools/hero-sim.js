@@ -10,7 +10,7 @@
 const path = require('path');
 const Logic = require(path.join(__dirname, '..', 'logic.js'));
 const Hero = require(path.join(__dirname, '..', 'hero.js'));
-const { CONFIG, Core, Sim } = Logic;
+const { CONFIG, Core, Sim, Generation } = Logic;
 
 const N = Number(process.argv[2] || 200);
 const SEED0 = Number(process.argv[3] || 1);
@@ -26,7 +26,7 @@ function choiceFor(kind, seed) {
   return { pos: pos, type: pos === 'pitcher' ? r.pick(pt) : r.pick(bt), level: kind.level, talent: kind.talent };
 }
 function run(kind, seed) {
-  const st = Hero.newHeroGame(seed);
+  const st = Hero.newHeroGame(seed, kind.coachLv ? { coachLv: kind.coachLv } : null);
   if (kind.pick) {
     const r = new Core.Rng((seed * 40503) >>> 0);
     Hero.pickHero(st, r.pick(st.pendingRecruits).id);
@@ -37,6 +37,8 @@ function run(kind, seed) {
   }
   const h0 = Hero.heroOf(st);
   const startPos = Core.isTwoWayKnown(h0) ? 'TW' : h0.position;
+  const heroTalent = h0.talent === 'genius' && !h0.geniusBust ? 'genius' : h0.reincarnation ? 'reinc' : 'normal';
+  const lv0 = st.leadership.lv;
   const cohortYear = h0.enrolledYear;
   Hero.startPlay(st);
   let guard = 0;
@@ -49,12 +51,18 @@ function run(kind, seed) {
     rating: Core.rating(p), talent: p.talent, geniusBust: p.geniusBust, reincarnation: p.reincarnation, twoWay: p.twoWay, position: p.position,
     pitch: Core.ratingOfKeys(p.abilities, Core.PITCH_KEYS), velo: p.abilities.velocity, velo0: p.initialAbilities.velocity,
   }));
+  // 同世代の順位(4):同学年の引きの選手の、入学時(1年4月)と3年夏(3年7月)の上位%
+  const topAt = (p, ab, g, m) => { const r = Generation.getGenerationRank({ abilities: ab, initialAbilities: p.initialAbilities, position: p.originalPosition || p.position, twoWay: p.twoWay, twoWayRevealed: true }, g, m); return r ? r.top : null; };
+  const cohortTop = st.players.filter((x) => x.enrolledYear === cohortYear && x.id !== H.id && x.origin === 'recruit' && !x.helper)
+    .map((p) => ({ top0: topAt(p, p.initialAbilities, 1, 4), top1: topAt(p, p.abilities, 3, 7), r0: Core.initialRating(p), r1: Core.rating(p), g: (p.talent === 'genius' && !p.geniusBust) || !!p.reincarnation }));
   const all = H.stories;
   return {
     st: st, H: H, a: a, startPos: startPos, rivalTwoWay: !!(rv && rv.twoWay),
     finRating: a ? a.rating : null,
     finSides: a ? { pitch: Core.ratingOfKeys(a.finalAbilities, Core.PITCH_KEYS), bat: Core.ratingOfKeys(a.finalAbilities, Core.BAT_KEYS) } : null,
-    cohort: cohort,
+    cohort: cohort, cohortTop: cohortTop, heroTalent: heroTalent, lv0: lv0, lvEnd: st.leadership.lv,
+    top0: H.graduation ? H.graduation.init.top : null, top1: H.graduation ? H.graduation.fin.top : null,
+    r0: H.graduation ? H.graduation.init.rating : null, r1: H.graduation ? H.graduation.fin.rating : null,
     stopsPerYear: [1, 2, 3].map((k) => H.stopsByYear[String(cohortYear + k - 1)] || 0),
     stopsTotal: Object.keys(H.stopsByYear).reduce((x, k) => x + H.stopsByYear[k], 0),   // 卒業の画面で止まる1回を含む
     stories: all.filter((s) => s.kind !== 'quiet'),
@@ -222,4 +230,48 @@ for (const k of Object.keys(T)) {
   const vd = judge(v, t);
   log('  ' + vd + ' ' + t.label + ' ' + fmt(v, t) + '  目安 ' + tgt(t) + (vd !== '✓' && vd !== '−' ? '  → ' + t.tune : ''));
 }
+// 4. 同世代の順位の調査(測定のみ。値は変えない)
+//   上位% は小さいほど上。変化 = 3年夏の上位% − 入学時の上位%(正 = 順位が下がった)
+const q = (a, f) => { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y); const i = (b.length - 1) * f; const lo = Math.floor(i); return b[lo] + (b[Math.ceil(i)] - b[lo]) * (i - lo); };
+const BR = require(path.join(__dirname, '..', 'benchmark.js')).rows;
+const med0 = BR['1-4'].p50, med1 = BR['3-7'].p50;
+// 上位% は p50 未満で null(下位半分)。null は「50%超」として並べ、変化は両方とも上位50%以内の人だけで見る。
+// あわせて、基準の中央値に対する総合値の比(入学時 ÷ 1年4月の中央値、3年夏 ÷ 3年7月の中央値)の変化も出す(下位半分も含めて比べられる)
+const topTxt = (v) => (v >= 999 ? '50%超' : f1(v) + '%');
+const dist = (L) => {
+  const ok = L.filter((x) => x.r0 != null && x.r1 != null);
+  const t0 = ok.map((x) => (x.top0 == null ? 999 : x.top0)), t1 = ok.map((x) => (x.top1 == null ? 999 : x.top1));
+  const both = ok.filter((x) => x.top0 != null && x.top1 != null).map((x) => x.top1 - x.top0);
+  const ratio = ok.map((x) => x.r1 / med1 - x.r0 / med0);
+  const in50 = (a) => pct(a.filter((v) => v < 999).length / (a.length || 1));
+  return '上位% 中央値 ' + topTxt(q(t0, 0.5)) + '→' + topTxt(q(t1, 0.5)) + '/上位50%以内 ' + in50(t0) + '→' + in50(t1)
+    + '/上位%の変化(両時点とも50%以内 ' + both.length + '人)中央値 ' + (q(both, 0.5) >= 0 ? '+' : '') + f1(q(both, 0.5)) + '(p25 ' + f1(q(both, 0.25)) + ' / p75 ' + f1(q(both, 0.75)) + ')'
+    + '/中央値比の変化 中央値 ' + (q(ratio, 0.5) >= 0 ? '+' : '') + q(ratio, 0.5).toFixed(2) + '(p25 ' + q(ratio, 0.25).toFixed(2) + ' / p75 ' + q(ratio, 0.75).toFixed(2) + ')(' + ok.length + '人)'; };
+log('');
+log('■ 4. 同世代の順位の調査(入学時=1年4月 と 3年夏=3年7月 の上位%。変化が+なら順位が下がった)');
+const pickR = res['pick'];
+const createdR = [].concat(res['n-low'], res['n-mid'], res['n-high'], res['g-low'], res['g-mid']);
+const groups = [
+  ['引き・凡人', pickR.filter((r) => r.heroTalent === 'normal')],
+  ['引き・天才(覚醒)/転生', pickR.filter((r) => r.heroTalent !== 'normal')],
+  ['作成・凡人(控えめ〜高め)', createdR.filter((r) => r.heroTalent === 'normal')],
+  ['作成・天才(覚醒)', createdR.filter((r) => r.heroTalent === 'genius')],
+];
+for (const g of groups) log('  ' + g[0] + ':' + dist(g[1]));
+// 同じ試行の中の、主人公以外の同学年の新入生(主人公の扱いに特有かどうか)
+const coh = [].concat.apply([], res['pick'].concat(res['n-mid']).map((r) => r.cohortTop));
+log('  同学年の他の新入生・凡人:' + dist(coh.filter((c) => !c.g)));
+log('  同学年の他の新入生・天才/転生:' + dist(coh.filter((c) => c.g)));
+// 実験:監督の指導力を Lv3(世代の基準を作るときと同じ)から始める
+const lv3 = {};
+for (const k of KINDS.filter((x) => x.key === 'pick' || x.key === 'n-mid')) { lv3[k.key] = []; for (let i = 0; i < N; i++) lv3[k.key].push(run(Object.assign({}, k, { coachLv: CONFIG.baselineCoachLv }), SEED0 + i)); }
+log('  実験(指導力の初期値):世代の基準は 指導力 Lv' + CONFIG.baselineCoachLv + ' で固定して作る。新入部員モードは Lv' + mean(pickR.map((r) => r.lv0)) + ' から始まり、卒業時 平均 Lv' + f1(mean(allRuns.map((r) => r.lvEnd))));
+for (const key of ['pick', 'n-mid']) {
+  const lab = key === 'pick' ? '引き' : '作成 凡人・普通';
+  log('    ' + lab + '(凡人)Lv1開始:' + dist(res[key].filter((r) => r.heroTalent === 'normal')));
+  log('    ' + lab + '(凡人)Lv' + CONFIG.baselineCoachLv + '開始:' + dist(lv3[key].filter((r) => r.heroTalent === 'normal')));
+}
+const cohLv3 = [].concat.apply([], lv3['pick'].concat(lv3['n-mid']).map((r) => r.cohortTop));
+log('    同学年の他の新入生・凡人 Lv' + CONFIG.baselineCoachLv + '開始:' + dist(cohLv3.filter((c) => !c.g)));
+log('    卒業時の指導力 Lv1開始 平均 Lv' + f1(mean(res['pick'].concat(res['n-mid']).map((r) => r.lvEnd))) + ' / Lv' + CONFIG.baselineCoachLv + '開始 平均 Lv' + f1(mean(lv3['pick'].concat(lv3['n-mid']).map((r) => r.lvEnd))));
 console.log(out.join('\n'));

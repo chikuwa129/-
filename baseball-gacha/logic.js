@@ -1179,6 +1179,8 @@
       box.relief = hp.reliefBox;
       box.wp = hp.wp;
       box.lp = hp.lp;
+      box.wpId = hp.wpId;
+      box.lpId = hp.lpId;
       // 活躍選手の判定には、勝利投手を使う(先発が勝利投手でなければ、先発は勝ちなし)
       box.pitcher = hp.wpStarter ? { id: pit.p.id, name: pit.p.name, outs: hp.starter.outs, runs: hp.starter.runs, win: true }
         : hp.wpRelief ? { id: hp.relief.id, name: hp.relief.name, outs: hp.reliefBox.outs, runs: hp.reliefBox.runs, win: true }
@@ -1232,6 +1234,8 @@
       line: { my: my, opp: opp }, cg: ip === 9, relief: relief, reliefLine: reliefLine,
       starter: { id: pit.p.id, name: pit.p.name, outs: ip * 3, runs: spRuns, stamina: Math.round(pit.p.abilities.stamina) },
       reliefBox: ip < 9 ? { id: relief ? relief.id : null, name: reliefName, outs: (9 - ip) * 3, runs: rpRuns } : null,
+      wpId: result.win ? (wpStarter ? pit.p.id : relief ? relief.id : null) : null,
+      lpId: result.win ? null : (lpStarter ? pit.p.id : relief ? relief.id : null),
       wp: result.win ? (wpStarter ? pit.p.name : reliefName) : null,
       lp: result.win ? null : (lpStarter ? pit.p.name : reliefName),
       wpStarter: wpStarter, wpRelief: wpRelief && !!relief,
@@ -2251,13 +2255,33 @@
       const hpo = heroPitchOpts(state, starters, false);
       const box = withStatRng(state, (srng) => recordGameStats(srng, state.year, slots, order, res, hpo ? { record: PG.includeInStats, heroPitch: hpo } : { record: PG.includeInStats }).box);
       const tag = noteGameResult(state, pred, res.win);
-      games.push({ title: '練習試合' + (i + 1), pred: pred, win: res.win, tag: tag, box: box, highlights: buildHighlights(state, box) });
+      const pg = { title: '練習試合' + (i + 1), pred: pred, win: res.win, tag: tag, box: box, highlights: buildHighlights(state, box) };
+      if (state.hero && state.hero.id != null) heroPracticeLine(state, pg, starters);   // 新入部員モードだけ:主人公の出場と成績
+      games.push(pg);
       state.stats.practiceGames.played++;
       if (res.win) state.stats.practiceGames.won++;
     }
     return { summary: '練習試合 ' + w + '勝' + l + '敗', practice: games };
   }
 
+  // 新入部員モード:練習試合の主人公の出場と成績(スタメンなら試合の中身から。途中出場なら、主人公のぶんだけ成績用の乱数で抽選)
+  function heroPracticeLine(state, g, starters) {
+    const h = state.players.find((q) => q.id === state.hero.id);
+    if (!h || h.retired) return;
+    const P = CONFIG.heroMode.practiceSub;
+    if (starters.indexOf(h) >= 0) { g.heroRole = 'start'; return; }
+    g.heroRole = 'sub';
+    if (g.box && g.box.relief && g.box.relief.id === h.id) return;   // 救援で登板済み
+    g.heroLine = withStatRng(state, (srng) => {
+      if (h.position === 'P' && !isTwoWayKnown(h)) {
+        return { outs: P.reliefInnings * 3, runs: srng.chance(P.reliefRunRate) ? 1 : 0 };
+      }
+      const n = P.paMin + (srng.chance(P.paExtraRate) ? 1 : 0);
+      const l = { ab: 0, h: 0, hr: 0, rbi: 0 };
+      for (let i = 0; i < n; i++) { const r = plateAppearance(srng, h, 9); l.ab += r.ab; l.h += r.h; l.hr += r.hr; l.rbi += r.rbi; }
+      return l;
+    });
+  }
   // 合宿
   function runCamp(state, rng, type) {
     const label = type.label;
@@ -2369,6 +2393,12 @@
         cls: tag ? 'special' : res.win ? 'win' : 'lose',
         round: roundName, opp: opp + '高校', pred: pred, win: res.win, tag: tag,
       });
+      if (state.hero && state.hero.id != null) {   // 新入部員モードだけ:主人公の出場の状態(スタメン / ベンチ入り / ベンチ外)
+        const g0 = games[games.length - 1];
+        g0.heroRole = members_.some((p) => p.id === state.hero.id) ? 'start' : bench.some((p) => p.id === state.hero.id) ? 'bench' : 'out';
+        g0.roundNo = r;
+        g0.rounds = T.rounds;
+      }
       for (const p of members_) {
         p.record.games++;
         if (res.win) p.record.wins++;

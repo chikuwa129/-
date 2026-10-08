@@ -246,11 +246,13 @@ test('新入部員モード:保存データ(bbgacha_hero_v*)は3種類のリセ�
   const Hero = require('../hero.js');
   const st = memoryStorage();
   const K = Hero.keys();
-  assert.ok(K.save.indexOf(CONFIG.storagePrefix + 'hero_v' + CONFIG.heroMode.saveVersion + '_') === 0 && CONFIG.heroMode.saveVersion === 2, '保存キーの接頭辞');
+  assert.ok(K.save.indexOf(CONFIG.storagePrefix + 'hero_v' + CONFIG.heroMode.saveVersion + '_') === 0 && CONFIG.heroMode.saveVersion === 3, '保存キーの接頭辞');
   const progress = (seed) => {
     const s = Hero.startNew(st, seed);
     Hero.reroll(s);
     Hero.pickHero(s, s.pendingRecruits[0].id);
+    const other = s.players.find((p) => p.id !== s.hero.id && p.id !== s.hero.rivalId && !p.helper);
+    Hero.toggleWatch(s, other.id);   // 気になる選手
     Hero.startPlay(s);
     for (let i = 0; i < 6; i++) Hero.advance(s, 'event');
     Hero.save(st, s);
@@ -259,6 +261,8 @@ test('新入部員モード:保存データ(bbgacha_hero_v*)は3種類のリセ�
     assert.strictEqual(ld.hero.phase, 'play', '途中の状態が保存される');
     assert.ok(ld.players.some((p) => p.pitches && p.pitches.length), '球種の内訳が保存される');
     assert.ok((ld.hero.gameLog || []).length > 0, '投球回の記録が保存される');
+    assert.ok(ld.hero.watch.length === 1 || Object.keys(ld.hero.watchLog).length === 1, '気になる選手が保存される');
+    assert.ok(ld.hero.appear.length > 0, '主人公の出場と成績が保存される');
     return s;
   };
   const fresh = (s) => JSON.stringify(s) === JSON.stringify(Hero.newHeroGame(s.seed));

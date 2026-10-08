@@ -37,7 +37,8 @@ const TW = { pos: 'twoWay', pitchType: 'gikou', batType: 'kyouda', level: 'mid',
 
 // 3年間を通した実行(いくつかのテストで共有)
 const RUNS = [];
-for (let s = 1; s <= 30; s++) {
+// 3年間を通した実行(200回)
+for (let s = 1; s <= 100; s++) {
   RUNS.push(play(s, { pick: true }));
   RUNS.push(play(1000 + s, s % 3 === 0 ? TW : s % 3 === 1 ? FIELD : PITCH));
 }
@@ -514,6 +515,99 @@ test('部員名簿は、助っ人を除く全員を載せる', () => {
   for (const st of RUNS.slice(0, 10)) {
     const L = Hero.rosterList(st);
     assert.strictEqual(L.length, st.players.filter((p) => !p.helper).length);
+  }
+});
+
+test('物語の数字は、その時点の値(ランクアップは上がった月の値、一番伸びた半年は半年の始まりと終わりの値)', () => {
+  let ups = 0;
+  let peaks = 0;
+  for (const st of RUNS) {
+    const H = st.hero;
+    const a = st.alumni.find((x) => x.id === H.id);
+    for (const x of H.stories.filter((y) => y.kind === 'abilityUp' && y.meta)) {
+      const v = Hero.getValueAt(a, x.s);
+      if (x.meta.key === 'velocity') assert.ok(Hero.toKmh(v.velocity) >= x.meta.v.k && Hero.toKmh(v.velocity) < x.meta.v.k + 5, '球速は上がった月の値');
+      else if (x.meta.key !== 'breaking') assert.strictEqual(Hero.getRank(v[x.meta.key]), x.meta.v.rank, 'ランクは上がった月の値:' + x.text);
+      ups++;
+    }
+    if (H.peakInfo && H.peakInfo.range) {
+      peaks++;
+      const v0 = Hero.getValueAt(a, H.peakInfo.range[0] - 1);
+      const v1 = Hero.getValueAt(a, H.peakInfo.range[1]);
+      const t = H.peakInfo.text;
+      const m = /特に(.+?)は([SABCDEFG])から([SABCDEFG])に上がった/.exec(t);
+      if (m) {
+        const k = Object.keys(Core.ABILITY_LABEL).find((x) => Core.ABILITY_LABEL[x] === m[1]);
+        assert.strictEqual(m[2], Hero.getRank(v0[k]), '始まりのランク:' + t);
+        assert.strictEqual(m[3], Hero.getRank(v1[k]), '終わりのランク(卒業時のランクではない):' + t);
+      }
+      const n = /特に(.+?)が(\d+)から(\d+)に伸びた/.exec(t);
+      if (n) {
+        const k = Object.keys(Core.ABILITY_LABEL).find((x) => Core.ABILITY_LABEL[x] === n[1]);
+        assert.strictEqual(Number(n[2]), Math.round(v0[k]));
+        assert.strictEqual(Number(n[3]), Math.round(v1[k]));
+      }
+    }
+  }
+  assert.ok(ups > 100 && peaks > 100);
+});
+
+test('試合の山:年・大会・ラウンド・結果が記録と一致し、最高成績を超えない(200回)', () => {
+  const depth = (label, rounds) => (label === '優勝' || label === '準優勝' ? rounds : label === 'ベスト4' ? rounds - 1 : label === 'ベスト8' ? rounds - 2 : label === '初戦敗退' ? 1 : Number((/(\d+)回戦敗退/.exec(label) || [0, 1])[1]));
+  let n = 0;
+  for (const st of RUNS) {
+    const G = st.hero.peakGame;
+    if (!G) continue;
+    n++;
+    const e = st.hero.appear.find((x) => x.kind === 'tourney' && x.s === G.s && x.tkey === G.tkey && x.roundNo === G.roundNo);
+    assert.ok(e && (e.role === 'start' || e.role === 'sub'), '主人公が出場した試合:' + JSON.stringify(e) + ' / ' + JSON.stringify(G));
+    assert.strictEqual(e.win, G.win, '結果');
+    const rec = st.yearRecords[G.y] && st.yearRecords[G.y][G.tkey];
+    assert.ok(rec && depth(rec, G.rounds) >= G.roundNo, 'その大会の到達ラウンド以内:' + rec + ' / ' + G.roundNo);
+    const line = st.hero.graduation.lines.find((l) => l.indexOf(G.when) >= 0);
+    assert.ok(line && line.indexOf(G.roundLabel) >= 0 && !/[((](勝利|敗戦)[))]/.test(line), '年・大会・ラウンドが文に入り、括弧書きがない:' + line);
+    assert.strictEqual(G.when, G.grade + '年' + CONFIG.tournaments[G.tkey].name);
+  }
+  assert.ok(n > 100);
+});
+
+test('主人公の出場と成績が記録と一致し、練習試合の成績は大会の通算に混ざらない(200回)', () => {
+  for (const st of RUNS) {
+    const H = st.hero;
+    const a = st.alumni.find((x) => x.id === H.id);
+    let ab = 0, h = 0;
+    for (const e of H.appear) {
+      if (e.kind === 'tourney') {
+        if (e.role === 'start' || e.role === 'sub') assert.ok(e.bat || e.pit, 'スタメン・途中出場なら試合の記録がある');
+        else assert.ok(!e.bat && !e.pit, 'ベンチ入り(出番なし)・ベンチ外なら記録はない');
+        if (e.bat) { ab += e.bat.ab; h += e.bat.h; }
+      } else {
+        assert.ok(e.role === 'start' || e.role === 'sub', '練習試合は途中出場以上');
+      }
+    }
+    assert.strictEqual(a.stats.career.ab, ab, '大会の打数は、大会の試合の合計(練習試合を含まない)');
+    assert.strictEqual(a.stats.career.h, h);
+  }
+});
+
+test('気になる選手は2人まで。ひとことと止まる回数に影響しない', () => {
+  for (const seed of [31, 32, 33]) {
+    const a = Hero.newHeroGame(seed);
+    const b = Hero.newHeroGame(seed);
+    Hero.pickHero(a, a.pendingRecruits[0].id);
+    Hero.pickHero(b, b.pendingRecruits[0].id);
+    const others = b.players.filter((p) => p.id !== b.hero.id && p.id !== b.hero.rivalId && !p.helper);
+    assert.ok(Hero.toggleWatch(b, others[0].id).ok);
+    assert.ok(Hero.toggleWatch(b, others[1].id).ok);
+    const r = Hero.toggleWatch(b, others[2].id);
+    assert.ok(!r.ok && r.needRemove.length === 2, '3人目は外す選手を選ばせる');
+    assert.ok(b.hero.watch.length <= CONFIG.heroMode.watchMax);
+    assert.strictEqual(Hero.toggleWatch(b, b.hero.id).ok, false, '主人公は別枠');
+    Hero.startPlay(a); Hero.startPlay(b);
+    while (a.hero.phase === 'play') Hero.advance(a, 'event');
+    while (b.hero.phase === 'play') { Hero.advance(b, 'event'); assert.ok(b.hero.watch.length <= CONFIG.heroMode.watchMax); }
+    assert.deepStrictEqual(b.hero.stories.map((x) => x.text), a.hero.stories.map((x) => x.text), 'ひとことは同じ');
+    assert.deepStrictEqual(b.hero.stopsByYear, a.hero.stopsByYear, '止まる回数は同じ');
   }
 });
 
