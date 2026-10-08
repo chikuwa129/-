@@ -101,6 +101,14 @@
   .rvchart .gl { stroke: var(--line); stroke-width: 1; } .rvchart .tk { font-size: 10px; fill: var(--sub); }
   .key { display: inline-block; width: 14px; height: 0; border-top: 3px solid var(--accent); vertical-align: middle; margin: 0 3px 0 6px; } .key.kr { border-top: 2px dashed var(--lose); }
   .topmate { margin-top: 6px; }
+  table.stm { font-size: 12px; } table.stm th, table.stm td { padding: 2px 3px; } table.stm th { white-space: nowrap; }
+  table.stm th.th2 { line-height: 1.1; text-align: center; } table.stm th.th2 span { display: block; font-size: 9px; }
+  table.stm td.rc { text-align: center; line-height: 1.05; } table.stm td.rc b { display: block; font-size: 14px; } table.stm td.rc span { display: block; font-size: 10px; color: var(--sub); } table.stm td.rc i { font-style: normal; font-size: 8px; }
+  table.stm td.nm { line-height: 1.2; } table.stm td.nm .gr { font-size: 10px; color: var(--sub); font-weight: normal; }
+  .faint { opacity: 0.45; }
+  .rrow .r1 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 4px; } .rrow .r2 { padding-left: 2px; }
+  .rst { margin-left: auto; font-size: 12px; white-space: nowrap; } .rst b { font-size: 13px; margin-left: 1px; } .rst i { font-style: normal; font-size: 9px; }
+  @media (max-width: 340px) { table.stm:not(.wide) .col-r { display: none; } }
   table.tot { font-size: 12px; line-height: 1.3; } table.tot td, table.tot th { padding: 2px 4px; vertical-align: top; } table.tot td:first-child { white-space: nowrap; color: var(--sub); }
   .mk.on { color: var(--win); font-size: 12px; } .mk.me { background: #fff6dc; } .mk.rv { background: #fde8e8; color: #b03a2e; } .mk.sp { background: #e8f0f7; color: var(--accent); }
   .chip { padding: 4px 10px; border: 1px solid var(--line); background: #fff; border-radius: 14px; font-size: 12px; }
@@ -498,7 +506,7 @@
 
     // ---- 新入部員モード(hero.html / play-hero.html)。数値はすべて仮の値。育成監督モードでは使わない ----
     heroMode: {
-      saveVersion: 4,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4)
+      saveVersion: 5,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5)
       seedSalt: 0x4e52b1d3,         // このモード専用の乱数(引き直し・主人公の作成・物語の文面・転向と再起の抽選)
       rerollMax: 2,                 // 新入部員の一覧の引き直しの回数
       stopOnStory: true,            // 主人公の山場の物語で、自動進行を止める
@@ -556,6 +564,13 @@
       practiceSub: { paMin: 1, paExtraRate: 0.5, reliefInnings: 1, reliefRunRate: 0.3 },
       watchMax: 2,                  // 気になる選手の上限(主人公とライバルは別枠)
       totals: { minAb: 20, minOuts: 27 },   // 卒業の通算成績:打数・アウト数がこれ未満なら「参考」と添える
+      // スタメン表・部員名簿の指標と、主人公の打順の変化のひとこと
+      lineup: {
+        minAb: 20,                  // スタメン表の打率:打数がこれ未満なら薄い文字(参考値)
+        orderChangeMin: 2,          // 打順がこれ以上動いた月だけ、ひとことにする
+        orderChangeMax: 3,          // 打順の変化のひとことの、1年あたりの上限
+        reasonMonths: 3,            // 打順が上がった理由(打撃の能力のランクの上昇)を、記録で確かめる期間(か月)
+      },
       // 先発の投球回(このモードの成績だけ。得点・勝敗は変えない)
       stamina: {
         enabled: true,              // false で、従来どおり先発はすべて完投として記録(テスト用)
@@ -916,6 +931,10 @@
     ['heroMode.practiceSub.reliefInnings', 'hero', '練習試合の途中出場:投手の登板の回数'],
     ['heroMode.practiceSub.reliefRunRate', 'hero', '練習試合の途中出場:投手が1点取られる確率'],
     ['heroMode.watchMax', 'hero', '気になる選手の上限(主人公とライバルは別枠)'],
+    ['heroMode.lineup.minAb', 'hero', 'スタメン表の打率:打数がこれ未満なら薄い文字(参考値)'],
+    ['heroMode.lineup.orderChangeMin', 'hero', '主人公の打順の変化:これ以上動いた月だけ、ひとことにする'],
+    ['heroMode.lineup.orderChangeMax', 'hero', '主人公の打順の変化のひとこと:1年あたりの上限'],
+    ['heroMode.lineup.reasonMonths', 'hero', '打順が上がった理由(ランクの上昇)を、記録で確かめる期間(か月)'],
     ['heroMode.totals.minAb', 'hero', '卒業の通算成績:打数がこれ未満なら打率に「参考」と添える'],
     ['heroMode.totals.minOuts', 'hero', '卒業の通算成績:アウト数がこれ未満なら防御率に「参考」と添える'],
     ['heroMode.rival.revealAtGraduation', 'hero', '卒業のときに、ライバルの素質を明かす(オン/オフ)'],
@@ -4428,6 +4447,26 @@
       '{n}は初先発で、自分の投球を試合で確かめた。',
     ],
     // 新しい球種(主人公。重要度3)
+    // 主人公の打順の変化(2つ以上。理由は記録で確かめられるときだけ {why})
+    orderChange: {
+      up: [
+        '{n}の打順が、{from}番から{to}番に上がった。',
+        '打順表を見て、{n}は二度見した。{from}番から{to}番へ。',
+        '{n}、{from}番から{to}番に昇格。期待が打順に表れた。',
+        '{from}番から{to}番へ。{n}の名前を呼ぶ場内アナウンスが、少し早くなった。',
+      ],
+      upWhy: [
+        '{why}、{n}の打順が{from}番から{to}番に上がった。',
+        '{why}、{n}は{from}番から{to}番へ。打順が結果に追いついた。',
+        '{n}の打順が{from}番から{to}番に。{why}、監督も見ていた。',
+      ],
+      down: [
+        '{n}の打順が、{from}番から{to}番に下がった。気楽に振れる打順だ。',
+        '{n}は{from}番から{to}番へ。打順が変わっても、やることは同じ。',
+        '{from}番から{to}番に下がった{n}。次の打席で取り返せばいい。',
+        '{n}、今月は{to}番。{from}番の頃より、のびのび振れそうだ。',
+      ],
+    },
     newPitch: [
       '{n}が{pitch}を覚えた!投球の幅が広がった。',
       '{n}の新しい武器は{pitch}。ブルペンで手応えをつかんだ。',
@@ -4980,6 +5019,7 @@
       starterMonths: 0, slotMonths: { P: 0, bat: 0, bench: 0 }, contestEver: {},
       bestGame: null, retiredTold: false, rivalMovedTold: false,
       practiceApps: 0, graduation: null,
+      prevOrder: null, orderLog: [], orderChanges: {},
     };
     trng(st, (r) => { for (const p of st.players.concat(st.pendingRecruits)) syncPitches(r, p); });
     return st;
@@ -5703,9 +5743,33 @@
           addStory(st, r, out, 'noRebound', STORY.noRebound, vars);
         }
       }
+      // 打順の変化(野手として出場した月どうしで、2つ以上動いたとき。他の物語がある月は出さない。年に orderChangeMax 回まで)
+      orderChange(st, r, out, h, hs, slots, sv, vars);
       H.prevSlot = hs;
     });
     return out;
+  }
+  function orderChange(st, r, out, h, hs, slots, sv, vars) {
+    const H = st.hero;
+    const L = HM().lineup;
+    const now = hs && hs !== 'P' ? Core.battingOrder(slots)[h.id] || null : null;
+    const prev = H.prevOrder;
+    H.prevOrder = now;
+    (H.orderLog = H.orderLog || []).push([sv, now]);
+    if (now == null || prev == null || Math.abs(now - prev) < L.orderChangeMin || out.length) return;
+    const yk = String(st.year);
+    H.orderChanges = H.orderChanges || {};
+    if ((H.orderChanges[yk] || 0) >= L.orderChangeMax) return;
+    H.orderChanges[yk] = (H.orderChanges[yk] || 0) + 1;
+    const up = now < prev;
+    // 理由:直近3か月の記録で、打撃の能力のランクが実際に上がっていたときだけ添える(上がったときのみ)
+    let why = '';
+    const a1 = HighSchool.abilitiesAt(h, sv);
+    const a0 = HighSchool.abilitiesAt(h, sv - L.reasonMonths);
+    if (up && a1 && a0) for (const k of ['contact', 'power', 'speed']) if (rankIdx(getRank(a1[k])) > rankIdx(getRank(a0[k]))) { why = Core.ABILITY_LABEL[k] + 'が' + getRank(a1[k]) + 'に上がって'; break; }
+    const v = Object.assign({ from: prev, to: now, why: why }, vars);
+    const s = addStory(st, r, out, up ? 'orderUp' : 'orderDown', up ? (why ? STORY.orderChange.upWhy : STORY.orderChange.up) : STORY.orderChange.down, v, 2);
+    s.meta = { from: prev, to: now, why: why, why0: why ? a0 : null, why1: why ? a1 : null };
   }
   // 転向の条件(すべてを満たしたときだけ)。満たしたら発生の抽選をして、既存のコンバートの処理で転向させる
   function convertEligible(st, hs, rv) {
@@ -5852,6 +5916,38 @@
       parts.push('練習試合 ' + t.g + '試合出場 ' + lineText(t));
     }
     return parts.join(' / ');
+  }
+
+  // ---------- スタメン表と部員名簿の指標(既存の能力と簡易成績から。新しい計算はしない) ----------
+  //   cells:初期表示の3列(野手はミート・パワー・走力、投手枠は球速・制球・スタミナ)。stat:打率(投手枠は防御率)
+  //   ext:詳細列(野手は守備・肩・本塁打・打点・打数、投手枠は投球回・勝敗・総変化量。二刀流の投手枠は打撃も)
+  function rankCell(v) { return { rank: getRank(v), v: Math.round(v) }; }
+  function statCells(p, asPitcher) {
+    const a = p.abilities;
+    const c = (p.stats && p.stats.career) || Core.emptyStatLine();
+    if (asPitcher) {
+      return {
+        cells: [{ rank: '', v: toKmh(a.velocity), unit: 'km/h' }, rankCell(a.control), rankCell(a.stamina)],
+        stat: { text: c.outs ? Core.formatEra(c) : '---', faint: false },
+        ext: { ip: Math.floor(c.outs / 3), wl: c.w + '勝' + c.l + '敗', brk: breakTotal(p),
+          bat: twoWayKnown(p) ? { cells: [rankCell(a.contact), rankCell(a.power), rankCell(a.speed)], avg: c.ab ? Core.formatAverage(c) : '---' } : null },
+      };
+    }
+    return {
+      cells: [rankCell(a.contact), rankCell(a.power), rankCell(a.speed)],
+      stat: { text: c.ab ? Core.formatAverage(c) : '---', faint: c.ab > 0 && c.ab < HM().lineup.minAb },
+      ext: { def: rankCell(a.defense), arm: rankCell(a.arm), hr: c.hr, rbi: c.rbi, ab: c.ab },
+    };
+  }
+  function lineupRows(st) {
+    const slots = Core.buildLineup(st.players, { heroTwoWay: true });
+    const order = Core.battingOrder(slots);
+    return slots.filter((x) => x.player).sort((a, b) => (order[a.player.id] || 10) - (order[b.player.id] || 10)).map((x) => {
+      const p = x.player;
+      const pr = x.pos === 'P';
+      return Object.assign({ id: p.id, name: p.name, grade: p.grade, order: order[p.id] || null, pos: x.pos, oop: !!x.outOfPosition, own: p.position, twoWay: twoWayKnown(p), pitcher: pr,
+        rating: twoWayKnown(p) && !pr ? batR(p) : twoWayKnown(p) ? pitchR(p) : Core.rating(p) }, statCells(p, pr));
+    });
   }
 
   // ---------- ライバルの今月の出場と成績(既存の簡易成績 = 試合の記録 box から。新しい計算はしない) ----------
@@ -6379,8 +6475,20 @@
       const on = (H.watch || []).indexOf(p.id) >= 0;
       return '<button class="star' + (on ? ' on' : '') + '" data-watch="' + p.id + '" title="気になる">' + (on ? '★' : '☆') + '</button>';
     }
-    function compactRow(p, marks) {
+    // 部員名簿の指標(ランク文字だけ。投手は球速・制球・スタミナと防御率、それ以外はミート・パワー・走力と打率)
+    function rosterStats(p) {
+      const c = statCells(p, p.position === 'P');
+      const lab = p.position === 'P' ? ['', '制', 'ス'] : ['ミ', 'パ', '走'];
+      return '<span class="rst">' + c.cells.map((x, i) => (x.unit ? x.v + '<i>km</i>' : lab[i] + '<b>' + x.rank + '</b>')).join(' ') + ' <span class="' + (c.stat.faint ? 'faint' : '') + '">' + (p.position === 'P' ? '防' : '') + c.stat.text + '</span></span>';
+    }
+    function compactRow(p, marks, stats) {
       const r = rankOf(p);
+      if (stats) {
+        // 名簿:1行目に名前・守備区分・総合値・指標、2行目にラベルと印
+        return '<div class="crow rrow"><div class="r1">' + starBtn(p) + '<button class="namebtn" data-pdet="' + p.id + '">' + esc(p.name) + '</button>' + posTag(p.position) + extraTags(p)
+          + ' <span class="small">' + (p.helper ? '助' : p.grade + '年') + ' <b>' + (twoWayKnown(p) ? Core.ratingSides(p).pitch + '/' + Core.ratingSides(p).bat : Core.rating(p)) + '</b></span>' + stats + '</div>'
+          + ((r && r.label) || r || marks ? '<div class="r2 small">' + (r && r.label ? '<span class="rlabel">' + r.label + '</span>' : '') + (r ? '<span class="gen">上位' + Generation.formatTop(r.top) + '</span>' : '') + (marks || '') + '</div>' : '') + '</div>';
+      }
       return '<div class="crow">' + starBtn(p) + '<button class="namebtn" data-pdet="' + p.id + '">' + esc(p.name) + '</button>' + posTag(p.position) + extraTags(p)
         + ' <span class="small">' + (p.helper ? '助' : p.grade + '年') + '・総合値 <b>' + (twoWayKnown(p) ? Core.ratingSides(p).pitch + '/' + Core.ratingSides(p).bat : Core.rating(p)) + '</b>'
         + (r && r.label ? '<span class="rlabel">' + r.label + '</span>' : '') + (r ? '<span class="gen">上位' + Generation.formatTop(r.top) + '</span>' : '') + '</span>' + (marks || '') + '</div>';
@@ -6407,7 +6515,7 @@
         : sort === 'pos' ? (a, b) => ord[a.position] - ord[b.position] || Core.rating(b) - Core.rating(a) || a.id - b.id
         : (a, b) => b.grade - a.grade || Core.rating(b) - Core.rating(a) || a.id - b.id;
       const row = (p) => compactRow(p, (inLine.has(p.id) ? ' <span class="mk on">◯</span>' : '') + (p.id === H.id ? ' <span class="mk me">主人公</span>' : '')
-        + (p.id === H.rivalId ? ' <span class="mk rv">ライバル</span>' : '') + (samePos(p) ? ' <span class="mk sp">同じポジション</span>' : ''));
+        + (p.id === H.rivalId ? ' <span class="mk rv">ライバル</span>' : '') + (samePos(p) ? ' <span class="mk sp">同じポジション</span>' : ''), rosterStats(p));
       const btn = (k, l) => '<button class="chip' + (sort === k ? ' on' : '') + '" data-rsort="' + k + '">' + l + '</button>';
       let html = '<div class="row2">' + btn('grade', '学年順') + btn('rating', '総合値順') + btn('pos', '守備区分順') + '</div>';
       const list = rosterList(st);
@@ -6692,16 +6800,28 @@
       }).join('') + '</div>';
     }
     function lineupTable() {
-      const slots = Core.buildLineup(st.players, { heroTwoWay: true });
-      const order = Core.battingOrder(slots);
       const h = heroOf(st);
-      const rows = slots.filter((s) => s.player).sort((a, b) => (order[a.player.id] || 10) - (order[b.player.id] || 10)).map((s) => {
-        const p = s.player;
-        return '<tr class="' + (s.outOfPosition ? 'oop' : '') + (h && p.id === h.id ? ' me' : '') + '"><td>' + (order[p.id] || '-') + '</td><td>' + Core.POSITION_SHORT[s.pos] + '</td><td>'
-          + esc(p.name) + (twoWayKnown(p) ? ' <span class="tag twoway">二刀流</span>' : '') + (s.outOfPosition ? ' <span class="small">(本職:' + Core.POSITION_SHORT[p.position] + ')</span>' : '')
-          + '</td><td>' + p.grade + '年</td><td class="num">' + (twoWayKnown(p) && s.pos !== 'P' ? batR(p) : twoWayKnown(p) ? pitchR(p) : Core.rating(p)) + '</td></tr>';
+      const rows = lineupRows(st);
+      const wide = !!ui.luDetail;
+      const rc = (c) => '<td class="rc"><b>' + (c.rank || '') + '</b><span>' + c.v + (c.unit ? '<i>' + c.unit + '</i>' : '') + '</span></td>';
+      const anyTW = rows.some((r) => r.pitcher && r.ext.bat);
+      const th2 = (a, b) => '<th class="th2">' + a + '<span>' + b + '</span></th>';
+      let head = '<tr><th>打順</th><th>守</th><th>名前</th><th class="col-r">総合値</th>' + th2('ミート', '球速') + th2('パワー', '制球') + th2('走力', 'スタミナ') + th2('打率', '防御率');
+      if (wide) head += th2('守備', '投球回') + th2('肩', '勝敗') + th2('本塁打', '変化量') + '<th>打点</th><th>打数</th>' + (anyTW ? '<th>打撃(二刀流)</th>' : '');
+      head += '</tr>';
+      const body = rows.map((r) => {
+        let tr = '<tr class="' + (r.oop ? 'oop' : '') + (h && r.id === h.id ? ' me' : '') + '"><td>' + (r.pitcher ? '先発' + (r.order ? '<br>' + r.order : '') : r.order || '-') + '</td><td>' + Core.POSITION_SHORT[r.pos] + '</td><td class="nm">'
+          + esc(r.name) + ' <span class="gr">' + r.grade + '年</span>' + (r.twoWay ? ' <span class="tag twoway">二刀流</span>' : '') + (r.oop ? ' <span class="small">(本職:' + Core.POSITION_SHORT[r.own] + ')</span>' : '')
+          + '</td><td class="num col-r">' + r.rating + '</td>' + r.cells.map(rc).join('') + '<td class="num' + (r.stat.faint ? ' faint' : '') + '">' + r.stat.text + '</td>';
+        if (wide) {
+          tr += r.pitcher ? '<td class="num">' + r.ext.ip + '</td><td>' + r.ext.wl + '</td><td class="num">' + r.ext.brk + '</td><td></td><td></td>'
+            : rc(r.ext.def) + rc(r.ext.arm) + '<td class="num">' + r.ext.hr + '</td><td class="num">' + r.ext.rbi + '</td><td class="num">' + r.ext.ab + '</td>';
+          if (anyTW) tr += '<td class="small">' + (r.pitcher && r.ext.bat ? r.ext.bat.cells.map((c, i) => ['ミ', 'パ', '走'][i] + c.rank + c.v).join(' ') + ' ' + r.ext.bat.avg : '') + '</td>';
+        }
+        return tr + '</tr>';
       }).join('');
-      return '<div class="scroll"><table class="lu"><tr><th>打順</th><th>守</th><th>名前</th><th>学年</th><th>総合値</th></tr>' + rows + '</table></div><div class="small">赤字は本職外の起用。</div>';
+      return '<div class="scroll"><table class="lu stm' + (wide ? ' wide' : '') + '">' + head + body + '</table></div>'
+        + '<div class="small">赤字は本職外の起用。薄い打率は打数' + HM().lineup.minAb + '未満(参考値)。打率・防御率は大会の通算。 <button class="chip" id="hLuDetail">' + (wide ? '詳細列を閉じる' : '詳細列') + '</button></div>';
     }
     function chronicle() {
       const H = st.hero;
@@ -6862,6 +6982,7 @@
       if (id === 'hDetailClose') { detail = null; render(); return; }
       if (ds.rsort) { ui.rosterSort = ds.rsort; saveUi(); render(); return; }
       if (id === 'hRoster') { screen = 'roster'; render(); return; }
+      if (id === 'hLuDetail') { ui.luDetail = !ui.luDetail; saveUi(); render(); return; }
       if (id === 'hRosterClose') { screen = null; render(); return; }
       if (id === 'hNewYearOk') { act(() => closeNewYear(st)); window.scrollTo(0, 0); return; }
       if (ds.rtab) { rivalTab = ds.rtab; render(); return; }
@@ -6911,7 +7032,7 @@
     autoRival: autoRival, getValueAt: getValueAt, gamePeak: gamePeak, monthAppearance: monthAppearance, lineText: lineText, emptyLine: emptyLine, addLine: addLine, toggleWatch: toggleWatch, swapWatch: swapWatch, addWatch: addWatch, diffSentence: diffSentence, getRank: getRank, toKmh: toKmh, breakTotal: breakTotal, syncPitches: syncPitches, pitchCountFor: pitchCountFor, closeNewYear: closeNewYear, rosterList: rosterList, makeHeroPlayer: makeHeroPlayer, contestOf: contestOf, convertEligible: convertEligible, heroOf: heroOf, rivalOf: rivalOf, statusLabel: statusLabel,
     rivalLine: rivalLine, contestAxisNow: contestAxisNow, keys: keys, save: save, load: load, wipeKeys: wipeKeys,
     startNew: startNew, resetSameSeed: resetSameSeed, resetNewSeed: resetNewSeed, wipeAll: wipeAll, startup: startup,
-    playerMonthLine: playerMonthLine, ratingSeries: ratingSeries, autoRival: autoRival,
+    playerMonthLine: playerMonthLine, ratingSeries: ratingSeries, autoRival: autoRival, lineupRows: lineupRows, statCells: statCells,
     pickText: pickText, fill: fill, typeOf: typeOf, setback: setback, tryRebound: tryRebound, hrng: hrng, serialOf: serialOf,
     mountUI: mountUI,
   };

@@ -100,6 +100,14 @@
   .rvchart .gl { stroke: var(--line); stroke-width: 1; } .rvchart .tk { font-size: 10px; fill: var(--sub); }
   .key { display: inline-block; width: 14px; height: 0; border-top: 3px solid var(--accent); vertical-align: middle; margin: 0 3px 0 6px; } .key.kr { border-top: 2px dashed var(--lose); }
   .topmate { margin-top: 6px; }
+  table.stm { font-size: 12px; } table.stm th, table.stm td { padding: 2px 3px; } table.stm th { white-space: nowrap; }
+  table.stm th.th2 { line-height: 1.1; text-align: center; } table.stm th.th2 span { display: block; font-size: 9px; }
+  table.stm td.rc { text-align: center; line-height: 1.05; } table.stm td.rc b { display: block; font-size: 14px; } table.stm td.rc span { display: block; font-size: 10px; color: var(--sub); } table.stm td.rc i { font-style: normal; font-size: 8px; }
+  table.stm td.nm { line-height: 1.2; } table.stm td.nm .gr { font-size: 10px; color: var(--sub); font-weight: normal; }
+  .faint { opacity: 0.45; }
+  .rrow .r1 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 4px; } .rrow .r2 { padding-left: 2px; }
+  .rst { margin-left: auto; font-size: 12px; white-space: nowrap; } .rst b { font-size: 13px; margin-left: 1px; } .rst i { font-style: normal; font-size: 9px; }
+  @media (max-width: 340px) { table.stm:not(.wide) .col-r { display: none; } }
   table.tot { font-size: 12px; line-height: 1.3; } table.tot td, table.tot th { padding: 2px 4px; vertical-align: top; } table.tot td:first-child { white-space: nowrap; color: var(--sub); }
   .mk.on { color: var(--win); font-size: 12px; } .mk.me { background: #fff6dc; } .mk.rv { background: #fde8e8; color: #b03a2e; } .mk.sp { background: #e8f0f7; color: var(--accent); }
   .chip { padding: 4px 10px; border: 1px solid var(--line); background: #fff; border-radius: 14px; font-size: 12px; }

@@ -78,6 +78,7 @@
       starterMonths: 0, slotMonths: { P: 0, bat: 0, bench: 0 }, contestEver: {},
       bestGame: null, retiredTold: false, rivalMovedTold: false,
       practiceApps: 0, graduation: null,
+      prevOrder: null, orderLog: [], orderChanges: {},
     };
     trng(st, (r) => { for (const p of st.players.concat(st.pendingRecruits)) syncPitches(r, p); });
     return st;
@@ -801,9 +802,33 @@
           addStory(st, r, out, 'noRebound', STORY.noRebound, vars);
         }
       }
+      // 打順の変化(野手として出場した月どうしで、2つ以上動いたとき。他の物語がある月は出さない。年に orderChangeMax 回まで)
+      orderChange(st, r, out, h, hs, slots, sv, vars);
       H.prevSlot = hs;
     });
     return out;
+  }
+  function orderChange(st, r, out, h, hs, slots, sv, vars) {
+    const H = st.hero;
+    const L = HM().lineup;
+    const now = hs && hs !== 'P' ? Core.battingOrder(slots)[h.id] || null : null;
+    const prev = H.prevOrder;
+    H.prevOrder = now;
+    (H.orderLog = H.orderLog || []).push([sv, now]);
+    if (now == null || prev == null || Math.abs(now - prev) < L.orderChangeMin || out.length) return;
+    const yk = String(st.year);
+    H.orderChanges = H.orderChanges || {};
+    if ((H.orderChanges[yk] || 0) >= L.orderChangeMax) return;
+    H.orderChanges[yk] = (H.orderChanges[yk] || 0) + 1;
+    const up = now < prev;
+    // 理由:直近3か月の記録で、打撃の能力のランクが実際に上がっていたときだけ添える(上がったときのみ)
+    let why = '';
+    const a1 = HighSchool.abilitiesAt(h, sv);
+    const a0 = HighSchool.abilitiesAt(h, sv - L.reasonMonths);
+    if (up && a1 && a0) for (const k of ['contact', 'power', 'speed']) if (rankIdx(getRank(a1[k])) > rankIdx(getRank(a0[k]))) { why = Core.ABILITY_LABEL[k] + 'が' + getRank(a1[k]) + 'に上がって'; break; }
+    const v = Object.assign({ from: prev, to: now, why: why }, vars);
+    const s = addStory(st, r, out, up ? 'orderUp' : 'orderDown', up ? (why ? STORY.orderChange.upWhy : STORY.orderChange.up) : STORY.orderChange.down, v, 2);
+    s.meta = { from: prev, to: now, why: why, why0: why ? a0 : null, why1: why ? a1 : null };
   }
   // 転向の条件(すべてを満たしたときだけ)。満たしたら発生の抽選をして、既存のコンバートの処理で転向させる
   function convertEligible(st, hs, rv) {
@@ -950,6 +975,38 @@
       parts.push('練習試合 ' + t.g + '試合出場 ' + lineText(t));
     }
     return parts.join(' / ');
+  }
+
+  // ---------- スタメン表と部員名簿の指標(既存の能力と簡易成績から。新しい計算はしない) ----------
+  //   cells:初期表示の3列(野手はミート・パワー・走力、投手枠は球速・制球・スタミナ)。stat:打率(投手枠は防御率)
+  //   ext:詳細列(野手は守備・肩・本塁打・打点・打数、投手枠は投球回・勝敗・総変化量。二刀流の投手枠は打撃も)
+  function rankCell(v) { return { rank: getRank(v), v: Math.round(v) }; }
+  function statCells(p, asPitcher) {
+    const a = p.abilities;
+    const c = (p.stats && p.stats.career) || Core.emptyStatLine();
+    if (asPitcher) {
+      return {
+        cells: [{ rank: '', v: toKmh(a.velocity), unit: 'km/h' }, rankCell(a.control), rankCell(a.stamina)],
+        stat: { text: c.outs ? Core.formatEra(c) : '---', faint: false },
+        ext: { ip: Math.floor(c.outs / 3), wl: c.w + '勝' + c.l + '敗', brk: breakTotal(p),
+          bat: twoWayKnown(p) ? { cells: [rankCell(a.contact), rankCell(a.power), rankCell(a.speed)], avg: c.ab ? Core.formatAverage(c) : '---' } : null },
+      };
+    }
+    return {
+      cells: [rankCell(a.contact), rankCell(a.power), rankCell(a.speed)],
+      stat: { text: c.ab ? Core.formatAverage(c) : '---', faint: c.ab > 0 && c.ab < HM().lineup.minAb },
+      ext: { def: rankCell(a.defense), arm: rankCell(a.arm), hr: c.hr, rbi: c.rbi, ab: c.ab },
+    };
+  }
+  function lineupRows(st) {
+    const slots = Core.buildLineup(st.players, { heroTwoWay: true });
+    const order = Core.battingOrder(slots);
+    return slots.filter((x) => x.player).sort((a, b) => (order[a.player.id] || 10) - (order[b.player.id] || 10)).map((x) => {
+      const p = x.player;
+      const pr = x.pos === 'P';
+      return Object.assign({ id: p.id, name: p.name, grade: p.grade, order: order[p.id] || null, pos: x.pos, oop: !!x.outOfPosition, own: p.position, twoWay: twoWayKnown(p), pitcher: pr,
+        rating: twoWayKnown(p) && !pr ? batR(p) : twoWayKnown(p) ? pitchR(p) : Core.rating(p) }, statCells(p, pr));
+    });
   }
 
   // ---------- ライバルの今月の出場と成績(既存の簡易成績 = 試合の記録 box から。新しい計算はしない) ----------
@@ -1477,8 +1534,20 @@
       const on = (H.watch || []).indexOf(p.id) >= 0;
       return '<button class="star' + (on ? ' on' : '') + '" data-watch="' + p.id + '" title="気になる">' + (on ? '★' : '☆') + '</button>';
     }
-    function compactRow(p, marks) {
+    // 部員名簿の指標(ランク文字だけ。投手は球速・制球・スタミナと防御率、それ以外はミート・パワー・走力と打率)
+    function rosterStats(p) {
+      const c = statCells(p, p.position === 'P');
+      const lab = p.position === 'P' ? ['', '制', 'ス'] : ['ミ', 'パ', '走'];
+      return '<span class="rst">' + c.cells.map((x, i) => (x.unit ? x.v + '<i>km</i>' : lab[i] + '<b>' + x.rank + '</b>')).join(' ') + ' <span class="' + (c.stat.faint ? 'faint' : '') + '">' + (p.position === 'P' ? '防' : '') + c.stat.text + '</span></span>';
+    }
+    function compactRow(p, marks, stats) {
       const r = rankOf(p);
+      if (stats) {
+        // 名簿:1行目に名前・守備区分・総合値・指標、2行目にラベルと印
+        return '<div class="crow rrow"><div class="r1">' + starBtn(p) + '<button class="namebtn" data-pdet="' + p.id + '">' + esc(p.name) + '</button>' + posTag(p.position) + extraTags(p)
+          + ' <span class="small">' + (p.helper ? '助' : p.grade + '年') + ' <b>' + (twoWayKnown(p) ? Core.ratingSides(p).pitch + '/' + Core.ratingSides(p).bat : Core.rating(p)) + '</b></span>' + stats + '</div>'
+          + ((r && r.label) || r || marks ? '<div class="r2 small">' + (r && r.label ? '<span class="rlabel">' + r.label + '</span>' : '') + (r ? '<span class="gen">上位' + Generation.formatTop(r.top) + '</span>' : '') + (marks || '') + '</div>' : '') + '</div>';
+      }
       return '<div class="crow">' + starBtn(p) + '<button class="namebtn" data-pdet="' + p.id + '">' + esc(p.name) + '</button>' + posTag(p.position) + extraTags(p)
         + ' <span class="small">' + (p.helper ? '助' : p.grade + '年') + '・総合値 <b>' + (twoWayKnown(p) ? Core.ratingSides(p).pitch + '/' + Core.ratingSides(p).bat : Core.rating(p)) + '</b>'
         + (r && r.label ? '<span class="rlabel">' + r.label + '</span>' : '') + (r ? '<span class="gen">上位' + Generation.formatTop(r.top) + '</span>' : '') + '</span>' + (marks || '') + '</div>';
@@ -1505,7 +1574,7 @@
         : sort === 'pos' ? (a, b) => ord[a.position] - ord[b.position] || Core.rating(b) - Core.rating(a) || a.id - b.id
         : (a, b) => b.grade - a.grade || Core.rating(b) - Core.rating(a) || a.id - b.id;
       const row = (p) => compactRow(p, (inLine.has(p.id) ? ' <span class="mk on">◯</span>' : '') + (p.id === H.id ? ' <span class="mk me">主人公</span>' : '')
-        + (p.id === H.rivalId ? ' <span class="mk rv">ライバル</span>' : '') + (samePos(p) ? ' <span class="mk sp">同じポジション</span>' : ''));
+        + (p.id === H.rivalId ? ' <span class="mk rv">ライバル</span>' : '') + (samePos(p) ? ' <span class="mk sp">同じポジション</span>' : ''), rosterStats(p));
       const btn = (k, l) => '<button class="chip' + (sort === k ? ' on' : '') + '" data-rsort="' + k + '">' + l + '</button>';
       let html = '<div class="row2">' + btn('grade', '学年順') + btn('rating', '総合値順') + btn('pos', '守備区分順') + '</div>';
       const list = rosterList(st);
@@ -1790,16 +1859,28 @@
       }).join('') + '</div>';
     }
     function lineupTable() {
-      const slots = Core.buildLineup(st.players, { heroTwoWay: true });
-      const order = Core.battingOrder(slots);
       const h = heroOf(st);
-      const rows = slots.filter((s) => s.player).sort((a, b) => (order[a.player.id] || 10) - (order[b.player.id] || 10)).map((s) => {
-        const p = s.player;
-        return '<tr class="' + (s.outOfPosition ? 'oop' : '') + (h && p.id === h.id ? ' me' : '') + '"><td>' + (order[p.id] || '-') + '</td><td>' + Core.POSITION_SHORT[s.pos] + '</td><td>'
-          + esc(p.name) + (twoWayKnown(p) ? ' <span class="tag twoway">二刀流</span>' : '') + (s.outOfPosition ? ' <span class="small">(本職:' + Core.POSITION_SHORT[p.position] + ')</span>' : '')
-          + '</td><td>' + p.grade + '年</td><td class="num">' + (twoWayKnown(p) && s.pos !== 'P' ? batR(p) : twoWayKnown(p) ? pitchR(p) : Core.rating(p)) + '</td></tr>';
+      const rows = lineupRows(st);
+      const wide = !!ui.luDetail;
+      const rc = (c) => '<td class="rc"><b>' + (c.rank || '') + '</b><span>' + c.v + (c.unit ? '<i>' + c.unit + '</i>' : '') + '</span></td>';
+      const anyTW = rows.some((r) => r.pitcher && r.ext.bat);
+      const th2 = (a, b) => '<th class="th2">' + a + '<span>' + b + '</span></th>';
+      let head = '<tr><th>打順</th><th>守</th><th>名前</th><th class="col-r">総合値</th>' + th2('ミート', '球速') + th2('パワー', '制球') + th2('走力', 'スタミナ') + th2('打率', '防御率');
+      if (wide) head += th2('守備', '投球回') + th2('肩', '勝敗') + th2('本塁打', '変化量') + '<th>打点</th><th>打数</th>' + (anyTW ? '<th>打撃(二刀流)</th>' : '');
+      head += '</tr>';
+      const body = rows.map((r) => {
+        let tr = '<tr class="' + (r.oop ? 'oop' : '') + (h && r.id === h.id ? ' me' : '') + '"><td>' + (r.pitcher ? '先発' + (r.order ? '<br>' + r.order : '') : r.order || '-') + '</td><td>' + Core.POSITION_SHORT[r.pos] + '</td><td class="nm">'
+          + esc(r.name) + ' <span class="gr">' + r.grade + '年</span>' + (r.twoWay ? ' <span class="tag twoway">二刀流</span>' : '') + (r.oop ? ' <span class="small">(本職:' + Core.POSITION_SHORT[r.own] + ')</span>' : '')
+          + '</td><td class="num col-r">' + r.rating + '</td>' + r.cells.map(rc).join('') + '<td class="num' + (r.stat.faint ? ' faint' : '') + '">' + r.stat.text + '</td>';
+        if (wide) {
+          tr += r.pitcher ? '<td class="num">' + r.ext.ip + '</td><td>' + r.ext.wl + '</td><td class="num">' + r.ext.brk + '</td><td></td><td></td>'
+            : rc(r.ext.def) + rc(r.ext.arm) + '<td class="num">' + r.ext.hr + '</td><td class="num">' + r.ext.rbi + '</td><td class="num">' + r.ext.ab + '</td>';
+          if (anyTW) tr += '<td class="small">' + (r.pitcher && r.ext.bat ? r.ext.bat.cells.map((c, i) => ['ミ', 'パ', '走'][i] + c.rank + c.v).join(' ') + ' ' + r.ext.bat.avg : '') + '</td>';
+        }
+        return tr + '</tr>';
       }).join('');
-      return '<div class="scroll"><table class="lu"><tr><th>打順</th><th>守</th><th>名前</th><th>学年</th><th>総合値</th></tr>' + rows + '</table></div><div class="small">赤字は本職外の起用。</div>';
+      return '<div class="scroll"><table class="lu stm' + (wide ? ' wide' : '') + '">' + head + body + '</table></div>'
+        + '<div class="small">赤字は本職外の起用。薄い打率は打数' + HM().lineup.minAb + '未満(参考値)。打率・防御率は大会の通算。 <button class="chip" id="hLuDetail">' + (wide ? '詳細列を閉じる' : '詳細列') + '</button></div>';
     }
     function chronicle() {
       const H = st.hero;
@@ -1960,6 +2041,7 @@
       if (id === 'hDetailClose') { detail = null; render(); return; }
       if (ds.rsort) { ui.rosterSort = ds.rsort; saveUi(); render(); return; }
       if (id === 'hRoster') { screen = 'roster'; render(); return; }
+      if (id === 'hLuDetail') { ui.luDetail = !ui.luDetail; saveUi(); render(); return; }
       if (id === 'hRosterClose') { screen = null; render(); return; }
       if (id === 'hNewYearOk') { act(() => closeNewYear(st)); window.scrollTo(0, 0); return; }
       if (ds.rtab) { rivalTab = ds.rtab; render(); return; }
@@ -2009,7 +2091,7 @@
     autoRival: autoRival, getValueAt: getValueAt, gamePeak: gamePeak, monthAppearance: monthAppearance, lineText: lineText, emptyLine: emptyLine, addLine: addLine, toggleWatch: toggleWatch, swapWatch: swapWatch, addWatch: addWatch, diffSentence: diffSentence, getRank: getRank, toKmh: toKmh, breakTotal: breakTotal, syncPitches: syncPitches, pitchCountFor: pitchCountFor, closeNewYear: closeNewYear, rosterList: rosterList, makeHeroPlayer: makeHeroPlayer, contestOf: contestOf, convertEligible: convertEligible, heroOf: heroOf, rivalOf: rivalOf, statusLabel: statusLabel,
     rivalLine: rivalLine, contestAxisNow: contestAxisNow, keys: keys, save: save, load: load, wipeKeys: wipeKeys,
     startNew: startNew, resetSameSeed: resetSameSeed, resetNewSeed: resetNewSeed, wipeAll: wipeAll, startup: startup,
-    playerMonthLine: playerMonthLine, ratingSeries: ratingSeries, autoRival: autoRival,
+    playerMonthLine: playerMonthLine, ratingSeries: ratingSeries, autoRival: autoRival, lineupRows: lineupRows, statCells: statCells,
     pickText: pickText, fill: fill, typeOf: typeOf, setback: setback, tryRebound: tryRebound, hrng: hrng, serialOf: serialOf,
     mountUI: mountUI,
   };

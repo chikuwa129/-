@@ -215,12 +215,20 @@ test('ライバルの新方式(chaseable):主人公より強い候補のうち�
   assert.ok(kinds.above > 20 && kinds.below > 3, JSON.stringify(kinds));
 });
 
-test('ライバルの旧方式(strongest)は、H1.3 と完全に一致する(勝敗・能力・進路・本体の乱数・物語。100回)', () => {
+test('ライバルの旧方式(strongest)は、H1.3 と一致する(勝敗・能力・進路・本体の乱数・ライバル。100回)', () => {
+  // H1.4 の時点では物語の文面(stories・trng)まで一致していた。H1.3b で打順の変化のひとことが増えたため、文面は比べない
   const FP = require('./hero-fingerprint.js');
   const ref = require('./fixtures/h13-fingerprint.json');
+  const strip = (o) => { const x = Object.assign({}, o); delete x.stories; delete x.trng; return x; };
   withRivalMode('strongest', () => {
-    for (let i = 0; i < FP.N; i++) assert.deepStrictEqual(FP.fingerprint(i, { stories: true }), ref[i], i + '回目');
+    for (let i = 0; i < FP.N; i++) assert.deepStrictEqual(strip(FP.fingerprint(i, { stories: true })), strip(ref[i]), i + '回目');
   });
+});
+
+test('H1.3b(スタメン表・打順の変化のひとこと)は、勝敗・能力・進路・本体の乱数が H1.4 と一致する(100回)', () => {
+  const FP = require('./hero-fingerprint.js');
+  const ref = require('./fixtures/h14-fingerprint.json');
+  for (let i = 0; i < FP.N; i++) assert.deepStrictEqual(FP.fingerprint(i), ref[i], i + '回目');
 });
 
 test('争いの軸:投手×二刀流=投手枠 / 二刀流×外野手=外野枠 / 二刀流×二刀流=投手枠と野手側の区分', () => {
@@ -792,6 +800,68 @@ test('卒業の通算成績:主人公とライバルの大会・練習試合の�
     }
   }
   assert.ok(withRival > 150);
+});
+
+// ---------- H1.3b:スタメン表の指標と、打順の変化のひとこと(確認は20回) ----------
+test('スタメン表:各行の指標が、能力と簡易成績と一致する。打数0は「---」、20未満は薄い表示(20回)', () => {
+  let rows = 0, faint = 0, dash = 0;
+  for (let i = 0; i < 20; i++) {
+    const st = Hero.newHeroGame(4000 + i);
+    Hero.pickHero(st, st.pendingRecruits[i % st.pendingRecruits.length].id);
+    Hero.startPlay(st);
+    for (let k = 0; k < 4 + (i % 8); k++) Hero.advance(st, 'event');
+    if (st.hero.phase !== 'play') continue;
+    for (const r of Hero.lineupRows(st)) {
+      rows++;
+      const p = st.players.find((q) => q.id === r.id);
+      const a = p.abilities;
+      const c = (p.stats && p.stats.career) || Core.emptyStatLine();
+      if (r.pitcher) {
+        assert.strictEqual(r.cells[0].v, Hero.toKmh(a.velocity));
+        assert.deepStrictEqual([r.cells[1].rank, r.cells[1].v], [Hero.getRank(a.control), Math.round(a.control)]);
+        assert.deepStrictEqual([r.cells[2].rank, r.cells[2].v], [Hero.getRank(a.stamina), Math.round(a.stamina)]);
+        assert.strictEqual(r.stat.text, c.outs ? Core.formatEra(c) : '---');
+      } else {
+        ['contact', 'power', 'speed'].forEach((k, j) => assert.deepStrictEqual([r.cells[j].rank, r.cells[j].v], [Hero.getRank(a[k]), Math.round(a[k])]));
+        assert.strictEqual(r.stat.text, c.ab ? Core.formatAverage(c) : '---');
+        assert.strictEqual(r.stat.faint, c.ab > 0 && c.ab < CONFIG.heroMode.lineup.minAb);
+        if (!c.ab) dash++;
+        if (r.stat.faint) faint++;
+        assert.strictEqual(r.ext.ab, c.ab);
+        assert.strictEqual(r.ext.hr, c.hr);
+      }
+    }
+  }
+  assert.ok(rows > 100 && faint > 0 && dash > 0, rows + ' / ' + faint + ' / ' + dash);
+});
+
+test('打順の変化のひとこと:2つ以上動いた月だけ、年に3回まで、文面の打順は記録と一致(20回)', () => {
+  const L = CONFIG.heroMode.lineup;
+  let n = 0;
+  for (let i = 0; i < 20; i++) {
+    const st = Hero.newHeroGame(4100 + i);
+    Hero.pickHero(st, st.pendingRecruits[i % st.pendingRecruits.length].id);
+    Hero.startPlay(st);
+    for (let k = 0; k < 200 && st.hero.phase === 'play'; k++) Hero.advance(st, 'event');
+    const H = st.hero;
+    const log = {};
+    for (const [sv, o] of H.orderLog) log[sv] = o;
+    const perYear = {};
+    for (const x of H.stories.filter((y) => y.kind === 'orderUp' || y.kind === 'orderDown')) {
+      n++;
+      const m = x.meta;
+      assert.strictEqual(log[x.s], m.to, '今月の打順');
+      assert.strictEqual(log[x.s - 1], m.from, '前の月の打順(先発から外れた・戻った月は null で出ない)');
+      assert.ok(Math.abs(m.to - m.from) >= L.orderChangeMin);
+      assert.strictEqual(x.kind === 'orderUp', m.to < m.from);
+      assert.ok(x.text.indexOf(m.from + '番から' + m.to + '番') >= 0 || (x.text.indexOf(m.from + '番') >= 0 && x.text.indexOf(m.to + '番') >= 0), x.text);
+      assert.ok(!H.stories.some((y) => y.s === x.s && y !== x && y.kind !== 'quiet'), '同じ月の他の物語が優先');
+      perYear[x.y] = (perYear[x.y] || 0) + 1;
+      if (m.why) assert.ok(x.text.indexOf(m.why) >= 0 && m.why1 && m.why0, '理由は記録で確かめられたときだけ');
+    }
+    for (const y of Object.keys(perYear)) assert.ok(perYear[y] <= L.orderChangeMax, '年に3回まで');
+  }
+  assert.ok(n > 0, '打順の変化のひとことが出ている');
 });
 
 console.log(failed ? '\n失敗 ' + failed + '件' : '\nすべて成功(' + passed + '件)');

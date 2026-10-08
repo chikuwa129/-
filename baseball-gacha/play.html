@@ -579,7 +579,7 @@
 
     // ---- 新入部員モード(hero.html / play-hero.html)。数値はすべて仮の値。育成監督モードでは使わない ----
     heroMode: {
-      saveVersion: 4,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4)
+      saveVersion: 5,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5)
       seedSalt: 0x4e52b1d3,         // このモード専用の乱数(引き直し・主人公の作成・物語の文面・転向と再起の抽選)
       rerollMax: 2,                 // 新入部員の一覧の引き直しの回数
       stopOnStory: true,            // 主人公の山場の物語で、自動進行を止める
@@ -637,6 +637,13 @@
       practiceSub: { paMin: 1, paExtraRate: 0.5, reliefInnings: 1, reliefRunRate: 0.3 },
       watchMax: 2,                  // 気になる選手の上限(主人公とライバルは別枠)
       totals: { minAb: 20, minOuts: 27 },   // 卒業の通算成績:打数・アウト数がこれ未満なら「参考」と添える
+      // スタメン表・部員名簿の指標と、主人公の打順の変化のひとこと
+      lineup: {
+        minAb: 20,                  // スタメン表の打率:打数がこれ未満なら薄い文字(参考値)
+        orderChangeMin: 2,          // 打順がこれ以上動いた月だけ、ひとことにする
+        orderChangeMax: 3,          // 打順の変化のひとことの、1年あたりの上限
+        reasonMonths: 3,            // 打順が上がった理由(打撃の能力のランクの上昇)を、記録で確かめる期間(か月)
+      },
       // 先発の投球回(このモードの成績だけ。得点・勝敗は変えない)
       stamina: {
         enabled: true,              // false で、従来どおり先発はすべて完投として記録(テスト用)
@@ -997,6 +1004,10 @@
     ['heroMode.practiceSub.reliefInnings', 'hero', '練習試合の途中出場:投手の登板の回数'],
     ['heroMode.practiceSub.reliefRunRate', 'hero', '練習試合の途中出場:投手が1点取られる確率'],
     ['heroMode.watchMax', 'hero', '気になる選手の上限(主人公とライバルは別枠)'],
+    ['heroMode.lineup.minAb', 'hero', 'スタメン表の打率:打数がこれ未満なら薄い文字(参考値)'],
+    ['heroMode.lineup.orderChangeMin', 'hero', '主人公の打順の変化:これ以上動いた月だけ、ひとことにする'],
+    ['heroMode.lineup.orderChangeMax', 'hero', '主人公の打順の変化のひとこと:1年あたりの上限'],
+    ['heroMode.lineup.reasonMonths', 'hero', '打順が上がった理由(ランクの上昇)を、記録で確かめる期間(か月)'],
     ['heroMode.totals.minAb', 'hero', '卒業の通算成績:打数がこれ未満なら打率に「参考」と添える'],
     ['heroMode.totals.minOuts', 'hero', '卒業の通算成績:アウト数がこれ未満なら防御率に「参考」と添える'],
     ['heroMode.rival.revealAtGraduation', 'hero', '卒業のときに、ライバルの素質を明かす(オン/オフ)'],

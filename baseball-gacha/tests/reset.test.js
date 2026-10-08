@@ -246,7 +246,7 @@ test('新入部員モード:保存データ(bbgacha_hero_v*)は3種類のリセ�
   const Hero = require('../hero.js');
   const st = memoryStorage();
   const K = Hero.keys();
-  assert.ok(K.save.indexOf(CONFIG.storagePrefix + 'hero_v' + CONFIG.heroMode.saveVersion + '_') === 0 && CONFIG.heroMode.saveVersion === 4, '保存キーの接頭辞');
+  assert.ok(K.save.indexOf(CONFIG.storagePrefix + 'hero_v' + CONFIG.heroMode.saveVersion + '_') === 0 && CONFIG.heroMode.saveVersion === 5, '保存キーの接頭辞');
   const progress = (seed) => {
     const s = Hero.startNew(st, seed);
     Hero.reroll(s);
@@ -256,7 +256,7 @@ test('新入部員モード:保存データ(bbgacha_hero_v*)は3種類のリセ�
     Hero.startPlay(s);
     for (let i = 0; i < 6; i++) Hero.advance(s, 'event');
     Hero.save(st, s);
-    st.setItem(K.ui, '{"open":{"team":true,"roster":true},"rosterSort":"rating"}');
+    st.setItem(K.ui, '{"open":{"team":true,"roster":true},"rosterSort":"rating","luDetail":true}');   // 詳細列の開閉も、表示の記憶(K.ui)に入る
     const ld = Hero.load(st);
     assert.strictEqual(ld.hero.phase, 'play', '途中の状態が保存される');
     assert.ok(ld.players.some((p) => p.pitches && p.pitches.length), '球種の内訳が保存される');
