@@ -734,6 +734,7 @@
       if (!H.ms.hr && c.hr > 0) { H.ms.hr = true; addStory(st, r, out, 'firstHR', STORY.firstHR, vars); }
       if (!H.ms.win && c.w > 0) { H.ms.win = true; addStory(st, r, out, 'firstWin', STORY.firstWin, vars); }
       if (!H.ms.pstart && c.pg > 0 && c.outs > 0) { H.ms.pstart = true; addStory(st, r, out, 'firstPitchStart', STORY.firstPitchStart, vars); }
+      if ((HM().pitching.reliefMax || 1) > 1 && !H.ms.relief && H.appear.some((e) => e.s === sv && e.pit && !e.pit.start)) { H.ms.relief = true; addStory(st, r, out, 'firstRelief', STORY.firstRelief, vars, 3); }   // 初登板(救援)
       if (!H.ms.complete && (c.cg || 0) > 0) { H.ms.complete = true; addStory(st, r, out, 'firstComplete', STORY.firstComplete, vars); }
       // 大会での活躍(試合の中身の活躍選手)
       let best = null;
@@ -916,13 +917,15 @@
   }
 
   // ---------- 主人公の出場と成績 ----------
+  // 救援の一覧(H1.5b:複数。古い記録は box.relief の1人)
+  function reliefsOf(b) { return (b && (b.reliefs || (b.relief ? [b.relief] : []))) || []; }
   function heroGameEntry(h, g, kind, card, noLine) {
     const b = g.box || {};
     const bt = (b.batters || []).find((x) => x.id === h.id);
     let bat = bt ? { ab: bt.ab, h: bt.h, hr: bt.hr, rbi: bt.rbi } : null;
     let pit = null;
     if (b.starter && b.starter.id === h.id) pit = { start: true, outs: b.starter.outs, runs: b.starter.runs };
-    else if (b.relief && b.relief.id === h.id) pit = { start: false, outs: b.relief.outs, runs: b.relief.runs };
+    else if (reliefsOf(b).some((x) => x.id === h.id)) { const x = reliefsOf(b).find((y) => y.id === h.id); pit = { start: false, outs: x.outs, runs: x.runs }; }
     else if (!b.starter && b.pitcher && b.pitcher.id === h.id) pit = { start: true, outs: b.pitcher.outs, runs: b.pitcher.runs };
     if (pit) { pit.w = b.wpId === h.id || (!b.starter && b.pitcher && b.pitcher.id === h.id && b.win) ? 1 : 0; pit.l = b.lpId === h.id || (!b.starter && b.pitcher && b.pitcher.id === h.id && !b.win) ? 1 : 0; }
     if (g.heroLine && !noLine) { if (g.heroLine.outs != null) pit = { start: false, outs: g.heroLine.outs, runs: g.heroLine.runs, w: 0, l: 0 }; else bat = g.heroLine; }
@@ -1080,7 +1083,7 @@
       if (bt) { bat.n++; bat.ab += bt.ab; bat.h += bt.h; bat.hr += bt.hr; bat.rbi += bt.rbi; }
       const sp = b.starter || (!b.starter && b.pitcher) || null;
       if (sp && sp.id === p.id) { pit.st++; pit.outs += sp.outs; pit.runs += sp.runs; }
-      else if (b.relief && b.relief.id === p.id) { pit.rel++; pit.outs += b.relief.outs; pit.runs += b.relief.runs; }
+      else if (reliefsOf(b).some((x) => x.id === p.id)) { const x = reliefsOf(b).find((y) => y.id === p.id); pit.rel++; pit.outs += x.outs; pit.runs += x.runs; }
     }
     const tk = T.length ? Object.keys(CONFIG.tournaments).find((k) => tname.indexOf(CONFIG.tournaments[k].name) >= 0) : null;
     const label = T.length ? (tk ? CONFIG.tournaments[tk].name : '大会') : '練習試合';
@@ -1967,7 +1970,7 @@
         const sp = b.starter ? '先発 ' + esc(b.starter.name) + ' ' + ip(b.starter.outs) + b.starter.runs + '失点' : '';
         return '<div class="game"><div class="' + (g.win ? 'win' : 'lose') + '">' + hd + '</div><div class="small">' + sp + '</div>'
           + renderCollapsible('g:' + sv + ':' + i, '<span class="small">あなたの成績・救援・勝敗投手</span>', () =>
-            '<div class="small">あなた:' + esc(one(mine[i])) + '<br>' + (b.relief ? '救援 ' + esc(b.relief.name) + ' ' + ip(b.relief.outs) + b.relief.runs + '失点' : '先発が完投') + '<br>'
+            '<div class="small">あなた:' + esc(one(mine[i])) + '<br>' + (reliefsOf(b).length ? '救援 ' + reliefsOf(b).map((x) => esc(x.name) + ' ' + ip(x.outs) + x.runs + '失点').join('、') : '先発が完投') + '<br>'
             + (b.wp ? '勝利投手 ' + esc(b.wp) : '敗戦投手 ' + esc(b.lp || '-')) + '</div>') + '</div>';
       }).join('') + '</div>';
     }

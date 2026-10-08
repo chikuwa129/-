@@ -77,6 +77,7 @@
         minPerClass: { P: 2, C: 1, IF: 0, OF: 0 },
         overlay: {
           saveVersion: 11,             // 育成監督モードの保存(部員の構成が変わるため。legacy は 10 のまま)
+          heroMode: { stamina: { base: 4.0 }, pitching: { reliefMax: 3 } },   // H1.5b:先発の投球回の基準と、救援の複数化(新入部員モードだけで使う値。legacy は 3.7 と 1)
           newcomers: { rosterCap: 45 },
           rating: { genius: { min: 200, max: 300 }, reincarnation: { min: 250, max: 350 }, geniusReincarnationMax: 350 },
           tournaments: { summer: { oppBase: 46 }, autumn: { oppBase: 37 } },
@@ -395,7 +396,7 @@
 
     // ---- 新入部員モード(hero.html / play-hero.html)。数値はすべて仮の値。育成監督モードでは使わない ----
     heroMode: {
-      saveVersion: 8,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5、H1.4b で 6:卒業待ち、H1.5a で 7:ピックアップ、H1.4c で 8:月ごとのスタメン)
+      saveVersion: 9,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5、H1.4b で 6:卒業待ち、H1.5a で 7:ピックアップ、H1.4c で 8:月ごとのスタメン、H1.5b で 9:救援)
       seedSalt: 0x4e52b1d3,         // このモード専用の乱数(引き直し・主人公の作成・物語の文面・転向と再起の抽選)
       rerollMax: 2,                 // 新入部員の一覧の引き直しの回数
       stopOnStory: true,            // 主人公の山場の物語で、自動進行を止める
@@ -467,7 +468,7 @@
       // 先発の投球回(このモードの成績だけ。得点・勝敗は変えない)
       stamina: {
         enabled: true,              // false で、従来どおり先発はすべて完投として記録(テスト用)
-        base: 3.7,                  // 投球回の基準 = base + スタミナ ÷ perPoint(minInnings〜9)。仕様の仮値 3.5 から調整(スタミナ20〜50の平均を5回以上に)
+        base: 3.7,                  // 投球回の基準 = base + スタミナ ÷ perPoint(minInnings〜9)。仕様の仮値 3.5 から調整。roster.version 'v2' では overlay で 4.0(H1.5b。スタミナ20〜50の平均を5回以上に)
         perPoint: 15,
         minInnings: 3,
         finalBonus: true,           // 決勝では、スタミナが B 以上の投手を +1回
@@ -481,6 +482,8 @@
         refStrength: 410,           // この総合値の先発では、平均して失点は変わらない。仕様の仮値 300 から調整(係数1つで、弱い先発の失点を増やし、強い先発を下げすぎないため)
         noise: 1.5,                 // ばらつき(±の一様乱数)。0.5 から調整(強い先発でも打ち込まれる日を残す)
         maxShift: 3.0,              // ずらす点数の絶対値の上限
+        reliefMax: 1,               // 救援の最大人数(H1.5b)。roster.version 'v2' では overlay で 3。1 で、救援は1人(H1.5a と同じ)
+        reliefBase: 150,            // 大会の救援の抽選の重み = 総合値 + reliefBase(低い投手も選ばれる)
       },
       story: {
         bigMonthGain: 6,            // 「成長が大きい月」の総合値の増分
@@ -851,6 +854,8 @@
     ['heroMode.pitching.refStrength', 'hero', '失点のずらし:基準の総合値(これより強い先発は失点が減る)'],
     ['heroMode.pitching.noise', 'hero', '失点のずらし:ばらつき(±の一様乱数)'],
     ['heroMode.pitching.maxShift', 'hero', '失点のずらし:1試合でずらす点数の上限'],
+    ['heroMode.pitching.reliefMax', 'hero', '救援の最大人数(1 で救援は1人。H1.5a と同じ)'],
+    ['heroMode.pitching.reliefBase', 'hero', '大会の救援の抽選の重み = 総合値 + この値'],
     ['heroMode.stamina.enabled', 'hero', '先発の投球回をスタミナで決める(オン/オフ)'],
     ['heroMode.stamina.base', 'hero', '先発の投球回の基準(base + スタミナ ÷ perPoint)'],
     ['heroMode.stamina.perPoint', 'hero', '先発の投球回:スタミナ何ごとに1回か'],

@@ -720,7 +720,7 @@ test('失点の組み直し:勝てば 0〜得点−1、負ければ得点+1 以�
           n++;
           if (b.win) assert.ok(b.opp >= 0 && b.opp < b.my, '勝ち:' + b.my + '対' + b.opp);
           else assert.ok(b.opp >= b.my + 1, '負け:' + b.my + '対' + b.opp);
-          assert.strictEqual(b.starter.runs + (b.relief ? b.relief.runs : 0), b.opp, '先発+救援 = 失点');
+          assert.strictEqual(b.starter.runs + (b.reliefs || (b.relief ? [b.relief] : [])).reduce((a, x) => a + x.runs, 0), b.opp, '先発+救援 = 失点');
           assert.strictEqual(b.line.opp.reduce((a, x) => a + x, 0), b.opp, 'ラインスコアの合計 = 失点');
           assert.strictEqual(b.line.my.reduce((a, x) => a + x, 0), b.my);
           if (b.shift) shifted++;
@@ -771,7 +771,7 @@ test('卒業の通算成績:主人公とライバルの大会・練習試合の�
     else if (bt) { t.ab += bt.ab; t.h += bt.h; t.hr += bt.hr; t.rbi += bt.rbi; }
     if (line && line.outs != null) { t.outs += line.outs; t.runs += line.runs; }
     else if (b.starter && b.starter.id === p.id) { t.outs += b.starter.outs; t.runs += b.starter.runs; if (b.starter.outs >= 27) t.cg++; }
-    else if (b.relief && b.relief.id === p.id) { t.outs += b.relief.outs; t.runs += b.relief.runs; }
+    else if ((b.reliefs || (b.relief ? [b.relief] : [])).some((x) => x.id === p.id)) { const x = (b.reliefs || [b.relief]).find((y) => y.id === p.id); t.outs += x.outs; t.runs += x.runs; }
     if (b.wpId === p.id) t.w++;
     if (b.lpId === p.id) t.l++;
   };
@@ -1020,6 +1020,53 @@ test('3年の7月の画面:スタメン表は大会の最後の試合のスタ�
     assert.ok(Hero.anyPlayer(st, st.hero.id), '卒業した主人公も名簿に出せる');
   }
   assert.ok(with3 >= 15, '3年生を含む ' + with3);
+});
+
+// ---------- H1.5b:救援の複数化 ----------
+function withReliefMax(n, fn) { const P = CONFIG.heroMode.pitching; const prev = P.reliefMax; P.reliefMax = n; try { return fn(); } finally { P.reliefMax = prev; } }
+function gameList(seed) {
+  const st = Hero.newHeroGame(seed);
+  Hero.pickHero(st, Hero.pickable(st)[seed % Hero.pickable(st).length].id);
+  Hero.startPlay(st);
+  const L = [];
+  for (let k = 0; k < 200 && st.hero.phase === 'play'; k++) {
+    Hero.advance(st, 'event');
+    for (const m of st.lastEvents || []) {
+      for (const c of m.cards || []) if (c.type === 'tournament' && c.games) for (const g of c.games) L.push(g.box);
+      for (const g of m.practice || []) L.push(g.box);
+    }
+  }
+  return L;
+}
+test('救援(H1.5b):reliefMax が1でも3でも、勝敗・能力・進路・本体の乱数は H1.5a と一致。勝敗・自校の得点・失点の合計も同じ(20回)', () => {
+  if (!Core.isV2()) return;
+  const FP = require('./hero-fingerprint.js');
+  const ref = require('./fixtures/h15a-fingerprint.json');
+  for (const n of [1, 3]) withReliefMax(n, () => { for (let i = 0; i < ref.length; i++) assert.deepStrictEqual(FP.fingerprint(i), ref[i], 'reliefMax ' + n + ':' + i + '回目'); });
+  for (let i = 0; i < 20; i++) {
+    const a = withReliefMax(1, () => gameList(7300 + i)).map((b) => [b.win, b.my, b.opp].join(':'));
+    const b = withReliefMax(3, () => gameList(7300 + i)).map((x) => [x.win, x.my, x.opp].join(':'));
+    assert.deepStrictEqual(b, a, i + '回目');
+  }
+});
+
+test('救援(H1.5b):人数は reliefMax まで。救援の投球回の合計 = 9 − 先発、失点の合計 = 試合の失点。控えの投手にも出番が回る(200試合以上)', () => {
+  let n = 0;
+  const who = {};
+  for (let i = 0; i < 6; i++) {
+    for (const b of gameList(7400 + i)) {
+      if (!b.starter) continue;
+      n++;
+      const R = b.reliefs || [];
+      assert.ok(R.length <= CONFIG.heroMode.pitching.reliefMax);
+      assert.strictEqual(R.reduce((a, x) => a + x.outs, 0), 27 - b.starter.outs, '投球回');
+      assert.strictEqual(b.starter.runs + R.reduce((a, x) => a + x.runs, 0), b.opp, '失点');
+      assert.ok(R.every((x) => x.runs >= 0));
+      R.forEach((x) => { who[x.id] = (who[x.id] || 0) + 1; });
+    }
+  }
+  assert.ok(n >= 200, '試合 ' + n);
+  assert.ok(Object.keys(who).length >= 8, '救援に出た投手 ' + Object.keys(who).length + '人');
 });
 
 // legacy の一致の確認(別プロセス)

@@ -1181,7 +1181,8 @@
         for (const line of statLinesFor(b.p, year)) for (const k of Object.keys(b.g)) line[k] += b.g[k];
         if (hp && b === pit && hp.cg) for (const line of statLinesFor(b.p, year)) line.cg = (line.cg || 0) + 1;
       }
-      if (hp && hp.relief) for (const line of statLinesFor(hp.relief, year)) for (const k of Object.keys(hp.reliefLine)) line[k] = (line[k] || 0) + hp.reliefLine[k];
+      if (hp && hp.reliefLines) { for (const rl of hp.reliefLines) for (const line of statLinesFor(rl.p, year)) for (const k of Object.keys(rl.line)) line[k] = (line[k] || 0) + rl.line[k]; }
+      else if (hp && hp.relief) for (const line of statLinesFor(hp.relief, year)) for (const k of Object.keys(hp.reliefLine)) line[k] = (line[k] || 0) + hp.reliefLine[k];
     }
     // ラインスコア(得点と失点をイニングに配分する)
     const spread = (runs) => {
@@ -1200,13 +1201,14 @@
     if (hp) {
       box.starter = hp.starter;
       box.relief = hp.reliefBox;
+      if (hp.reliefBoxes) { box.reliefs = hp.reliefBoxes; box.reliefLegacyId = hp.legacyReliefId; }
       box.wp = hp.wp;
       box.lp = hp.lp;
       box.wpId = hp.wpId;
       box.lpId = hp.lpId;
       // 活躍選手の判定には、勝利投手を使う(先発が勝利投手でなければ、先発は勝ちなし)
       box.pitcher = hp.wpStarter ? { id: pit.p.id, name: pit.p.name, outs: hp.starter.outs, runs: hp.starter.runs, win: true }
-        : hp.wpRelief ? { id: hp.relief.id, name: hp.relief.name, outs: hp.reliefBox.outs, runs: hp.reliefBox.runs, win: true }
+        : hp.wpRelief ? { id: hp.relief.id, name: hp.relief.name, outs: (hp.wpBox || hp.reliefBox).outs, runs: (hp.wpBox || hp.reliefBox).runs, win: true }
         : { id: pit.p.id, name: pit.p.name, outs: hp.starter.outs, runs: hp.starter.runs, win: false };
     }
     return { paByOrder: paByOrder, box: box };
@@ -1235,6 +1237,7 @@
     return { win: result.win, my: result.my, opp: opp };
   }
   function heroPitching(rng, pit, result, o) {
+    if ((CONFIG.heroMode.pitching.reliefMax || 1) > 1) return heroPitchingMulti(rng, pit, result, o);
     const V = CONFIG.visual;
     const S = CONFIG.stats;
     const ip = heroInnings(pit.p.abilities.stamina, result.opp, o.final);
@@ -1277,12 +1280,96 @@
       wpStarter: wpStarter, wpRelief: wpRelief && !!relief,
     };
   }
-  // 新入部員モード:先発の投球回と救援の候補(控えの本職の投手を総合値の高い順)
-  function heroPitchOpts(state, starters, final) {
+  // H1.5b:救援の複数化(reliefMax > 1)。残りの投球回 R を n = clamp(ceil(R/3), 1, reliefMax) 人で分ける
+  //   大会:控えの投手から、重み(総合値 + reliefBase)の抽選で n 人。練習試合:控えの投手を順番に(o.rot)
+  //   投球回はほぼ均等(端数は最初の救援)、失点は投球回の割合(四捨五入。合計は救援全体の失点)
+  //   勝利投手:先発が条件を満たさなければ、最初の救援。敗戦投手:先発でなければ、失点の最も多い救援(同じなら先に投げた方)
+  function heroPitchingMulti(rng, pit, result, o) {
+    const V = CONFIG.visual;
+    const S = CONFIG.stats;
+    const PC = CONFIG.heroMode.pitching;
+    const ip = heroInnings(pit.p.abilities.stamina, result.opp, o.final);
+    const spRuns = Math.round(result.opp * ip / 9);
+    const rpRuns = result.opp - spRuns;
+    const spreadIn = (runs, from, to) => {
+      const inn = new Array(9).fill(0);
+      const w = V.inningWeights.map((x, i) => (i >= from && i < to ? x : 0));
+      for (let i = 0; i < runs; i++) inn[rng.weighted(w)]++;
+      return inn;
+    };
+    const my = spreadIn(result.my, 0, 9);
+    const sp = spreadIn(spRuns, 0, ip);
+    const R = 9 - ip;
+    const cands = (o.bench || []).filter((p) => p && p.id !== pit.p.id);
+    let rel = [];
+    if (R > 0) {
+      const n = Math.min(clamp(Math.ceil(R / 3), 1, PC.reliefMax), Math.max(1, cands.length));
+      if (o.rot != null && cands.length) {
+        const L = cands.slice().sort((a, b) => a.id - b.id);
+        for (let i = 0; i < n && i < L.length; i++) rel.push(L[(o.rot.i + i) % L.length]);
+        o.rot.i = (o.rot.i + rel.length) % L.length;
+      } else {
+        // 救援の抽選は専用の乱数(成績用の乱数の消費を変えない = 以降の試合の失点の組み直しが、救援1人のときと同じになる)
+        const H = o.hero || {};
+        const rr = new Rng(H.relRng != null ? H.relRng : hashSeed((H.rng || 1) ^ 0x2c1b3c6d, 0x68e31da4));
+        const pool = cands.slice();
+        for (let i = 0; i < n && pool.length; i++) {
+          const k = rr.weighted(pool.map((p) => rating(p) + PC.reliefBase));
+          rel.push(pool.splice(k, 1)[0]);
+        }
+        if (o.hero) o.hero.relRng = rr.s;
+      }
+    }
+    // 投球回と失点の分担(救援がいなければ「救援陣」1行)
+    const slots = rel.length ? rel.map((p) => ({ p: p })) : (R > 0 ? [{ p: null }] : []);
+    const base = slots.length ? Math.floor(R / slots.length) : 0;
+    slots.forEach((x, i) => { x.inn = base + (i === 0 ? R - base * slots.length : 0); });
+    slots.forEach((x) => { x.runs = Math.round(rpRuns * x.inn / Math.max(1, R)); });
+    // 四捨五入の残りで合計がずれたら、多ければ失点の多い救援から減らし、少なければ最初の救援に足す(合計 = 救援全体の失点)
+    let sumR = slots.reduce((a, x) => a + x.runs, 0);
+    for (let g0 = 0; sumR > rpRuns && g0 < 20; g0++) { slots.slice().sort((a, b) => b.runs - a.runs)[0].runs--; sumR--; }
+    if (slots.length && sumR < rpRuns) slots[0].runs += rpRuns - sumR;
+    let from = ip;
+    const opp = sp.slice();
+    for (const x of slots) { const r = spreadIn(x.runs, from, from + x.inn); r.forEach((v, i) => { opp[i] += v; }); x.from = from; from += x.inn; }
+    const myAt = my.slice(0, ip).reduce((a, b) => a + b, 0);
+    const lead = myAt > spRuns;
+    const trail = myAt < spRuns;
+    let wpStarter = false, lpStarter = false;
+    if (result.win) { if (ip >= 5 && lead) wpStarter = true; }
+    else if (trail || ip === 9) lpStarter = true;
+    const wpSlot = result.win && !wpStarter ? slots[0] || null : null;
+    const lpSlot = !result.win && !lpStarter ? slots.slice().sort((a, b) => b.runs - a.runs || a.from - b.from)[0] || null : null;
+    const g = pit.g;
+    g.pg = 1;
+    g.outs = ip * 3;
+    g.er = Math.round(spRuns * S.earnedRate);
+    g.w = wpStarter ? 1 : 0;
+    g.l = lpStarter ? 1 : 0;
+    const lines = slots.filter((x) => x.p).map((x) => ({ p: x.p, line: { pg: 1, outs: x.inn * 3, er: Math.round(x.runs * S.earnedRate), w: x === wpSlot ? 1 : 0, l: x === lpSlot ? 1 : 0 } }));
+    const boxes = slots.map((x) => ({ id: x.p ? x.p.id : null, name: x.p ? x.p.name : '救援陣', outs: x.inn * 3, runs: x.runs }));
+    const nm = (x) => (x && x.p ? x.p.name : '救援陣');
+    return {
+      line: { my: my, opp: opp }, cg: ip === 9, relief: wpSlot && wpSlot.p ? wpSlot.p : rel[0] || null, reliefLine: null, reliefLines: lines,
+      starter: { id: pit.p.id, name: pit.p.name, outs: ip * 3, runs: spRuns, stamina: Math.round(pit.p.abilities.stamina) },
+      reliefBox: boxes[0] || null, reliefBoxes: boxes,
+      wpId: result.win ? (wpStarter ? pit.p.id : wpSlot && wpSlot.p ? wpSlot.p.id : null) : null,
+      lpId: result.win ? null : (lpStarter ? pit.p.id : lpSlot && lpSlot.p ? lpSlot.p.id : null),
+      wp: result.win ? (wpStarter ? pit.p.name : nm(wpSlot)) : null,
+      lp: result.win ? null : (lpStarter ? pit.p.name : nm(lpSlot)),
+      wpStarter: wpStarter, wpRelief: !!(wpSlot && wpSlot.p), wpBox: wpSlot ? boxes[slots.indexOf(wpSlot)] : null,
+      // 救援1人(reliefMax 1)のときに救援になる選手(控えの本職の投手で総合値が最も高い選手)。成績用の乱数の消費をそろえるために使う
+      legacyReliefId: ip < 9 ? ((o.bench || []).find((p) => p && p.id !== pit.p.id && p.position === 'P') || { id: null }).id : null,
+    };
+  }
+  // 新入部員モード:先発の投球回と救援の候補(控えの本職の投手を総合値の高い順。reliefMax > 1 なら、ベンチ入りの二刀流も)
+  //   practiceRot:練習試合の救援の順番({ i })。省くと大会(重みの抽選)
+  function heroPitchOpts(state, starters, final, practiceRot) {
     if (!state.hero || !CONFIG.heroMode.stamina.enabled) return null;
     const ids = new Set(starters.map((p) => p.id));
-    const bench = activeMembers(state).filter((p) => p.position === 'P' && !ids.has(p.id)).sort((a, b) => rating(b) - rating(a) || a.id - b.id);
-    return { bench: bench, final: !!final };
+    const multi = (CONFIG.heroMode.pitching.reliefMax || 1) > 1;
+    const bench = activeMembers(state).filter((p) => (p.position === 'P' || (multi && isTwoWayKnown(p))) && !ids.has(p.id)).sort((a, b) => rating(b) - rating(a) || a.id - b.id);
+    return { bench: bench, final: !!final, rot: multi && practiceRot ? practiceRot : null, hero: multi ? state.hero : null };
   }
 
   // ---------- 世代の基準(同世代の上位○%) ----------
@@ -2362,7 +2449,7 @@
       }
       countGame(state, starters);
       // 試合の中身(成績用の乱数)。成績に含めるかは設定で選ぶ
-      const hpo = heroPitchOpts(state, starters, false);
+      const hpo = heroPitchOpts(state, starters, false, state.hero ? (state.hero.reliefRot = state.hero.reliefRot || { i: 0 }) : null);
       const box = withStatRng(state, (srng) => recordGameStats(srng, state.year, slots, order, res, hpo ? { record: PG.includeInStats, heroPitch: hpo } : { record: PG.includeInStats }).box);
       const tag = noteGameResult(state, pred, res.win);
       const pg = { title: '練習試合' + (i + 1), pred: pred, win: res.win, tag: tag, box: box, highlights: buildHighlights(state, box) };
@@ -2381,8 +2468,12 @@
     const P = CONFIG.heroMode.practiceSub;
     if (starters.indexOf(h) >= 0) { g.heroRole = 'start'; return; }
     g.heroRole = 'sub';
-    if (g.box && g.box.relief && g.box.relief.id === h.id) return;   // 救援で登板済み
-    g.heroLine = withStatRng(state, (srng) => {
+    // 救援で登板済みなら、途中出場の行は作らない。ただし成績用の乱数の消費は、救援1人のとき(reliefMax 1)と同じにする
+    //   (救援1人のときに主人公が救援になる場合だけ、抽選をしない)
+    const legacyRelief = g.box && (g.box.reliefLegacyId != null ? g.box.reliefLegacyId : g.box.relief && g.box.relief.id);
+    if (legacyRelief === h.id) return;
+    const relieved = g.box && (g.box.reliefs || []).some((x) => x.id === h.id);
+    const line = withStatRng(state, (srng) => {
       if (h.position === 'P' && !isTwoWayKnown(h)) {
         return { outs: P.reliefInnings * 3, runs: srng.chance(P.reliefRunRate) ? 1 : 0 };
       }
@@ -2391,6 +2482,7 @@
       for (let i = 0; i < n; i++) { const r = plateAppearance(srng, h, 9); l.ab += r.ab; l.h += r.h; l.hr += r.hr; l.rbi += r.rbi; }
       return l;
     });
+    if (!relieved) g.heroLine = line;
   }
   // 合宿
   function runCamp(state, rng, type) {
