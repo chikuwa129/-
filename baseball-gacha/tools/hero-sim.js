@@ -1,6 +1,6 @@
 // =============================================================
 // tools/hero-sim.js : 新入部員モードの検証(画面なし)
-//   使い方: node tools/hero-sim.js [回数=200] [最初のシード=1] [防御率・打撃の測定の回数=520]
+//   使い方: node tools/hero-sim.js [回数=200] [最初のシード=1] [防御率・打撃の測定の回数=520] [凡人の調査の人数=200]
 //   引きの主人公と、作った主人公(レベル感 × 素質、二刀流)を、それぞれ指定の回数だけ3年間進めて、
 //   config.js の heroMode.targets と比べて ✓ / △ / ✕ を出す。同じ引数なら同じ結果になる。
 //   測定の時点は「3年の夏の大会の直後」(主人公の卒業の時点)。比較先の引きの選手も同じ時点で測る。
@@ -420,4 +420,95 @@ for (const key of ['pick', 'n-mid']) {
 const cohLv3 = [].concat.apply([], lv3['pick'].concat(lv3['n-mid']).map((r) => r.cohortTop));
 log('    同学年の他の新入生・凡人 Lv' + CONFIG.baselineCoachLv + '開始:' + dist(cohLv3.filter((c) => !c.g)));
 log('    卒業時の指導力 Lv1開始 平均 Lv' + f1(mean(res['pick'].concat(res['n-mid']).map((r) => r.lvEnd))) + ' / Lv' + CONFIG.baselineCoachLv + '開始 平均 Lv' + f1(mean(lv3['pick'].concat(lv3['n-mid']).map((r) => r.lvEnd))));
+// H1.4 凡人の調査(測定のみ。値は変えない)
+//   入学時の総合値 80〜120 の凡人(素質は通常)の主人公を、引き・作成 × 投手・野手 で各 NB 人、3年の夏の大会まで進める
+//   同じシード・同じ選択で、ライバルの選び方を 'strongest'(H1.3)と 'chaseable'(H1.4)に切り替えて比べる
+const NB = Number(process.argv[5] || 200);
+const RANKS = ['初戦敗退', '2回戦敗退', '3回戦敗退', 'ベスト8', 'ベスト4', '準優勝', '優勝'];
+function bonjinRun(group, seed, mode) {
+  const prev = CONFIG.heroMode.rival.selectMode;
+  CONFIG.heroMode.rival.selectMode = mode;
+  try {
+    const st = Hero.newHeroGame(seed);
+    const wantP = group.pitch;
+    if (group.pick) {
+      const L = st.pendingRecruits.filter((p) => p.talent !== 'genius' && !p.reincarnation && !Core.isTwoWayKnown(p) && (p.position === 'P') === wantP && Core.rating(p) >= 80 && Core.rating(p) <= 120);
+      if (!L.length) return null;
+      const r = new Core.Rng((seed * 40503) >>> 0);
+      Hero.pickHero(st, r.pick(L).id);
+    } else {
+      const r = new Core.Rng((seed * 2654435761) >>> 0);
+      const types = Object.keys(wantP ? Hero.PITCH_TYPES : Hero.BAT_TYPES);
+      const err = Hero.createHero(st, { pos: wantP ? 'pitcher' : 'fielder', type: r.pick(types), level: ['low', 'mid', 'high'][seed % 3], talent: 'normal' });
+      if (err) throw new Error(err);
+      Hero.confirmRival(st, 'auto');
+    }
+    const h = Hero.heroOf(st);
+    const H = st.hero;
+    if (H.initRating < 80 || H.initRating > 120) return null;
+    // 入学時:同じ守備区分で、自分より総合値が高い選手(同学年 / 上級生)
+    const role = h.position;
+    const stronger = st.players.filter((p) => p !== h && !p.helper && Hero.rolesOf(p).indexOf(role) >= 0 && Hero.sideRating(p, role) > Hero.sideRating(h, role));
+    const sameUp = stronger.filter((p) => p.enrolledYear === h.enrolledYear).length;
+    const senUp = stronger.filter((p) => p.enrolledYear < h.enrolledYear).length;
+    const startDiff = H.startDiff;
+    Hero.startPlay(st);
+    const monthsWithGames = new Set();
+    for (let g = 0; H.phase === 'play' && g < 200; g++) {
+      Hero.advance(st, 'event');
+      for (const m of st.lastEvents || []) if ((m.practice && m.practice.length) || (m.cards || []).some((c) => c.type === 'tournament' && c.games)) monthsWithGames.add(m.serial);
+    }
+    const bySerial = {};
+    for (const e of H.appear) { const o = bySerial[e.s] = bySerial[e.s] || { play: false, bench: false, tourney: false }; if (e.role === 'start' || e.role === 'sub') o.play = true; if (e.role === 'bench') o.bench = true; if (e.kind === 'tourney') o.tourney = true; }
+    const ser = Array.from(monthsWithGames);
+    const none = ser.filter((sv) => !bySerial[sv] || (!bySerial[sv].play && !bySerial[sv].bench)).length;
+    const tMonths = ser.filter((sv) => bySerial[sv] && bySerial[sv].tourney);
+    const tNone = tMonths.filter((sv) => !bySerial[sv].play && !bySerial[sv].bench).length;
+    const tNoPlay = tMonths.filter((sv) => !bySerial[sv].play).length;   // 大会の月で、出場しなかった(ベンチ入りだけ、またはベンチ外)
+    const tPlay = H.appear.filter((e) => e.kind === 'tourney' && (e.role === 'start' || e.role === 'sub')).length;
+    const a = st.alumni.find((x) => x.id === H.id);
+    const c = (a && a.stats && a.stats.career) || Core.emptyStatLine();
+    let best = -1;
+    for (let y = H.enrolledYear; y <= H.enrolledYear + 2; y++) for (const k of ['summer', 'autumn']) { const v = st.yearRecords[y] && st.yearRecords[y][k]; if (v) best = Math.max(best, Math.max(0, RANKS.findIndex((x) => v.indexOf(x) >= 0))); }
+    const storyMonths = new Set(H.stories.filter((x) => x.kind !== 'quiet').map((x) => x.s)).size;
+    const stops = Object.keys(H.stopsByYear).reduce((x, k) => x + H.stopsByYear[k], 0);
+    return { starts: H.starterMonths, none: none, tNone: tNone, tNoPlay: tNoPlay, tMonths: tMonths.length, tPlay: tPlay, pa: c.pa || 0, ip: (c.outs || 0) / 3, storyMonths: storyMonths, stops: stops,
+      sameUp: sameUp, senUp: senUp, best: best, diff: startDiff == null ? null : -startDiff, contest: Object.keys(H.contestEver).length > 0, swap: (H.rankSwaps || 0) > 0, hasRival: H.rivalId != null };
+  } finally { CONFIG.heroMode.rival.selectMode = prev; }
+}
+const BGROUPS = [
+  { key: 'pickP', label: '引き・投手', pick: true, pitch: true },
+  { key: 'pickF', label: '引き・野手', pick: true, pitch: false },
+  { key: 'makeP', label: '作成・投手', pick: false, pitch: true },
+  { key: 'makeF', label: '作成・野手', pick: false, pitch: false },
+];
+const BJ = {};
+for (const g of BGROUPS) {
+  BJ[g.key] = { chase: [], strong: [] };
+  for (let seed = 1; BJ[g.key].chase.length < NB && seed < NB * 40; seed++) {
+    const a = bonjinRun(g, 10000 + seed, 'chaseable');
+    if (!a) continue;
+    BJ[g.key].chase.push(a);
+    BJ[g.key].strong.push(bonjinRun(g, 10000 + seed, 'strongest'));
+  }
+}
+const d4 = (L, f) => { const v = L.map(f).filter((x) => x != null && Number.isFinite(x)); return '平均 ' + f1(mean(v)) + ' / 中央値 ' + f1(quant(v, 0.5)) + ' / 25%点 ' + f1(quant(v, 0.25)) + ' / 75%点 ' + f1(quant(v, 0.75)); };
+const share = (L, f) => pct(L.filter(f).length / (L.length || 1));
+log('');
+log('■ H1.4 凡人の調査(入学時の総合値 80〜120、素質は通常。各 ' + NB + '人。3年の夏の大会まで。1〜6 は新方式 chaseable の試行)');
+for (const g of BGROUPS) {
+  const L = BJ[g.key].chase;
+  log('  【' + g.label + '】' + L.length + '人');
+  log('   1. スタメンの月数(3年間):' + d4(L, (x) => x.starts) + ' / 0〜2か月 ' + share(L, (x) => x.starts <= 2));
+  log('   2. 出番なしの月数(試合のある月のうち、ベンチ入りも出場もない月):' + d4(L, (x) => x.none) + ' / 大会のある月 ' + f1(mean(L.map((x) => x.tMonths))) + 'か月のうち、ベンチ入りもない月 ' + d4(L, (x) => x.tNone)
+    + ' / 出場しなかった月(ベンチ入りだけを含む)' + d4(L, (x) => x.tNoPlay) + '(練習試合は、主人公は毎月必ず出場する)');
+  log('   3. 大会の出場試合数:' + d4(L, (x) => x.tPlay) + (g.pitch ? ' / 大会の投球回:' + d4(L, (x) => x.ip) : ' / 大会の打席数:' + d4(L, (x) => x.pa)) + ' / 大会に1試合も出ていない ' + share(L, (x) => x.tPlay === 0));
+  log('   4. 物語が出た月数:' + d4(L, (x) => x.storyMonths) + ' / 山場で止まった回数:' + d4(L, (x) => x.stops));
+  log('   5. 入学時、同じ守備区分で自分より強い選手:同学年 ' + d4(L, (x) => x.sameUp) + ' / 上級生 ' + d4(L, (x) => x.senUp) + ' / 上級生に3人以上 ' + share(L, (x) => x.senUp >= 3));
+  log('   6. 大会の最高成績:' + RANKS.map((r, i) => r + ' ' + share(L, (x) => x.best === i)).join(' / '));
+  const S = BJ[g.key].strong;
+  const line7 = (M, lab) => lab + ' ライバルとの差(ライバル − 主人公。入学時)' + d4(M.filter((x) => x.diff != null), (x) => x.diff) + ' / 争いが成立 ' + share(M, (x) => x.contest) + ' / 順位の逆転 ' + share(M, (x) => x.swap);
+  log('   7. ' + line7(S, '旧方式 strongest:'));
+  log('      ' + line7(L, '新方式 chaseable:'));
+}
 console.log(out.join('\n'));

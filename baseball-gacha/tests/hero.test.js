@@ -132,7 +132,13 @@ test('作った主人公の初期の総合値は、選んだ範囲に収まる(�
   }
 });
 
-test('ライバルは同学年の選手で、3年間変わらない。自動は、同じ守備区分(二刀流は該当する役割)の最上位', () => {
+// ライバルの自動の選び方を切り替えて実行する
+function withRivalMode(mode, fn) {
+  const prev = CONFIG.heroMode.rival.selectMode;
+  CONFIG.heroMode.rival.selectMode = mode;
+  try { return fn(); } finally { CONFIG.heroMode.rival.selectMode = prev; }
+}
+test('ライバルは同学年の選手で、3年間変わらない。旧方式(strongest)は同じ守備区分の最上位', () => {
   for (const st of RUNS) {
     const H = st.hero;
     if (H.rivalId == null) continue;
@@ -140,27 +146,81 @@ test('ライバルは同学年の選手で、3年間変わらない。自動は�
     const rv = st.alumni.find((a) => a.id === H.rivalId) || st.players.find((p) => p.id === H.rivalId);
     assert.ok(rv && rv.enrolledYear === hero.enrolledYear, '同学年');
   }
-  // 自動の決め方:開始時に、同じ役割の候補がいれば、その中の最上位
-  for (let s = 1; s <= 40; s++) {
-    const st = Hero.newHeroGame(s);
-    Hero.pickHero(st, st.pendingRecruits[s % st.pendingRecruits.length].id);
-    const h = Hero.heroOf(st);
-    const mates = st.players.filter((p) => p !== h && !p.helper && p.enrolledYear === h.enrolledYear);
-    const role = Core.isTwoWayKnown(h) ? 'P' : h.position;
-    const same = mates.filter((p) => Hero.rolesOf(p).indexOf(role) >= 0);
-    if (same.length) {
-      const top = same.slice().sort((a, b) => Hero.sideRating(b, role) - Hero.sideRating(a, role) || a.id - b.id)[0];
-      assert.strictEqual(st.hero.rivalId, top.id, 'シード' + s);
-    } else if (!Core.isTwoWayKnown(h)) {
-      const top = mates.slice().sort((a, b) => Core.rating(b) - Core.rating(a) || a.id - b.id)[0];
-      assert.strictEqual(st.hero.rivalId, top ? top.id : null);
-      assert.strictEqual(st.hero.axisList.length, 0, '同じ役割がいなければ、争いは成立しない');
+  withRivalMode('strongest', () => {
+    for (let s = 1; s <= 40; s++) {
+      const st = Hero.newHeroGame(s);
+      Hero.pickHero(st, st.pendingRecruits[s % st.pendingRecruits.length].id);
+      const h = Hero.heroOf(st);
+      const mates = st.players.filter((p) => p !== h && !p.helper && p.enrolledYear === h.enrolledYear);
+      const role = Core.isTwoWayKnown(h) ? 'P' : h.position;
+      const same = mates.filter((p) => Hero.rolesOf(p).indexOf(role) >= 0);
+      if (same.length) {
+        const top = same.slice().sort((a, b) => Hero.sideRating(b, role) - Hero.sideRating(a, role) || a.id - b.id)[0];
+        assert.strictEqual(st.hero.rivalId, top.id, 'シード' + s);
+      } else if (!Core.isTwoWayKnown(h)) {
+        const top = mates.slice().sort((a, b) => Core.rating(b) - Core.rating(a) || a.id - b.id)[0];
+        assert.strictEqual(st.hero.rivalId, top ? top.id : null);
+        assert.strictEqual(st.hero.axisList.length, 0, '同じ役割がいなければ、争いは成立しない');
+      }
     }
-    const id0 = st.hero.rivalId;
-    Hero.startPlay(st);
-    for (let i = 0; i < 10 && st.hero.phase === 'play'; i++) Hero.advance(st, 'event');
-    assert.strictEqual(st.hero.rivalId, id0, '途中で変わらない');
-  }
+  });
+});
+
+test('ライバルの新方式(chaseable):主人公より強い候補のうち差が最小かつ minGap 以上。最上位なら次に強い選手。3年間変わらない', () => {
+  const R = CONFIG.heroMode.rival;
+  const kinds = { above: 0, far: 0, below: 0, none: 0, nearOnly: 0 };
+  withRivalMode('chaseable', () => {
+    for (let s = 1; s <= 120; s++) {
+      const st = Hero.newHeroGame(s);
+      if (s % 3) Hero.pickHero(st, st.pendingRecruits[s % st.pendingRecruits.length].id);
+      else { Hero.createHero(st, s % 2 ? PITCH : (s % 9 === 0 ? TW : FIELD)); Hero.confirmRival(st, 'auto'); }
+      const h = Hero.heroOf(st);
+      const mates = st.players.filter((p) => p !== h && !p.helper && p.enrolledYear === h.enrolledYear);
+      let role = Core.isTwoWayKnown(h) ? 'P' : h.position;
+      let same = mates.filter((p) => Hero.rolesOf(p).indexOf(role) >= 0);
+      if (!same.length && Core.isTwoWayKnown(h)) { role = Core.twoWayBatPos(h); same = mates.filter((p) => Hero.rolesOf(p).indexOf(role) >= 0); }
+      const pk = st.hero.rivalPick;
+      if (!same.length) {
+        const top = mates.slice().sort((a, b) => Core.rating(b) - Core.rating(a) || a.id - b.id)[0];
+        assert.strictEqual(st.hero.rivalId, top ? top.id : null, 'シード' + s + ':候補なし → 同学年の最上位');
+        kinds.none++;
+      } else {
+        const hr = Hero.sideRating(h, role);
+        const above = same.filter((p) => Hero.sideRating(p, role) > hr).map((p) => ({ id: p.id, d: Hero.sideRating(p, role) - hr })).sort((a, b) => a.d - b.d || a.id - b.id);
+        let want;
+        if (above.length) {
+          const ok = above.filter((x) => x.d >= R.minGap);
+          want = ok.length ? ok[0] : above[0];
+          if (!ok.length) kinds.nearOnly++;
+          kinds[want.d > R.maxGap ? 'far' : 'above']++;
+          assert.ok(want.d < R.minGap || above.every((x) => x.d < R.minGap || x.d >= want.d), '差が最小(minGap 以上)');
+        } else {
+          want = { id: same.slice().sort((a, b) => Hero.sideRating(b, role) - Hero.sideRating(a, role) || a.id - b.id)[0].id };
+          kinds.below++;
+        }
+        assert.strictEqual(st.hero.rivalId, want.id, 'シード' + s);
+        assert.strictEqual(st.hero.mainAxis, role);
+        assert.ok(pk && pk.chosen === want.id);
+        assert.ok(st.hero.rivalReason.length > 0 && (pk.kind !== 'far' || st.hero.rivalReason.indexOf('差は大きい') >= 0));
+      }
+      const id0 = st.hero.rivalId;
+      if (s % 4 === 0) {   // 一部は3年間進めて、ライバルが変わらないことを確かめる
+        Hero.startPlay(st);
+        for (let i = 0; i < 200 && st.hero.phase === 'play'; i++) Hero.advance(st, 'event');
+        assert.strictEqual(st.hero.phase, 'graduate');
+        assert.strictEqual(st.hero.rivalId, id0, '途中で変わらない');
+      }
+    }
+  });
+  assert.ok(kinds.above > 20 && kinds.below > 3, JSON.stringify(kinds));
+});
+
+test('ライバルの旧方式(strongest)は、H1.3 と完全に一致する(勝敗・能力・進路・本体の乱数・物語。100回)', () => {
+  const FP = require('./hero-fingerprint.js');
+  const ref = require('./fixtures/h13-fingerprint.json');
+  withRivalMode('strongest', () => {
+    for (let i = 0; i < FP.N; i++) assert.deepStrictEqual(FP.fingerprint(i, { stories: true }), ref[i], i + '回目');
+  });
 });
 
 test('争いの軸:投手×二刀流=投手枠 / 二刀流×外野手=外野枠 / 二刀流×二刀流=投手枠と野手側の区分', () => {
@@ -625,7 +685,7 @@ test('失点の組み直し:勝敗・自校の得点・能力・進路・本体�
   const FP = require('./hero-fingerprint.js');
   const ref = require('./fixtures/h12-fingerprint.json');
   assert.strictEqual(ref.length, FP.N);
-  for (let i = 0; i < FP.N; i++) assert.deepStrictEqual(FP.fingerprint(i), ref[i], i + '回目');
+  withRivalMode('strongest', () => { for (let i = 0; i < FP.N; i++) assert.deepStrictEqual(FP.fingerprint(i), ref[i], i + '回目'); });   // H1.4 の新しいライバルの選び方では展開が変わるため、旧方式で比べる
 });
 
 test('失点の組み直し:勝てば 0〜得点−1、負ければ得点+1 以上。先発+救援 = 失点、ラインスコアの合計 = 失点', () => {
@@ -688,6 +748,50 @@ test('失点の組み直しは、育成監督モードでは起きない(heroMod
     for (const m of st.lastEvents || []) for (const c of m.cards || []) if (c.type === 'tournament' && c.games) for (const g of c.games) { n++; assert.ok(g.box.shift == null && g.box.oppBase == null && !g.box.starter); }
   }
   assert.ok(n > 0);
+});
+
+test('卒業の通算成績:主人公とライバルの大会・練習試合の通算が、試合の記録の合計と一致する(200回)', () => {
+  const add = (t, b, p, line) => {
+    const bt = (b.batters || []).find((x) => x.id === p.id);
+    if (line && line.outs == null) { t.ab += line.ab; t.h += line.h; t.hr += line.hr; t.rbi += line.rbi; }
+    else if (bt) { t.ab += bt.ab; t.h += bt.h; t.hr += bt.hr; t.rbi += bt.rbi; }
+    if (line && line.outs != null) { t.outs += line.outs; t.runs += line.runs; }
+    else if (b.starter && b.starter.id === p.id) { t.outs += b.starter.outs; t.runs += b.starter.runs; if (b.starter.outs >= 27) t.cg++; }
+    else if (b.relief && b.relief.id === p.id) { t.outs += b.relief.outs; t.runs += b.relief.runs; }
+    if (b.wpId === p.id) t.w++;
+    if (b.lpId === p.id) t.l++;
+  };
+  const z = () => ({ ab: 0, h: 0, hr: 0, rbi: 0, outs: 0, runs: 0, w: 0, l: 0, cg: 0 });
+  const pick = (t, keys) => keys.reduce((o, k) => { o[k] = t[k] || 0; return o; }, {});
+  const K = ['ab', 'h', 'hr', 'rbi', 'outs', 'w', 'l'];
+  let withRival = 0;
+  for (let i = 0; i < 200; i++) {
+    const seed = 3000 + i;
+    const st = Hero.newHeroGame(seed);
+    if (i % 2) Hero.pickHero(st, st.pendingRecruits[i % st.pendingRecruits.length].id);
+    else { Hero.createHero(st, [FIELD, PITCH, TW][i % 3]); Hero.confirmRival(st, 'auto'); }
+    Hero.startPlay(st);
+    const H = st.hero;
+    const exp = { ht: z(), hp: z(), rt: z(), rp: z() };
+    for (let guard = 0; H.phase === 'play' && guard < 200; guard++) {
+      Hero.advance(st, 'event');
+      const h = Hero.heroOf(st) || st.alumni.find((a) => a.id === H.id);
+      const rv = H.rivalId != null ? (Hero.rivalOf(st) || st.alumni.find((a) => a.id === H.rivalId)) : null;
+      for (const m of st.lastEvents || []) {
+        for (const c of m.cards || []) if (c.type === 'tournament' && c.games) for (const g of c.games) { add(exp.ht, g.box, h, null); if (rv) add(exp.rt, g.box, rv, null); }
+        for (const g of m.practice || []) { add(exp.hp, g.box, h, g.heroLine || null); if (rv) add(exp.rp, g.box, rv, null); }
+      }
+    }
+    const T = H.graduation.totals;
+    assert.deepStrictEqual(pick(T.hero.t, K), pick(exp.ht, K), seed + ':主人公の大会');
+    assert.deepStrictEqual(pick(T.hero.p, K.concat(['runs', 'cg'])), pick(exp.hp, K.concat(['runs', 'cg'])), seed + ':主人公の練習試合');
+    if (T.rival) {
+      withRival++;
+      assert.deepStrictEqual(pick(T.rival.t, K), pick(exp.rt, K), seed + ':ライバルの大会');
+      assert.deepStrictEqual(pick(T.rival.p, K.concat(['runs', 'cg'])), pick(exp.rp, K.concat(['runs', 'cg'])), seed + ':ライバルの練習試合');
+    }
+  }
+  assert.ok(withRival > 150);
 });
 
 console.log(failed ? '\n失敗 ' + failed + '件' : '\nすべて成功(' + passed + '件)');

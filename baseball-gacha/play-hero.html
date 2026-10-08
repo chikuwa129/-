@@ -96,6 +96,12 @@
   .crow { padding: 3px 0; border-top: 1px dotted #eee; font-size: 13px; }
   .namebtn { border: none; background: none; padding: 0; font-size: 14px; font-weight: bold; color: var(--accent); text-decoration: underline dotted; cursor: pointer; }
   .mk { font-size: 10px; padding: 0 5px; border-radius: 8px; white-space: nowrap; margin-left: 2px; }
+  .rvchart { width: 100%; max-width: 360px; height: auto; display: block; }
+  .rvchart .ln-h { stroke: var(--accent); stroke-width: 2.5; } .rvchart .ln-r { stroke: var(--lose); stroke-width: 2; stroke-dasharray: 5 3; }
+  .rvchart .gl { stroke: var(--line); stroke-width: 1; } .rvchart .tk { font-size: 10px; fill: var(--sub); }
+  .key { display: inline-block; width: 14px; height: 0; border-top: 3px solid var(--accent); vertical-align: middle; margin: 0 3px 0 6px; } .key.kr { border-top: 2px dashed var(--lose); }
+  .topmate { margin-top: 6px; }
+  table.tot { font-size: 12px; line-height: 1.3; } table.tot td, table.tot th { padding: 2px 4px; vertical-align: top; } table.tot td:first-child { white-space: nowrap; color: var(--sub); }
   .mk.on { color: var(--win); font-size: 12px; } .mk.me { background: #fff6dc; } .mk.rv { background: #fde8e8; color: #b03a2e; } .mk.sp { background: #e8f0f7; color: var(--accent); }
   .chip { padding: 4px 10px; border: 1px solid var(--line); background: #fff; border-radius: 14px; font-size: 12px; }
   .chip.on { background: var(--ink); color: #fff; }
@@ -492,7 +498,7 @@
 
     // ---- 新入部員モード(hero.html / play-hero.html)。数値はすべて仮の値。育成監督モードでは使わない ----
     heroMode: {
-      saveVersion: 3,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3)
+      saveVersion: 4,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4)
       seedSalt: 0x4e52b1d3,         // このモード専用の乱数(引き直し・主人公の作成・物語の文面・転向と再起の抽選)
       rerollMax: 2,                 // 新入部員の一覧の引き直しの回数
       stopOnStory: true,            // 主人公の山場の物語で、自動進行を止める
@@ -510,6 +516,10 @@
       },
       rival: {
         candidateCount: 5,          // ライバルを選び直す一覧の人数
+        // 自動のライバルの選び方:'chaseable'(主人公より少し上の、追える相手)/ 'strongest'(H1.3 までの方式。同じ守備区分で最も強い選手)
+        selectMode: 'chaseable',
+        minGap: 5,                  // 'chaseable':主人公との総合値の差がこれ未満の相手は外す(ほぼ同じ強さでは追う実感が出にくい)
+        maxGap: 120,                // 'chaseable':差がこれを超えても選ぶが、選ばれた理由に「差は大きい」と添える
         revealAtGraduation: true,   // 卒業のときに、ライバルの素質を明かす
         swapMonths: 2,              // 総合値の順位の入れ替わりを、物語にするまでの連続の月数
       },
@@ -545,6 +555,7 @@
       // 練習試合で途中出場したときの、主人公の成績の抽選(成績用の乱数。大会の通算には含めない)
       practiceSub: { paMin: 1, paExtraRate: 0.5, reliefInnings: 1, reliefRunRate: 0.3 },
       watchMax: 2,                  // 気になる選手の上限(主人公とライバルは別枠)
+      totals: { minAb: 20, minOuts: 27 },   // 卒業の通算成績:打数・アウト数がこれ未満なら「参考」と添える
       // 先発の投球回(このモードの成績だけ。得点・勝敗は変えない)
       stamina: {
         enabled: true,              // false で、従来どおり先発はすべて完投として記録(テスト用)
@@ -864,6 +875,9 @@
     ['heroMode.create.geniusGrowthRatio', 'hero', '作成:天才の成長の倍率(既存の天才の倍率に掛ける)'],
     ['heroMode.twoWay.batWeightInPitcherSlot', 'hero', '投手枠の評価値で、野手側の総合値に掛ける重み'],
     ['heroMode.rival.candidateCount', 'hero', 'ライバルを選び直す一覧の人数'],
+    ['heroMode.rival.selectMode', 'hero', '自動のライバルの選び方(chaseable:少し上の追える相手 / strongest:H1.3 までの最も強い相手)'],
+    ['heroMode.rival.minGap', 'hero', '追える相手:総合値の差がこれ未満の相手は外す'],
+    ['heroMode.rival.maxGap', 'hero', '追える相手:差がこれを超えたら、選ばれた理由に「差は大きい」と添える'],
     ['heroMode.rival.swapMonths', 'hero', '総合値の順位の入れ替わりを物語にする連続の月数'],
     ['heroMode.contest.swapStoryGap', 'hero', '「奪った・奪われた」の物語の最短間隔(月)'],
     ['heroMode.contest.benchStory.0', 'hero', '「控えが続く」の物語(1回目)の連続の月数'],
@@ -902,6 +916,8 @@
     ['heroMode.practiceSub.reliefInnings', 'hero', '練習試合の途中出場:投手の登板の回数'],
     ['heroMode.practiceSub.reliefRunRate', 'hero', '練習試合の途中出場:投手が1点取られる確率'],
     ['heroMode.watchMax', 'hero', '気になる選手の上限(主人公とライバルは別枠)'],
+    ['heroMode.totals.minAb', 'hero', '卒業の通算成績:打数がこれ未満なら打率に「参考」と添える'],
+    ['heroMode.totals.minOuts', 'hero', '卒業の通算成績:アウト数がこれ未満なら防御率に「参考」と添える'],
     ['heroMode.rival.revealAtGraduation', 'hero', '卒業のときに、ライバルの素質を明かす(オン/オフ)'],
     ['heroMode.pitching.enabled', 'hero', '先発の能力を失点に効かせる(オン/オフ。勝敗と自校の得点は変えない)'],
     ['heroMode.pitching.coef', 'hero', '失点のずらし:係数(総合値100あたりの点数。9回換算)'],
@@ -4957,7 +4973,7 @@
       benchStreak: 0, startStreak: 0, everStarted: false, settledTold: false, prevSlot: null, lostAll: false,
       ms: { hit: false, hr: false, win: false, pstart: false, complete: false, capped: false },
       best: {}, rankUps: 0, newPitches: 0, newYear: null,
-      appear: [], pstats: {}, watch: [], watchLog: {}, watchNote: null, heroGames: [],
+      appear: [], pstats: {}, rpstats: emptyLine(), watch: [], watchLog: {}, watchNote: null, heroGames: [],
       rank: null, rankSwaps: 0,
       bothStartYear: null, rivalTwoWayYear: null, twoWayBothTold: {},
       stories: [], recent: [], stopsByYear: {},
@@ -5219,8 +5235,46 @@
   function sameGrade(st, h) {
     return st.players.filter((p) => p !== h && !p.helper && p.enrolledYear === h.enrolledYear);
   }
-  // ライバルの自動の決め方
+  // ライバルの自動の決め方(selectMode で切り替え)
   function autoRival(st) {
+    return HM().rival.selectMode === 'strongest' ? autoRivalStrongest(st) : autoRivalChaseable(st);
+  }
+  // 'chaseable':同じ守備区分の同学年のうち、主人公より強い選手で、差が最も小さい相手(差が minGap 未満は外す)。
+  //   主人公が最も強ければ、次に強い選手(追われる側)。候補がいなければ、同学年で最も強い選手(争いは成立しない)
+  //   決定的な規則だけで選ぶ(乱数は使わない)。結果の内訳は pick に残す(テストと報告用)
+  function autoRivalChaseable(st) {
+    const h = heroOf(st);
+    const mates = sameGrade(st, h);
+    const R = HM().rival;
+    let axis = null;
+    let cands = [];
+    if (twoWayKnown(h)) {
+      cands = mates.filter((q) => rolesOf(q).indexOf('P') >= 0);
+      axis = 'P';
+      if (!cands.length) { axis = Core.twoWayBatPos(h); cands = mates.filter((q) => rolesOf(q).indexOf(axis) >= 0); }
+    } else {
+      axis = h.position;
+      cands = mates.filter((q) => rolesOf(q).indexOf(axis) >= 0);
+    }
+    if (!cands.length) {
+      const any = mates.slice().sort((a, b) => Core.rating(b) - Core.rating(a) || a.id - b.id)[0];
+      return any ? { id: any.id, axis: null, pick: { kind: 'none', hero: Core.rating(h), cands: [] } } : { id: null, axis: null };
+    }
+    const hr = sideRating(h, axis);
+    const list = cands.map((q) => ({ id: q.id, name: q.name, r: sideRating(q, axis), d: sideRating(q, axis) - hr }));
+    const above = list.filter((x) => x.d > 0).sort((a, b) => a.d - b.d || a.id - b.id);
+    let chosen;
+    let kind;
+    if (above.length) {
+      chosen = above.find((x) => x.d >= R.minGap) || above[0];
+      kind = chosen.d > R.maxGap ? 'far' : 'above';
+    } else {
+      chosen = list.slice().sort((a, b) => b.r - a.r || a.id - b.id)[0];
+      kind = 'below';
+    }
+    return { id: chosen.id, axis: axis, pick: { kind: kind, hero: hr, cands: list.sort((a, b) => b.r - a.r || a.id - b.id), chosen: chosen.id } };
+  }
+  function autoRivalStrongest(st) {
     const h = heroOf(st);
     const mates = sameGrade(st, h);
     const best = (list, axis) => list.slice().sort((a, b) => sideRating(b, axis) - sideRating(a, axis) || a.id - b.id)[0];
@@ -5258,7 +5312,8 @@
     const h = heroOf(st);
     let id = null;
     let axis = null;
-    if (choice === 'auto') { const a = autoRival(st); id = a.id; axis = a.axis; H.rivalMode = 'auto'; }
+    H.rivalPick = null;
+    if (choice === 'auto') { const a = autoRival(st); id = a.id; axis = a.axis; H.rivalMode = 'auto'; H.rivalPick = a.pick || null; }
     else if (choice && choice.id != null && sameGrade(st, h).some((p) => p.id === choice.id)) {
       id = choice.id;
       const r = byId(st, id);
@@ -5275,7 +5330,7 @@
     const rk = r ? Generation.getGenerationRank(r, 1, 4) : null;
     H.rivalInit = r ? { rating: Core.rating(r), side: sideRating(r, axis || 'X'), top: rk ? rk.top : null, label: rk ? rk.label : '' } : null;
     // 争う理由(自動選択の理由をそのまま書く)
-    H.rivalReason = !r ? '' : axis ? '同じ' + AXIS_LABEL[axis] + 'を争う相手' : H.rivalMode === 'auto' ? '同学年で最も強い選手' : '自分で選んだ相手';
+    H.rivalReason = !r ? '' : H.rivalPick ? chaseReason(H.rivalPick, axis) : axis ? '同じ' + AXIS_LABEL[axis] + 'を争う相手' : H.rivalMode === 'auto' ? '同学年で最も強い選手' : '自分で選んだ相手';
     H.diffNow = r ? H.startDiff : null;
     H.diffPrev = H.diffNow;
     H.rivalStarterMonths = 0;
@@ -5284,6 +5339,13 @@
     H.rank = r ? { confirmed: lead(st), pend: null, cnt: 0 } : null;
     recalcAxes(st, true);
     return true;
+  }
+  // 追える相手の、選ばれた理由
+  function chaseReason(pk, axis) {
+    const where = axis === 'P' ? '同じ投手の枠で' : axis ? '同じ' + Core.POSITION_LABEL[axis] + 'で' : '';
+    if (pk.kind === 'none') return '同学年で、追いかけたい相手';
+    if (pk.kind === 'below') return where + '、すぐ後ろから追ってくる相手';
+    return where + (axis === 'P' ? '、いちばん近い相手' : '、いちばん近くにいる相手') + (pk.kind === 'far' ? '(差は大きい)' : '');
   }
   function confirmRival(st, choice) {
     if (st.hero.phase !== 'rival') return false;
@@ -5714,7 +5776,7 @@
   }
 
   // ---------- 主人公の出場と成績 ----------
-  function heroGameEntry(h, g, kind, card) {
+  function heroGameEntry(h, g, kind, card, noLine) {
     const b = g.box || {};
     const bt = (b.batters || []).find((x) => x.id === h.id);
     let bat = bt ? { ab: bt.ab, h: bt.h, hr: bt.hr, rbi: bt.rbi } : null;
@@ -5723,7 +5785,7 @@
     else if (b.relief && b.relief.id === h.id) pit = { start: false, outs: b.relief.outs, runs: b.relief.runs };
     else if (!b.starter && b.pitcher && b.pitcher.id === h.id) pit = { start: true, outs: b.pitcher.outs, runs: b.pitcher.runs };
     if (pit) { pit.w = b.wpId === h.id || (!b.starter && b.pitcher && b.pitcher.id === h.id && b.win) ? 1 : 0; pit.l = b.lpId === h.id || (!b.starter && b.pitcher && b.pitcher.id === h.id && !b.win) ? 1 : 0; }
-    if (g.heroLine) { if (g.heroLine.outs != null) pit = { start: false, outs: g.heroLine.outs, runs: g.heroLine.runs, w: 0, l: 0 }; else bat = g.heroLine; }
+    if (g.heroLine && !noLine) { if (g.heroLine.outs != null) pit = { start: false, outs: g.heroLine.outs, runs: g.heroLine.runs, w: 0, l: 0 }; else bat = g.heroLine; }
     let role = kind === 'practice' ? (g.heroRole || 'sub') : (g.heroRole || (bat || pit ? 'start' : 'out'));
     if (kind === 'tourney' && role !== 'start' && (bat || pit)) role = 'sub';   // ベンチから継投で登板した(途中出場)
     const tkey = card ? Object.keys(CONFIG.tournaments).find((k) => card.title && card.title.indexOf(CONFIG.tournaments[k].name) >= 0) : null;
@@ -5732,9 +5794,16 @@
   function addLine(t, e) {
     if (e.bat) { t.ab += e.bat.ab; t.h += e.bat.h; t.hr += e.bat.hr; t.rbi += e.bat.rbi; }
     if (e.pit) { t.outs += e.pit.outs; t.runs += e.pit.runs; t.w += e.pit.w || 0; t.l += e.pit.l || 0; t.pg++; }
+    if (e.pit && e.pit.start && e.pit.outs >= 27) t.cg = (t.cg || 0) + 1;
     if (e.role === 'start' || e.role === 'sub') t.g++;
   }
-  const emptyLine = () => ({ g: 0, ab: 0, h: 0, hr: 0, rbi: 0, pg: 0, outs: 0, runs: 0, w: 0, l: 0 });
+  const emptyLine = () => ({ g: 0, ab: 0, h: 0, hr: 0, rbi: 0, pg: 0, outs: 0, runs: 0, w: 0, l: 0, cg: 0 });
+  // ライバルの練習試合の1試合(試合の記録 box から。主人公の途中出場の行は使わない)
+  function boxEntry(p, g) {
+    const e = heroGameEntry(p, g, 'practice', null, true);
+    e.role = e.bat || (e.pit && e.pit.start) ? 'start' : e.pit ? 'sub' : 'out';
+    return e;
+  }
   function recordAppearances(st, h, mev, sv) {
     const H = st.hero;
     const list = [];
@@ -5750,6 +5819,9 @@
         addLine(H.pstats[k], e);
       }
     }
+    // ライバルの練習試合の通算(大会はライバル自身の簡易成績にある)
+    const rv = rivalOf(st);
+    if (rv) for (const g of mev.practice || []) addLine(H.rpstats, boxEntry(rv, g));
   }
   // 試合ごとの成績の短い書き方
   function lineText(t) {
@@ -5780,6 +5852,52 @@
       parts.push('練習試合 ' + t.g + '試合出場 ' + lineText(t));
     }
     return parts.join(' / ');
+  }
+
+  // ---------- ライバルの今月の出場と成績(既存の簡易成績 = 試合の記録 box から。新しい計算はしない) ----------
+  //   大会のある月は大会の試合、ない月は練習試合を合計する。戻り値:{ label, text } か null(試合のない月)
+  function playerMonthLine(st, p) {
+    const T = [];
+    const P = [];
+    let tname = '';
+    for (const m of st.lastEvents || []) {
+      for (const c of (m && m.cards) || []) if (c.type === 'tournament' && c.games) { c.games.forEach((g) => T.push(g)); tname = tname || c.title || ''; }
+      for (const g of (m && m.practice) || []) P.push(g);
+    }
+    const L = T.length ? T : P;
+    if (!L.length) return null;
+    const bat = { n: 0, ab: 0, h: 0, hr: 0, rbi: 0 };
+    const pit = { st: 0, rel: 0, outs: 0, runs: 0 };
+    for (const g of L) {
+      const b = g.box || {};
+      const bt = (b.batters || []).find((x) => x.id === p.id);
+      if (bt) { bat.n++; bat.ab += bt.ab; bat.h += bt.h; bat.hr += bt.hr; bat.rbi += bt.rbi; }
+      const sp = b.starter || (!b.starter && b.pitcher) || null;
+      if (sp && sp.id === p.id) { pit.st++; pit.outs += sp.outs; pit.runs += sp.runs; }
+      else if (b.relief && b.relief.id === p.id) { pit.rel++; pit.outs += b.relief.outs; pit.runs += b.relief.runs; }
+    }
+    const tk = T.length ? Object.keys(CONFIG.tournaments).find((k) => tname.indexOf(CONFIG.tournaments[k].name) >= 0) : null;
+    const label = T.length ? (tk ? CONFIG.tournaments[tk].name : '大会') : '練習試合';
+    const cnt = (n) => (L.length > 1 ? n + '試合 ' : ' ');
+    const parts = [];
+    const pitcherSide = p.position === 'P' && !twoWayKnown(p);
+    if (pit.st || pit.rel) parts.push((pit.st ? '先発' + cnt(pit.st) : '救援' + cnt(pit.rel)).trimEnd() + ' ' + Math.floor(pit.outs / 3) + '回' + pit.runs + '失点');
+    if (bat.n && (!pitcherSide || !parts.length)) parts.push('スタメン' + cnt(bat.n).trimEnd() + ' ' + bat.ab + '打数' + bat.h + '安打' + (bat.hr ? ' ' + bat.hr + '本塁打' : '') + (bat.rbi ? ' ' + bat.rbi + '打点' : ''));
+    return { label: label, games: L.length, text: parts.length ? parts.join(' / ') : '控え(出番なし)' };
+  }
+  // 2人の総合値の推移(入学時 → 月ごと)。月ごとの記録(mlog)から。二刀流は軸の側の総合値
+  function ratingSeries(st, p, ax) {
+    const H = st.hero;
+    const s0 = HighSchool.monthSerial(H.enrolledYear, 0);   // 1年の4月
+    const val = (ab) => {
+      const v = { abilities: ab, initialAbilities: p.initialAbilities, position: p.position, twoWay: p.twoWay, twoWayRevealed: p.twoWayRevealed };
+      if (twoWayKnown(p) && ax && ax !== 'X') return ax === 'P' ? Core.ratingOfKeys(ab, Core.PITCH_KEYS) : Core.ratingOfKeys(ab, Core.BAT_KEYS);
+      return Core.rating(v);
+    };
+    const out = [{ s: s0 - 1, v: val(p.initialAbilities) }];
+    const last = serialOf(st);
+    for (let sv = s0; sv < last; sv++) { const ab = HighSchool.abilitiesAt(p, sv); if (ab) out.push({ s: sv, v: val(ab) }); }
+    return out;
   }
 
   // ---------- 気になる選手 ----------
@@ -5999,6 +6117,19 @@
       init: { rating: H.initRating, sides: H.initSides, top: H.initTop, label: H.initLabel },
       fin: { rating: a.rating, sides: a.twoWay ? { pitch: Core.ratingOfKeys(a.finalAbilities, Core.PITCH_KEYS), bat: Core.ratingOfKeys(a.finalAbilities, Core.BAT_KEYS) } : null, top: rank ? rank.top : null, label: rank ? rank.label : '' },
       career: a.career, twoWay: !!a.twoWay,
+      totals: careerTotals(st, a, rv),
+    };
+  }
+  // 卒業時の通算成績(大会 = 簡易成績の通算、練習試合 = このモードで数えた合計)。ライバルも同じ項目
+  function careerTotals(st, a, rv) {
+    const H = st.hero;
+    const tline = (p) => Object.assign(Core.emptyStatLine(), (p && p.stats && p.stats.career) || {});
+    const sum = (o) => { const t = emptyLine(); for (const k of Object.keys(o || {})) for (const f of Object.keys(t)) t[f] += o[k][f] || 0; return t; };
+    const kind = twoWayKnown(a) ? 'both' : Core.sideOf(a.position) === 'pitch' ? 'pitch' : 'bat';
+    return {
+      kind: kind,
+      hero: { t: tline(a), p: sum(H.pstats) },
+      rival: rv ? { name: rv.name, t: tline(rv), p: Object.assign(emptyLine(), H.rpstats || {}) } : null,
     };
   }
   // 時点を指定して能力を取る(月ごとの成長の記録から。記録より前は入学時、後は今の値)
@@ -6370,7 +6501,7 @@
         html += '<div class="btns"><button class="btn small ' + (rivalTab === 'pitch' ? '' : 'sub') + '" data-rtab="pitch">投手側で争う</button><button class="btn small ' + (rivalTab === 'bat' ? '' : 'sub') + '" data-rtab="bat">野手側で争う</button></div>'
           + C[rivalTab].map(row).join('');
       } else html += C.list.map(row).join('');
-      html += '<label class="rv"><input type="radio" name="rival" value="auto"' + (rivalPick === 'auto' ? ' checked' : '') + '> 自動(同じポジションの、最も強い選手)</label>'
+      html += '<label class="rv"><input type="radio" name="rival" value="auto"' + (rivalPick === 'auto' ? ' checked' : '') + '> 自動(' + (HM().rival.selectMode === 'strongest' ? '同じポジションの、最も強い選手' : '同じポジションで、少し上の追える相手') + ')</label>'
         + '<label class="rv"><input type="radio" name="rival" value="none"' + (rivalPick === 'none' ? ' checked' : '') + '> ライバルなし</label>'
         + '<div class="btns"><button class="btn" id="hRivalOk">決める</button></div></div>';
       return '<div class="card">' + heroCard(h, false) + '</div>' + html;
@@ -6420,10 +6551,19 @@
       }).join('');
       return '<div class="card"><h2>🎒 ' + esc(h.name) + 'の3年間が始まる</h2>' + heroCard(h, false)
         + '<div class="story">' + esc(H.originText) + '</div>'
-        + (rv ? rivalCard(rv) : '<div class="small">ライバル:なし</div>')
+        + (rv ? rivalCard(rv) : '<div class="small">ライバル:なし</div>') + topMateLine(h, rv)
         + '<div class="sublabel">同じポジションの先輩たち</div>' + (sen || '<div class="small">同じポジションの先輩はいません</div>')
         + '<div class="btns"><button class="btn sub small" id="hRoster">部員名簿を見る</button></div>'
         + '<div class="btns"><button class="btn" id="hStart">始める</button></div></div>';
+    }
+    // 今年の最強の同期(開始画面だけの1行。ライバルと同じ選手なら出さない。比較や物語には使わない)
+    function topMateLine(h, rv) {
+      const top = sameGrade(st, h).sort((a, b) => Core.rating(b) - Core.rating(a) || a.id - b.id)[0];
+      if (!top || (rv && top.id === rv.id)) return '';
+      const rk = rankOf(top);
+      const pos = twoWayKnown(top) ? '二刀流' : Core.POSITION_LABEL[top.position].replace(/手$/, '') + '手';
+      return '<div class="small topmate">今年の最強の同期:<button class="namebtn" data-pdet="' + top.id + '">' + esc(top.name) + '</button>(' + pos + '、総合値 ' + Core.rating(top)
+        + (rk ? '、同世代 上位' + Generation.formatTop(rk.top) : '') + ')</div>';
     }
     // ライバルのカード(開始画面)。素質は出さない
     function rivalCard(rv) {
@@ -6479,9 +6619,30 @@
       const axis = contestAxisNow(st);
       const slots = Core.buildLineup(st.players, { heroTwoWay: true });
       const on = (p) => (slots.some((x) => x.player === p) ? 'スタメン' : '控え');
+      const ml = playerMonthLine(st, rv);
       return '<div class="card small">ライバル:<button class="namebtn" data-pdet="' + rv.id + '">' + esc(rv.name) + '</button>(' + POS_LABEL[rv.position] + ')'
         + '<div class="cmp">あなた <b>' + a + '</b> / ' + esc(rv.name) + ' <b>' + b + '</b> / 差 <b>' + (d > 0 ? '+' : '') + d + '</b> <span class="arrow2">' + arrow + '</span></div>'
-        + '<div>' + (axis ? '同じ' + AXIS_LABEL[axis] + 'を争っている。' : '') + '今月:あなた ' + on(h) + '・' + esc(rv.name) + ' ' + on(rv) + '</div></div>';
+        + '<div>' + (axis ? '同じ' + AXIS_LABEL[axis] + 'を争っている。' : '') + '今月:あなた ' + on(h) + '・' + esc(rv.name) + ' ' + on(rv) + '</div>'
+        + (ml ? '<div>' + esc(rv.name) + '(' + esc(ml.label) + '):' + esc(ml.text) + '</div>' : '') + '</div>';
+    }
+    // 2人の総合値の推移の折れ線(インラインの SVG。ライバルの選手詳細の折りたたみの中)
+    function rivalChart(h, rv) {
+      const ax = st.hero.mainAxis || 'X';
+      const A = ratingSeries(st, h, ax), B = ratingSeries(st, rv, ax);
+      const n = Math.max(A.length, B.length);
+      if (n < 2) return '<div class="small">まだ記録がありません</div>';
+      const vals = A.concat(B).map((x) => x.v);
+      const lo = Math.floor(Math.min.apply(null, vals) / 20) * 20, hi = Math.ceil(Math.max.apply(null, vals) / 20) * 20 || lo + 20;
+      const W = 300, Ht = 150, L = 34, R = 8, T = 10, Bm = 22;
+      const x = (i) => L + (W - L - R) * i / (n - 1);
+      const y = (v) => T + (Ht - T - Bm) * (1 - (v - lo) / Math.max(1, hi - lo));
+      const line = (S, cls) => '<polyline class="' + cls + '" fill="none" points="' + S.map((p, i) => x(i).toFixed(1) + ',' + y(p.v).toFixed(1)).join(' ') + '"/>';
+      let g = '';
+      for (const v of [lo, Math.round((lo + hi) / 2), hi]) g += '<line class="gl" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v).toFixed(1) + '" y2="' + y(v).toFixed(1) + '"/><text class="tk" x="' + (L - 4) + '" y="' + (y(v) + 4).toFixed(1) + '" text-anchor="end">' + v + '</text>';
+      A.forEach((p, i) => { if (i && ((p.s % 12) + 12) % 12 === 0) g += '<text class="tk" x="' + x(i).toFixed(1) + '" y="' + (Ht - 6) + '" text-anchor="middle">' + (Math.floor(p.s / 12) + 1 - st.hero.enrolledYear + 1) + '年4月</text>'; });
+      g += '<text class="tk" x="' + L + '" y="' + (Ht - 6) + '">入学</text>';
+      return '<svg class="rvchart" viewBox="0 0 ' + W + ' ' + Ht + '" role="img" aria-label="2人の総合値の推移">' + g + line(B, 'ln-r') + line(A, 'ln-h') + '</svg>'
+        + '<div class="small"><span class="key kh"></span>あなた ' + A[A.length - 1].v + ' <span class="key kr"></span>' + esc(rv.name) + ' ' + B[B.length - 1].v + '(入学時 ' + A[0].v + ' / ' + B[0].v + ')</div>';
     }
     // 気になる選手(折りたたみ。閉じた状態は1行の要約)
     function watchCollapsible() {
@@ -6566,6 +6727,7 @@
         const hr = h ? Math.round(h.finalAbilities ? h.rating : Core.rating(h)) : 0;
         const rr = Core.rating(p);
         html += '<div class="small rvmark"><span class="mk rv">ライバル</span> 入学時 ' + Core.initialRating(p) + ' → 現在 ' + rr + '(あなたとの差 ' + (hr - rr > 0 ? '+' : '') + (hr - rr) + ')</div>';
+        if (h && !h.finalAbilities) html += renderCollapsible('rvchart', '2人の総合値の推移', () => rivalChart(h, p));
       }
       if (isHero) {
         html += '<div class="small">入学時からの変化</div>' + boxes(view, p.initialAbilities, abil) + statsTable(p) + '<div class="small">年表</div><ul class="hist">'
@@ -6603,9 +6765,23 @@
         + '<div class="grad"><div><div class="small">入学時</div>' + num(sides(G.init)) + '<div class="small">' + (G.init.top != null ? '同世代 上位' + Generation.formatTop(G.init.top) : '同世代 上位50%より下') + '</div></div>'
         + '<div class="arrow">→</div><div><div class="small">卒業時(3年夏)</div>' + num(sides(G.fin)) + '<div class="small">' + (G.fin.top != null ? '同世代 上位' + Generation.formatTop(G.fin.top) : '同世代 上位50%より下') + '</div></div></div>'
         + (a && abil ? boxes(Object.assign({}, a, { abilities: abil, pitches: st.hero.finalPitches || [] }), null, abil) : '')
-        + gradRival(G.rival) + (G.watch && G.watch.length ? '<div class="sublabel">気になる選手のその後</div>' + G.watch.map((t) => '<div class="small">' + esc(t) + '</div>').join('') : '')
+        + gradTotals(G.totals) + gradRival(G.rival) + (G.watch && G.watch.length ? '<div class="sublabel">気になる選手のその後</div>' + G.watch.map((t) => '<div class="small">' + esc(t) + '</div>').join('') : '')
         + '<div class="btns"><button class="btn sub small" data-detail="1">3年間の年表</button></div>'
         + '<div class="btns"><button class="btn" id="hAgain">もう一度引く</button><button class="btn sub" id="hSame">同じシードでやり直す</button></div></div>';
+    }
+    // 通算成績(大会と練習試合。ライバルと2列で並べる。数が小さいときは「参考」)
+    function gradTotals(T) {
+      if (!T) return '';
+      const cols = [T.hero].concat(T.rival ? [T.rival] : []);
+      const bat = (l) => (l.g || 0) + '試合 ' + l.ab + '打数' + l.h + '安打<br>打率' + Core.formatAverage(l) + (l.ab < CONFIG.heroMode.totals.minAb ? '(参考)' : '') + ' ' + l.hr + '本 ' + l.rbi + '打点';
+      const era = (l, er) => (l.outs ? (er * 27 / l.outs).toFixed(2) : '-.--') + (l.outs < CONFIG.heroMode.totals.minOuts ? '(参考)' : '');
+      const pit = (l, er) => (l.pg || 0) + '登板 ' + Math.floor(l.outs / 3) + '回 ' + l.w + '勝' + l.l + '敗<br>防' + era(l, er) + ' 完投' + (l.cg || 0);
+      const per = (l) => Math.round(l.runs * CONFIG.stats.earnedRate);
+      const rows = [];
+      if (T.kind !== 'pitch') rows.push(['大会<br>打撃', (c) => bat(c.t)], ['練習<br>打撃', (c) => bat(c.p)]);
+      if (T.kind !== 'bat') rows.push(['大会<br>投球', (c) => pit(c.t, c.t.er)], ['練習<br>投球', (c) => pit(c.p, per(c.p))]);
+      return '<div class="sublabel">通算成績</div><div class="scroll"><table class="lu tot"><tr><th></th><th>あなた</th>' + (T.rival ? '<th>' + esc(T.rival.name) + '</th>' : '') + '</tr>'
+        + rows.map((r) => '<tr><td>' + r[0] + '</td>' + cols.map((c) => '<td>' + r[1](c) + '</td>').join('') + '</tr>').join('') + '</table></div>';
     }
     function gradRival(R) {
       if (!R) return '';
@@ -6735,6 +6911,7 @@
     autoRival: autoRival, getValueAt: getValueAt, gamePeak: gamePeak, monthAppearance: monthAppearance, lineText: lineText, emptyLine: emptyLine, addLine: addLine, toggleWatch: toggleWatch, swapWatch: swapWatch, addWatch: addWatch, diffSentence: diffSentence, getRank: getRank, toKmh: toKmh, breakTotal: breakTotal, syncPitches: syncPitches, pitchCountFor: pitchCountFor, closeNewYear: closeNewYear, rosterList: rosterList, makeHeroPlayer: makeHeroPlayer, contestOf: contestOf, convertEligible: convertEligible, heroOf: heroOf, rivalOf: rivalOf, statusLabel: statusLabel,
     rivalLine: rivalLine, contestAxisNow: contestAxisNow, keys: keys, save: save, load: load, wipeKeys: wipeKeys,
     startNew: startNew, resetSameSeed: resetSameSeed, resetNewSeed: resetNewSeed, wipeAll: wipeAll, startup: startup,
+    playerMonthLine: playerMonthLine, ratingSeries: ratingSeries, autoRival: autoRival,
     pickText: pickText, fill: fill, typeOf: typeOf, setback: setback, tryRebound: tryRebound, hrng: hrng, serialOf: serialOf,
     mountUI: mountUI,
   };

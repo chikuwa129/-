@@ -364,7 +364,7 @@
 
     // ---- 新入部員モード(hero.html / play-hero.html)。数値はすべて仮の値。育成監督モードでは使わない ----
     heroMode: {
-      saveVersion: 3,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3)
+      saveVersion: 4,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4)
       seedSalt: 0x4e52b1d3,         // このモード専用の乱数(引き直し・主人公の作成・物語の文面・転向と再起の抽選)
       rerollMax: 2,                 // 新入部員の一覧の引き直しの回数
       stopOnStory: true,            // 主人公の山場の物語で、自動進行を止める
@@ -382,6 +382,10 @@
       },
       rival: {
         candidateCount: 5,          // ライバルを選び直す一覧の人数
+        // 自動のライバルの選び方:'chaseable'(主人公より少し上の、追える相手)/ 'strongest'(H1.3 までの方式。同じ守備区分で最も強い選手)
+        selectMode: 'chaseable',
+        minGap: 5,                  // 'chaseable':主人公との総合値の差がこれ未満の相手は外す(ほぼ同じ強さでは追う実感が出にくい)
+        maxGap: 120,                // 'chaseable':差がこれを超えても選ぶが、選ばれた理由に「差は大きい」と添える
         revealAtGraduation: true,   // 卒業のときに、ライバルの素質を明かす
         swapMonths: 2,              // 総合値の順位の入れ替わりを、物語にするまでの連続の月数
       },
@@ -417,6 +421,7 @@
       // 練習試合で途中出場したときの、主人公の成績の抽選(成績用の乱数。大会の通算には含めない)
       practiceSub: { paMin: 1, paExtraRate: 0.5, reliefInnings: 1, reliefRunRate: 0.3 },
       watchMax: 2,                  // 気になる選手の上限(主人公とライバルは別枠)
+      totals: { minAb: 20, minOuts: 27 },   // 卒業の通算成績:打数・アウト数がこれ未満なら「参考」と添える
       // 先発の投球回(このモードの成績だけ。得点・勝敗は変えない)
       stamina: {
         enabled: true,              // false で、従来どおり先発はすべて完投として記録(テスト用)
@@ -736,6 +741,9 @@
     ['heroMode.create.geniusGrowthRatio', 'hero', '作成:天才の成長の倍率(既存の天才の倍率に掛ける)'],
     ['heroMode.twoWay.batWeightInPitcherSlot', 'hero', '投手枠の評価値で、野手側の総合値に掛ける重み'],
     ['heroMode.rival.candidateCount', 'hero', 'ライバルを選び直す一覧の人数'],
+    ['heroMode.rival.selectMode', 'hero', '自動のライバルの選び方(chaseable:少し上の追える相手 / strongest:H1.3 までの最も強い相手)'],
+    ['heroMode.rival.minGap', 'hero', '追える相手:総合値の差がこれ未満の相手は外す'],
+    ['heroMode.rival.maxGap', 'hero', '追える相手:差がこれを超えたら、選ばれた理由に「差は大きい」と添える'],
     ['heroMode.rival.swapMonths', 'hero', '総合値の順位の入れ替わりを物語にする連続の月数'],
     ['heroMode.contest.swapStoryGap', 'hero', '「奪った・奪われた」の物語の最短間隔(月)'],
     ['heroMode.contest.benchStory.0', 'hero', '「控えが続く」の物語(1回目)の連続の月数'],
@@ -774,6 +782,8 @@
     ['heroMode.practiceSub.reliefInnings', 'hero', '練習試合の途中出場:投手の登板の回数'],
     ['heroMode.practiceSub.reliefRunRate', 'hero', '練習試合の途中出場:投手が1点取られる確率'],
     ['heroMode.watchMax', 'hero', '気になる選手の上限(主人公とライバルは別枠)'],
+    ['heroMode.totals.minAb', 'hero', '卒業の通算成績:打数がこれ未満なら打率に「参考」と添える'],
+    ['heroMode.totals.minOuts', 'hero', '卒業の通算成績:アウト数がこれ未満なら防御率に「参考」と添える'],
     ['heroMode.rival.revealAtGraduation', 'hero', '卒業のときに、ライバルの素質を明かす(オン/オフ)'],
     ['heroMode.pitching.enabled', 'hero', '先発の能力を失点に効かせる(オン/オフ。勝敗と自校の得点は変えない)'],
     ['heroMode.pitching.coef', 'hero', '失点のずらし:係数(総合値100あたりの点数。9回換算)'],
