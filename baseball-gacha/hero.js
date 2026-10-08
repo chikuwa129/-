@@ -624,6 +624,8 @@
     const year = st.year;
     const avail = st.players.filter((p) => !p.retired && !p.excluded);
     const slots = Core.buildLineup(st.players, { heroTwoWay: true });
+    // その月のスタメンと打順の記録(3年の7月の画面で、大会に出なかったときの「直前のスタメン」に使う。乱数は使わない)
+    { const ord = Core.battingOrder(slots); H.lineupPrev = H.lineupNow || null; H.lineupNow = slots.filter((x) => x.player).map((x) => ({ id: x.player.id, pos: x.pos, num: ord[x.player.id] || null, oop: !!x.outOfPosition })); }
     const hs = h.retired ? null : slotOf(slots, h);
     const rs = rv && !rv.retired ? slotOf(slots, rv) : null;
     H.prevSlotNow = hs;
@@ -1012,6 +1014,40 @@
       stat: { text: c.ab ? Core.formatAverage(c) : '---', faint: c.ab > 0 && c.ab < HM().lineup.minAb },
       ext: { def: rankCell(a.defense), arm: rankCell(a.arm), hr: c.hr, rbi: c.rbi, ab: c.ab },
     };
+  }
+  // 3年の7月の画面:夏の大会の最後の試合のスタメンと打順(3年生を含む)。大会がなければ直前の月のスタメン
+  //   戻り値:{ title, rows }。行の形は lineupRows と同じ。引退した3年生・卒業した主人公は、卒業時の能力で出す
+  function anyPlayer(st, id) {
+    const H = st.hero;
+    const p = st.players.find((q) => q.id === id) || (st.alumni || []).find((a) => a.id === id);
+    if (!p) return null;
+    if (!p.finalAbilities) return p;
+    return Object.assign({}, p, { abilities: id === H.id && H.finalAbilities ? H.finalAbilities : p.finalAbilities, grade: p.grade || 3 });
+  }
+  function tourneyLineupRows(st) {
+    let box = null;
+    for (const m of st.lastEvents || []) for (const c of (m && m.cards) || []) if (c.type === 'tournament' && c.games && c.games.length) box = c.games[c.games.length - 1].box || box;
+    let ent;
+    let title;
+    if (box) {
+      ent = (box.batters || []).map((b) => ({ id: b.id, pos: b.pos, num: b.num, oop: null }));
+      const sp = box.starter || box.pitcher;
+      if (sp && !ent.some((e) => e.id === sp.id)) ent.push({ id: sp.id, pos: 'P', num: null, oop: null });
+      title = '大会のときのスタメン';
+    } else {
+      ent = (st.hero.lineupPrev || []).slice();
+      title = '直前のスタメン';
+    }
+    const rows = ent.map((e) => {
+      const p = anyPlayer(st, e.id);
+      if (!p) return null;
+      const pr = e.pos === 'P';
+      const tw = twoWayKnown(p);
+      const oop = e.oop != null ? e.oop : !(p.position === e.pos || (tw && (e.pos === 'P' || e.pos === Core.twoWayBatPos(p))));
+      return Object.assign({ id: p.id, name: p.name, grade: p.grade, order: e.num, pos: e.pos, oop: oop, own: p.position, twoWay: tw, pitcher: pr, retired: !!p.retired || !!p.finalAbilities,
+        rating: tw && !pr ? batR(p) : tw ? pitchR(p) : Core.rating(p) }, statCells(p, pr));
+    }).filter(Boolean).sort((a, b) => (a.order || 10) - (b.order || 10));
+    return { title: title, rows: rows };
   }
   function lineupRows(st) {
     const slots = Core.buildLineup(st.players, { heroTwoWay: true });
@@ -1555,6 +1591,14 @@
       const pool = STORY.impression.find((x) => r >= x[0])[1];
       return pool[p.id % pool.length];
     }
+    // 進行ボタンのバー(heroMode.ui.progressBar:'bottom' 下に固定 / 'top' 上に固定 / 'inline' 元の位置のまま)
+    let pbarUsed = false;
+    function pbar(buttons) {
+      const mode = (HM().ui && HM().ui.progressBar) || 'bottom';
+      if (mode === 'inline') return '<div class="btns">' + buttons + '</div>';
+      pbarUsed = mode;
+      return '<div class="pbar pbar-' + mode + '"><div class="pbar-in">' + buttons + '</div></div>';
+    }
     function monthBand(nowIdx) {
       // 主人公の3年目は、夏の大会(7月)まで。7月の画面(卒業待ち)は 7月を今月にする
       const h = heroOf(st);
@@ -1621,7 +1665,7 @@
       const hr = rolesOf(h);
       return rolesOf(p).some((x) => hr.indexOf(x) >= 0);
     }
-    function rosterView() {
+    function rosterView(july) {
       const H = st.hero;
       const sort = ui.rosterSort || 'grade';
       const slots = Core.buildLineup(st.players, { heroTwoWay: true });
@@ -1630,13 +1674,14 @@
       const by = sort === 'rating' ? (a, b) => Core.rating(b) - Core.rating(a) || a.id - b.id
         : sort === 'pos' ? (a, b) => ord[a.position] - ord[b.position] || Core.rating(b) - Core.rating(a) || a.id - b.id
         : (a, b) => b.grade - a.grade || Core.rating(b) - Core.rating(a) || a.id - b.id;
-      const row = (p) => compactRow(p, (inLine.has(p.id) ? ' <span class="mk on">◯</span>' : '') + (p.id === H.id ? ' <span class="mk me">主人公</span>' : '')
+      const row = (p) => compactRow(p, (july && (p.retired || p.finalAbilities) ? ' <span class="mk ret">引退</span>' : '') + (inLine.has(p.id) ? ' <span class="mk on">◯</span>' : '') + (p.id === H.id ? ' <span class="mk me">主人公</span>' : '')
         + (p.id === H.rivalId ? ' <span class="mk rv">ライバル</span>' : '') + (samePos(p) ? ' <span class="mk sp">同じポジション</span>' : ''), rosterStats(p));
       const btn = (k, l) => '<button class="chip' + (sort === k ? ' on' : '') + '" data-rsort="' + k + '">' + l + '</button>';
       let html = '<div class="row2">' + btn('grade', '学年順') + btn('rating', '総合値順') + btn('pos', '守備区分順') + '</div>';
-      const list = rosterList(st);
+      // 3年の7月の画面:卒業した主人公も、引退した3年生と一緒に名簿に残す(卒業時の能力)
+      const list = july && !heroOf(st) && anyPlayer(st, H.id) ? rosterList(st).concat([anyPlayer(st, H.id)]) : rosterList(st);
       if (sort === 'grade') {
-        const hg = (heroOf(st) || {}).grade;
+        const hg = (heroOf(st) || heroView() || {}).grade;
         for (const g of [3, 2, 1]) {
           const L = list.filter((p) => p.grade === g).sort(by);
           // 学年ごとの折りたたみ(初期は主人公の学年だけ開く。開閉は記憶する)
@@ -1785,7 +1830,7 @@
         + (rv ? rivalCard(rv) : '<div class="small">ライバル:なし</div>') + topMateLine(h, rv)
         + '<div class="sublabel">同じポジションの先輩たち</div>' + (sen || '<div class="small">同じポジションの先輩はいません</div>')
         + '<div class="btns"><button class="btn sub small" id="hRoster">部員名簿を見る</button></div>'
-        + '<div class="btns"><button class="btn" id="hStart">始める</button></div></div>';
+        + '</div>' + pbar('<button class="btn" id="hStart">始める</button>');
     }
     // 今年の最強の同期(開始画面だけの1行。ライバルと同じ選手なら出さない。比較や物語には使わない)
     function topMateLine(h, rv) {
@@ -1818,7 +1863,7 @@
       const others = recs.filter((p) => top.indexOf(p) < 0);
       const otherRows = () => others.map((p) => compactRow(p, samePos(p) ? ' <span class="mk sp">同じポジション</span>' : '')).join('');
       html += others.length > HM().newYearOthersOpen ? renderCollapsible('nyOthers', '他の新入生(' + others.length + '人)', otherRows) : otherRows();
-      return html + '<div class="btns"><button class="btn" id="hNewYearOk">始める</button></div></div>';
+      return html + '</div>' + pbar('<button class="btn" id="hNewYearOk">始める</button>');
     }
     // ---------- ホーム ----------
     function renderHome(july) {
@@ -1832,11 +1877,11 @@
         + (H.watchNote ? '<div class="small wnote">★ ' + esc(H.watchNote) + '</div>' : '') + '</div>';
       html += gamesCard(july ? summerResultLine(st) : null);
       html += rivalCompare(july);
-      html += july ? '<div class="btns"><button class="btn" id="hToGrad">卒業へ進む</button></div>'
-        : '<div class="btns"><button class="btn" id="hNextEvent">次のイベントまで</button><button class="btn sub" id="hNextMonth">次の月へ</button></div>';
+      html += july ? pbar('<button class="btn" id="hToGrad">卒業へ進む</button>')
+        : pbar('<button class="btn" id="hNextEvent">次のイベントまで</button><button class="btn sub" id="hNextMonth">次の月へ</button>');
       // 折りたたみの並び(1つのブロック)
-      html += '<div class="card">' + renderCollapsible('team', 'チームの様子', lineupTable) + watchCollapsible()
-        + renderCollapsible('chron', '主人公の年表', chronicle) + renderCollapsible('roster', '部員名簿', rosterView) + '</div>';
+      html += '<div class="card">' + renderCollapsible('team', 'チームの様子', () => lineupTable(july)) + watchCollapsible()
+        + renderCollapsible('chron', '主人公の年表', chronicle) + renderCollapsible('roster', '部員名簿', () => rosterView(july)) + '</div>';
       return html;
     }
     // ライバルとの比較の1行(2人の総合値・差・矢印・今月のスタメン)
@@ -1854,7 +1899,7 @@
       const slots = Core.buildLineup(st.players, { heroTwoWay: true });
       const ml = playerMonthLine(st, rv);
       // 7月の画面では、3年生は引退して名簿にいないので、その月の記録(主人公の枠、ライバルの出場)で書く
-      const on = (p) => (july ? (p.id === H.id ? (() => { const sv = (st.lastEvents || []).map((m) => m && m.serial); const L = H.appear.filter((e) => e.kind === 'tourney' && sv.indexOf(e.s) >= 0); return L.some((e) => e.role === 'start') ? 'スタメン' : L.some((e) => e.role === 'sub') ? '途中出場' : '控え'; })() : ml && ml.text !== '控え(出番なし)' ? '出場' : '控え') : slots.some((x) => x.player === p) ? 'スタメン' : '控え');
+      const on = (p) => (july ? (p.id === H.id ? (() => { const sv = (st.lastEvents || []).map((m) => m && m.serial); const L = H.appear.filter((e) => e.kind === 'tourney' && sv.indexOf(e.s) >= 0); return L.some((e) => e.role === 'start') ? 'スタメン' : L.some((e) => e.role === 'sub') ? '途中出場' : '控え'; })() : ml && ml.text !== '控え(出番なし)' ? 'スタメン' : '控え') : slots.some((x) => x.player === p) ? 'スタメン' : '控え');
       return '<div class="card small">ライバル:<button class="namebtn" data-pdet="' + rv.id + '">' + esc(rv.name) + '</button>(' + POS_LABEL[rv.position] + ')'
         + '<div class="cmp">あなた <b>' + a + '</b> / ' + esc(rv.name) + ' <b>' + b + '</b> / 差 <b>' + (d > 0 ? '+' : '') + d + '</b> <span class="arrow2">' + arrow + '</span></div>'
         + '<div>' + (axis ? '同じ' + AXIS_LABEL[axis] + 'を争っている。' : '') + '今月:あなた ' + on(h) + '・' + esc(rv.name) + ' ' + on(rv) + '</div>'
@@ -1926,9 +1971,10 @@
             + (b.wp ? '勝利投手 ' + esc(b.wp) : '敗戦投手 ' + esc(b.lp || '-')) + '</div>') + '</div>';
       }).join('') + '</div>';
     }
-    function lineupTable() {
-      const h = heroOf(st);
-      const rows = lineupRows(st);
+    function lineupTable(july) {
+      const h = heroOf(st) || heroView();
+      const tl = july ? tourneyLineupRows(st) : null;
+      const rows = tl ? tl.rows : lineupRows(st);
       const wide = !!ui.luDetail;
       const rc = (c) => '<td class="rc"><b>' + (c.rank || '') + '</b><span>' + c.v + (c.unit ? '<i>' + c.unit + '</i>' : '') + '</span></td>';
       const anyTW = rows.some((r) => r.pitcher && r.ext.bat);
@@ -1947,7 +1993,7 @@
         }
         return tr + '</tr>';
       }).join('');
-      return '<div class="scroll"><table class="lu stm' + (wide ? ' wide' : '') + '">' + head + body + '</table></div>'
+      return (tl ? '<div class="small"><b>' + esc(tl.title) + '</b>(3年生を含む)</div>' : '') + '<div class="scroll"><table class="lu stm' + (wide ? ' wide' : '') + '">' + head + body + '</table></div>'
         + '<div class="small">赤字は本職外の起用。薄い打率は打数' + HM().lineup.minAb + '未満(参考値)。打率・防御率は大会の通算。 <button class="chip" id="hLuDetail">' + (wide ? '詳細列を閉じる' : '詳細列') + '</button></div>';
     }
     function chronicle() {
@@ -2068,6 +2114,7 @@
     }
     function render() {
       const H = st.hero;
+      pbarUsed = false;
       const h = heroOf(st);
       doc.getElementById('meta').innerHTML = H.phase === 'graduate' ? '<b>' + HighSchool.formatYear(st.year) + ' 7月' + (H.gradPending || julyView ? '' : '(卒業)') + '</b>'
         : '<b>' + HighSchool.formatYear(st.year) + ' ' + esc(HighSchool.monthLabel(st.month)) + '</b>' + (h ? ' ・ ' + esc(h.name) + '(' + (h.grade || 1) + '年)' : '');
@@ -2081,6 +2128,7 @@
       else if (H.newYear && !H.newYear.closed) html = renderNewYear();
       else html = renderHome();
       doc.getElementById('main').innerHTML = renderDev() + html + renderDetail() + renderModal();
+      if (doc.body && doc.body.classList) { doc.body.classList.toggle('has-pbar-bottom', pbarUsed === 'bottom'); doc.body.classList.toggle('has-pbar-top', pbarUsed === 'top'); }
     }
     function act(fn) { fn(); persist(); render(); }
     doc.getElementById('main').addEventListener('change', (e) => {
@@ -2161,7 +2209,7 @@
     autoRival: autoRival, getValueAt: getValueAt, gamePeak: gamePeak, monthAppearance: monthAppearance, lineText: lineText, emptyLine: emptyLine, addLine: addLine, toggleWatch: toggleWatch, swapWatch: swapWatch, addWatch: addWatch, diffSentence: diffSentence, getRank: getRank, toKmh: toKmh, breakTotal: breakTotal, syncPitches: syncPitches, pitchCountFor: pitchCountFor, closeNewYear: closeNewYear, rosterList: rosterList, makeHeroPlayer: makeHeroPlayer, contestOf: contestOf, convertEligible: convertEligible, heroOf: heroOf, rivalOf: rivalOf, statusLabel: statusLabel,
     rivalLine: rivalLine, contestAxisNow: contestAxisNow, keys: keys, save: save, load: load, wipeKeys: wipeKeys,
     startNew: startNew, resetSameSeed: resetSameSeed, resetNewSeed: resetNewSeed, wipeAll: wipeAll, startup: startup,
-    pickable: pickable, makePickup: makePickup, goGraduate: goGraduate, summerResultLine: summerResultLine, playerMonthLine: playerMonthLine, ratingSeries: ratingSeries, autoRival: autoRival, lineupRows: lineupRows, statCells: statCells,
+    pickable: pickable, makePickup: makePickup, goGraduate: goGraduate, summerResultLine: summerResultLine, playerMonthLine: playerMonthLine, ratingSeries: ratingSeries, autoRival: autoRival, lineupRows: lineupRows, tourneyLineupRows: tourneyLineupRows, anyPlayer: anyPlayer, statCells: statCells,
     pickText: pickText, fill: fill, typeOf: typeOf, setback: setback, tryRebound: tryRebound, hrng: hrng, serialOf: serialOf,
     mountUI: mountUI,
   };

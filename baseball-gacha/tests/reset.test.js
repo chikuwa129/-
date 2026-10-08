@@ -246,7 +246,7 @@ test('新入部員モード:保存データ(bbgacha_hero_v*)は3種類のリセ�
   const Hero = require('../hero.js');
   const st = memoryStorage();
   const K = Hero.keys();
-  assert.ok(K.save.indexOf(CONFIG.storagePrefix + 'hero_v' + CONFIG.heroMode.saveVersion + '_') === 0 && CONFIG.heroMode.saveVersion === 7, '保存キーの接頭辞');
+  assert.ok(K.save.indexOf(CONFIG.storagePrefix + 'hero_v' + CONFIG.heroMode.saveVersion + '_') === 0 && CONFIG.heroMode.saveVersion === 8, '保存キーの接頭辞');
   const progress = (seed) => {
     const s = Hero.startNew(st, seed);
     Hero.reroll(s);

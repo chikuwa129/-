@@ -610,7 +610,7 @@
 
     // ---- 新入部員モード(hero.html / play-hero.html)。数値はすべて仮の値。育成監督モードでは使わない ----
     heroMode: {
-      saveVersion: 7,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5、H1.4b で 6:卒業待ち、H1.5a で 7:ピックアップ)
+      saveVersion: 8,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5、H1.4b で 6:卒業待ち、H1.5a で 7:ピックアップ、H1.4c で 8:月ごとのスタメン)
       seedSalt: 0x4e52b1d3,         // このモード専用の乱数(引き直し・主人公の作成・物語の文面・転向と再起の抽選)
       rerollMax: 2,                 // 新入部員の一覧の引き直しの回数
       stopOnStory: true,            // 主人公の山場の物語で、自動進行を止める
@@ -669,6 +669,7 @@
       watchMax: 2,                  // 気になる選手の上限(主人公とライバルは別枠)
       entranceMax: 8,               // 入口で大きなカードで出す新入生(ピックアップ)の最大人数(roster.version 'v2' のとき)
       entrancePickTop: 5,           // ピックアップのうち、総合値の上位から選ぶ人数(残りは無作為)
+      ui: { progressBar: 'bottom' },   // 進行ボタンのバー:'bottom' 下に固定 / 'top' 上に固定 / 'inline' 固定しない(H1.4b の表示)
       newYearOthersOpen: 5,         // 新年度の画面:上位3人以外の新入生がこの人数を超えたら、折りたたみにする
       totals: { minAb: 20, minOuts: 27 },   // 卒業の通算成績:打数・アウト数がこれ未満なら「参考」と添える
       // スタメン表・部員名簿の指標と、主人公の打順の変化のひとこと
@@ -1051,6 +1052,7 @@
     ['roster.v2.minPerClass.C', 'roster', '各学年の新入生の本職の捕手の最低人数(v2)'],
     ['heroMode.entranceMax', 'hero', '入口のピックアップの最大人数(主人公に選べるのはピックアップだけ)'],
     ['heroMode.entrancePickTop', 'hero', '入口のピックアップのうち、総合値の上位から選ぶ人数'],
+    ['heroMode.ui.progressBar', 'hero', '進行ボタンのバー(bottom:下に固定 / top:上に固定 / inline:固定しない)', true, ['bottom', 'top', 'inline']],
     ['heroMode.newYearOthersOpen', 'hero', '新年度の画面:上位3人以外の新入生がこの人数を超えたら折りたたむ'],
     ['heroMode.lineup.minAb', 'hero', 'スタメン表の打率:打数がこれ未満なら薄い文字(参考値)'],
     ['heroMode.lineup.orderChangeMin', 'hero', '主人公の打順の変化:これ以上動いた月だけ、ひとことにする'],

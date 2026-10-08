@@ -980,6 +980,48 @@ test('入口(v2):ピックアップは8人以下(上位5人を含む)。主人�
   }
 });
 
+// ---------- H1.4c:3年の7月の画面のスタメンと名簿 ----------
+test('H1.4c:勝敗・能力・進路・本体の乱数が H1.5a と一致する(20回)', () => {
+  if (!Core.isV2()) return;
+  const FP = require('./hero-fingerprint.js');
+  const ref = require('./fixtures/h15a-fingerprint.json');
+  for (let i = 0; i < ref.length; i++) assert.deepStrictEqual(FP.fingerprint(i), ref[i], i + '回目');
+});
+
+test('3年の7月の画面:スタメン表は大会の最後の試合のスタメン(主人公と3年生を含む)。名簿には引退した3年生が残る(20回)', () => {
+  let with3 = 0;
+  for (let i = 0; i < 20; i++) {
+    const st = Hero.newHeroGame(7100 + i);
+    Hero.pickHero(st, Hero.pickable(st)[i % Hero.pickable(st).length].id);
+    Hero.startPlay(st);
+    let normalChecked = false;
+    for (let k = 0; k < 200 && st.hero.phase === 'play'; k++) {
+      Hero.advance(st, 'event');
+      if (!normalChecked && st.hero.phase === 'play') {   // 通常の月:今のスタメン(引退した選手は入らない)
+        assert.ok(Hero.lineupRows(st).every((r) => !st.players.find((p) => p.id === r.id).retired));
+        normalChecked = true;
+      }
+    }
+    assert.ok(st.hero.gradPending);
+    const T = Hero.tourneyLineupRows(st);
+    let box = null;
+    for (const m of st.lastEvents) for (const c of m.cards || []) if (c.type === 'tournament' && c.games) box = c.games[c.games.length - 1].box;
+    if (box) {
+      assert.strictEqual(T.title, '大会のときのスタメン');
+      const ids = box.batters.map((b) => b.id).concat(box.starter ? [box.starter.id] : []);
+      assert.deepStrictEqual(T.rows.map((r) => r.id).sort((a, b) => a - b), ids.filter((v, j) => ids.indexOf(v) === j).sort((a, b) => a - b), 'スタメンは試合の記録どおり');
+      for (const r of T.rows.filter((x) => !x.pitcher || x.order)) assert.strictEqual(r.order, (box.batters.find((b) => b.id === r.id) || {}).num, '打順');
+      if (T.rows.some((r) => r.grade === 3 && r.retired)) with3++;
+      const heroIn = st.hero.appear.some((e) => e.kind === 'tourney' && e.role === 'start' && e.s === st.lastEvents[0].serial);
+      if (heroIn) assert.ok(T.rows.some((r) => r.id === st.hero.id), '主人公を含む');
+    } else assert.strictEqual(T.title, '直前のスタメン');
+    // 名簿:引退した3年生(retired)が残り、主人公は卒業時の能力で取れる
+    assert.ok(st.players.some((p) => p.grade === 3 && p.retired), '引退した3年生が名簿のデータに残る');
+    assert.ok(Hero.anyPlayer(st, st.hero.id), '卒業した主人公も名簿に出せる');
+  }
+  assert.ok(with3 >= 15, '3年生を含む ' + with3);
+});
+
 // legacy の一致の確認(別プロセス)
 if (!LEGACY_ONLY && Core.isV2()) {
   test("roster.version 'legacy' の一致の確認(BBGACHA_ROSTER=legacy の別プロセスで、legacy の指紋のテストを実行)", () => {
