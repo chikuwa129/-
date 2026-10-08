@@ -3,6 +3,7 @@
 //   使い方: node tools/hero-sim.js [回数=200] [最初のシード=1]
 //   引きの主人公と、作った主人公(レベル感 × 素質、二刀流)を、それぞれ指定の回数だけ3年間進めて、
 //   config.js の heroMode.targets と比べて ✓ / △ / ✕ を出す。同じ引数なら同じ結果になる。
+//   測定の時点は「3年の夏の大会の直後」(主人公の卒業の時点)。比較先の引きの選手も同じ時点で測る。
 // =============================================================
 'use strict';
 
@@ -43,7 +44,11 @@ function run(kind, seed) {
   const H = st.hero;
   const a = st.alumni.find((x) => x.id === H.id);
   const rv = st.alumni.find((x) => x.id === H.rivalId);
-  const cohort = st.alumni.filter((x) => x.enrolledYear === cohortYear && x.id !== H.id && x.origin === 'recruit');
+  // 同学年の引きの選手(主人公の卒業の時点 = 3年の夏の大会の直後。まだ在籍している)
+  const cohort = st.players.filter((x) => x.enrolledYear === cohortYear && x.id !== H.id && x.origin === 'recruit' && !x.helper).map((p) => ({
+    rating: Core.rating(p), talent: p.talent, geniusBust: p.geniusBust, reincarnation: p.reincarnation, twoWay: p.twoWay, position: p.position,
+    pitch: Core.ratingOfKeys(p.abilities, Core.PITCH_KEYS), velo: p.abilities.velocity, velo0: p.initialAbilities.velocity,
+  }));
   const all = H.stories;
   return {
     st: st, H: H, a: a, startPos: startPos, rivalTwoWay: !!(rv && rv.twoWay),
@@ -103,9 +108,9 @@ for (const k of KINDS) {
 const cohort = [].concat.apply([], allRuns.map((r) => r.cohort));
 const normal = cohort.filter((a) => a.talent !== 'genius' && !a.reincarnation && !a.twoWay);
 const bloom = cohort.filter((a) => a.talent === 'genius' && !a.geniusBust && !a.reincarnation);
-const twoWayAll = [].concat.apply([], allRuns.map((r) => r.st.alumni.filter((a) => a.twoWay && a.origin === 'recruit' && a.id !== r.H.id)));
-const pitchOf = (a) => Core.ratingOfKeys(a.finalAbilities, Core.PITCH_KEYS);
-log('  (引きの基準)通常 ' + f1(mean(normal.map((a) => a.rating))) + '(' + normal.length + '人)/ 天才(開花) ' + f1(mean(bloom.map((a) => a.rating))) + '(' + bloom.length + '人)'
+const twoWayAll = cohort.filter((a) => a.twoWay);
+const pitchOf = (a) => a.pitch;
+log('  (引きの基準。3年夏の時点)通常 ' + f1(mean(normal.map((a) => a.rating))) + '(' + normal.length + '人)/ 天才(開花) ' + f1(mean(bloom.map((a) => a.rating))) + '(' + bloom.length + '人)'
   + ' / 二刀流(投手側) ' + f1(mean(twoWayAll.map(pitchOf))) + '(' + twoWayAll.length + '人)');
 const createdTW = res['tw-low'].concat(res['tw-mid']).filter((r) => r.a);
 const M = {};
@@ -178,6 +183,36 @@ log('  投手兼打者 ' + pct(sm.P / tot) + ' / 野手として出場 ' + pct(s
   + ' / 両方を失う挫折 ' + pct(createdTW.filter((r) => r.stories.some((s) => s.kind === 'twoWayLost')).length / createdTW.length));
 if (sm.P / tot > 0.7) log('# 二刀流が投手枠を取りすぎ → heroMode.twoWay.batWeightInPitcherSlot を下げる');
 if (sm.P / tot < 0.1) log('# 二刀流が投手枠を取れなさすぎ → heroMode.twoWay.batWeightInPitcherSlot を上げる');
+// 先発の投球回(スタミナ別。大会と練習試合の全先発)
+const glog = [].concat.apply([], allRuns.map((r) => r.H.gameLog || []));
+const band = (lo, hi) => glog.filter((g) => g.st >= lo && g.st < hi);
+const ipAvg = (L) => mean(L.map((g) => g.outs / 3));
+const cgRate = (L) => (L.length ? L.filter((g) => g.outs >= 27).length / L.length : NaN);
+log('');
+log('■ 先発の投球回(スタミナの値別。全先発 ' + glog.length + '試合)');
+for (const [lo, hi, lb] of [[0, 20, '20未満'], [20, 50, '20〜50'], [50, 70, '50〜70'], [70, 999, '70以上']]) {
+  const L = band(lo, hi);
+  log('  スタミナ' + lb.padEnd(6) + ' 平均 ' + f1(ipAvg(L)) + '回 / 完投率 ' + pct(cgRate(L)) + '(' + L.length + '試合)');
+}
+M.ipLow = ipAvg(band(0, 20));
+M.cgLow = cgRate(band(0, 20));
+M.ipMid = ipAvg(band(20, 50));
+M.ipHigh = ipAvg(band(70, 999));
+M.cgHigh = cgRate(band(70, 999));
+// ランクアップと新球種
+M.rankUps = mean(allRuns.map((r) => r.H.rankUps || 0));
+const pitchers = allRuns.filter((r) => r.startPos === 'P');
+M.newPitches = mean(pitchers.map((r) => r.H.newPitches || 0));
+log('');
+log('■ ランクアップと新球種');
+log('  ランクアップ 主人公1人あたり ' + f1(M.rankUps) + '回(3年間)/ 新球種 投手の主人公1人あたり ' + f1(M.newPitches) + '回(最大 '
+  + Math.max.apply(null, pitchers.map((r) => r.H.newPitches || 0)) + '回)');
+// 球速の分布
+const kmh = (v) => Hero.toKmh(v);
+const normalP = cohort.filter((a) => a.position === 'P' && a.talent !== 'genius' && !a.reincarnation && !a.twoWay);
+const specialP = cohort.filter((a) => a.position === 'P' && ((a.talent === 'genius' && !a.geniusBust) || a.reincarnation));
+log('  球速:通常の新入生(投手)平均 ' + f1(mean(normalP.map((a) => kmh(a.velo0)))) + 'km/h / 通常の3年夏 平均 ' + f1(mean(normalP.map((a) => kmh(a.velo))))
+  + 'km/h / 天才・転生の3年夏 最高 ' + (specialP.length ? Math.max.apply(null, specialP.map((a) => kmh(a.velo))) : '-') + 'km/h(平均 ' + f1(mean(specialP.map((a) => kmh(a.velo)))) + ')');
 // 目安
 log('');
 log('■ 目安との比較(✓ 範囲内 / △ 目安の±20%以内 / ✕ それ以外)');

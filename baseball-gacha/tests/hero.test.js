@@ -418,7 +418,106 @@ test('練習試合の出場保証:主人公はスタメンでない月も練習�
   assert.ok(checked > 0, '控えの月の練習試合を確認できた');
 });
 
-test('卒業:3年生の3月のあとに、読み物(4〜7文)と結果が出る', () => {
+test('卒業は3年の夏の大会の直後(8月以降には進まない)。新年度の画面は2年目と3年目の4月だけ', () => {
+  for (const st of RUNS) {
+    const H = st.hero;
+    const y3 = H.enrolledYear + 2;
+    const a = st.alumni.find((x) => x.id === H.id);
+    assert.strictEqual(a.graduatedYear, y3, '3年目に卒業');
+    assert.strictEqual(st.year, y3, '年度は3年目のまま');
+    assert.strictEqual(HighSchool.CALENDAR[st.month].month, 8, '8月は処理していない(夏の大会の7月まで)');
+    const ret = H.stories.filter((x) => x.kind === 'retire');
+    assert.strictEqual(ret.length, 1, '引退の一言は1回');
+    assert.strictEqual(ret[0].s, HighSchool.monthSerial(y3, 3), '引退は3年目の7月(夏の大会)');
+    assert.strictEqual(H.stories[H.stories.length - 1].s <= HighSchool.monthSerial(y3, 3), true, '7月より後の物語はない');
+    assert.deepStrictEqual(H.newYears, [H.enrolledYear + 1, H.enrolledYear + 2], '新年度の画面は2年目と3年目の4月');
+  }
+});
+
+test('getRank の境界値と、球速の換算', () => {
+  const R = CONFIG.heroMode.display.rank;
+  const cases = [['S', R.S], ['A', R.A], ['B', R.B], ['C', R.C], ['D', R.D], ['E', R.E], ['F', R.F]];
+  for (const [k, v] of cases) {
+    assert.strictEqual(Hero.getRank(v), k, k + ' の下限ちょうど');
+    assert.notStrictEqual(Hero.getRank(v - 0.01), k, k + ' の下限の直前');
+  }
+  assert.strictEqual(Hero.getRank(R.F - 0.01), 'G');
+  assert.strictEqual(Hero.getRank(0), 'G');
+  let prev = -1;
+  for (let v = 0; v <= 200; v += 0.5) { const k = Hero.toKmh(v); assert.ok(k >= prev, '単調に増える'); prev = k; }
+  const below = (Hero.toKmh(100) - Hero.toKmh(80)) / 20;
+  const above = (Hero.toKmh(140) - Hero.toKmh(120)) / 20;
+  assert.ok(above < below, '100を超える部分は緩やか');
+  assert.ok(Hero.toKmh(1000) <= CONFIG.heroMode.display.kmh.max, '上限');
+});
+
+test('球種の内訳:合計 = 総変化量、各 1〜7、重複なし、保存して読み込んでも同じ', () => {
+  let n = 0;
+  for (const st of RUNS) {
+    for (const p of st.players) {
+      if (!p.pitches) continue;
+      n++;
+      const tot = Hero.breakTotal(p);
+      const sum = p.pitches.reduce((a, x) => a + x.v, 0);
+      assert.strictEqual(sum, Math.min(tot, CONFIG.heroMode.display.maxPitches * CONFIG.heroMode.display.pitchMax), '合計 = 総変化量');
+      for (const x of p.pitches) assert.ok(x.v >= 1 && x.v <= CONFIG.heroMode.display.pitchMax, '変化量 1〜7');
+      assert.strictEqual(new Set(p.pitches.map((x) => x.n)).size, p.pitches.length, '重複なし');
+      assert.ok(p.pitches.length <= CONFIG.heroMode.display.maxPitches);
+    }
+    const back = JSON.parse(JSON.stringify(st));
+    assert.deepStrictEqual(back.players.map((p) => p.pitches), st.players.map((p) => p.pitches), '保存して読み込んでも同じ');
+  }
+  assert.ok(n > 500);
+});
+
+test('先発の投球回:スタミナが高いほど長く、2〜9回、失点が多いほど短い', () => {
+  let prev = 0;
+  for (let s = 0; s <= 120; s += 5) {
+    const ip = Core.heroInnings(s, 2, false);
+    assert.ok(ip >= prev, 'スタミナが高いほど長い');
+    assert.ok(ip >= 2 && ip <= 9);
+    prev = ip;
+  }
+  for (const s of [10, 40, 70, 100]) {
+    let p2 = 99;
+    for (let runs = 0; runs <= 15; runs++) {
+      const ip = Core.heroInnings(s, runs, false);
+      assert.ok(ip <= p2, '失点が多いほど短い');
+      assert.ok(ip >= 2 && ip <= 9);
+      p2 = ip;
+    }
+  }
+  // 実際の試合:先発は2〜9回、完投(9回)のときだけ救援なし
+  let games = 0;
+  for (const st of RUNS) {
+    for (const ev of st.hero.gameLog || []) {
+      games++;
+      assert.ok(ev.outs >= 6 && ev.outs <= 27);
+    }
+  }
+});
+
+test('先発の投球回の変更は、ゲーム本体(得点・勝敗・ゲームの乱数・能力)を変えない', () => {
+  const S = CONFIG.heroMode.stamina;
+  for (const seed of [11, 12, 13]) {
+    S.enabled = true;
+    const a = play(seed, { pick: true });
+    S.enabled = false;
+    const b = play(seed, { pick: true });
+    S.enabled = true;
+    const body = (st) => JSON.stringify([st.rngState, st.yearRecords, st.players.map((p) => [p.id, p.position, p.abilities]), st.alumni.map((x) => [x.id, x.finalAbilities, x.career])]);
+    assert.strictEqual(body(a), body(b), 'シード' + seed);
+  }
+});
+
+test('部員名簿は、助っ人を除く全員を載せる', () => {
+  for (const st of RUNS.slice(0, 10)) {
+    const L = Hero.rosterList(st);
+    assert.strictEqual(L.length, st.players.filter((p) => !p.helper).length);
+  }
+});
+
+test('卒業:3年の夏の大会のあとに、読み物(4〜7文)と結果が出る', () => {
   for (const st of RUNS) {
     assert.strictEqual(st.hero.phase, 'graduate');
     const G = st.hero.graduation;

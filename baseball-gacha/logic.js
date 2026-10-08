@@ -1145,9 +1145,10 @@
       bat[rng.weighted(w)].g.rbi++;
       rest--;
     }
-    // 投手(先発のみ。完投とみなす)
+    // 投手(先発のみ。完投とみなす)。新入部員モードでは、スタミナに応じた投球回と救援(heroPitching)
     const pit = bat.find((b) => b.pos === 'P');
-    if (pit) {
+    const hp = opts && opts.heroPitch && pit ? heroPitching(rng, pit, result, opts.heroPitch) : null;
+    if (pit && !hp) {
       pit.g.pg = 1;
       if (result.win) pit.g.w = 1; else pit.g.l = 1;
       pit.g.er = Math.round(result.opp * S.earnedRate);
@@ -1156,7 +1157,9 @@
     if (record) {
       for (const b of bat) {
         for (const line of statLinesFor(b.p, year)) for (const k of Object.keys(b.g)) line[k] += b.g[k];
+        if (hp && b === pit && hp.cg) for (const line of statLinesFor(b.p, year)) line.cg = (line.cg || 0) + 1;
       }
+      if (hp && hp.relief) for (const line of statLinesFor(hp.relief, year)) for (const k of Object.keys(hp.reliefLine)) line[k] = (line[k] || 0) + hp.reliefLine[k];
     }
     // ラインスコア(得点と失点をイニングに配分する)
     const spread = (runs) => {
@@ -1166,12 +1169,80 @@
     };
     const box = {
       my: result.my, opp: result.opp, win: result.win,
-      line: { my: spread(result.my), opp: spread(result.opp) },
+      line: hp ? hp.line : { my: spread(result.my), opp: spread(result.opp) },
       unearned: unearned,
       batters: bat.filter((b) => b.pos !== 'P' || b.g.pa > 0).map((b) => ({ id: b.p.id, name: b.p.name, num: b.num, pos: b.pos, ab: b.g.ab, h: b.g.h, hr: b.g.hr, rbi: b.g.rbi })),
       pitcher: pit ? { id: pit.p.id, name: pit.p.name, outs: pit.g.outs, runs: result.opp, win: result.win } : null,
     };
+    if (hp) {
+      box.starter = hp.starter;
+      box.relief = hp.reliefBox;
+      box.wp = hp.wp;
+      box.lp = hp.lp;
+      // 活躍選手の判定には、勝利投手を使う(先発が勝利投手でなければ、先発は勝ちなし)
+      box.pitcher = hp.wpStarter ? { id: pit.p.id, name: pit.p.name, outs: hp.starter.outs, runs: hp.starter.runs, win: true }
+        : hp.wpRelief ? { id: hp.relief.id, name: hp.relief.name, outs: hp.reliefBox.outs, runs: hp.reliefBox.runs, win: true }
+        : { id: pit.p.id, name: pit.p.name, outs: hp.starter.outs, runs: hp.starter.runs, win: false };
+    }
     return { paByOrder: paByOrder, box: box };
+  }
+
+  // 新入部員モードの先発の投球回(スタミナから)。得点と失点は変えず、失点を先発と救援に配分する
+  //   o:{ bench:[救援の候補], final:決勝か }。戻り値の line はラインスコア(成績用の乱数で配分)
+  function heroInnings(stamina, oppRuns, final) {
+    const S = CONFIG.heroMode.stamina;
+    let ip = clamp(S.base + stamina / S.perPoint, S.minInnings, 9);
+    ip -= Math.max(0, Math.ceil(oppRuns / 3) - 1);   // 失点が3点を超えるたびに1回減らす
+    ip = clamp(Math.round(ip), 2, 9);
+    if (final && S.finalBonus && stamina >= CONFIG.heroMode.display.rank.B) ip = Math.min(9, ip + 1);
+    return ip;
+  }
+  function heroPitching(rng, pit, result, o) {
+    const V = CONFIG.visual;
+    const S = CONFIG.stats;
+    const ip = heroInnings(pit.p.abilities.stamina, result.opp, o.final);
+    const spRuns = Math.ceil(result.opp * ip / 9);   // 端数は先発に寄せる
+    const rpRuns = result.opp - spRuns;
+    const spreadIn = (runs, from, to) => {
+      const inn = new Array(9).fill(0);
+      const w = V.inningWeights.map((x, i) => (i >= from && i < to ? x : 0));
+      for (let i = 0; i < runs; i++) inn[rng.weighted(w)]++;
+      return inn;
+    };
+    const my = spreadIn(result.my, 0, 9);
+    const sp = spreadIn(spRuns, 0, ip);
+    const rp = ip < 9 ? spreadIn(rpRuns, ip, 9) : new Array(9).fill(0);
+    const opp = sp.map((x, i) => x + rp[i]);
+    const myAt = my.slice(0, ip).reduce((a, b) => a + b, 0);
+    const lead = myAt > spRuns;
+    const trail = myAt < spRuns;
+    const relief = ip < 9 ? (o.bench || []).find((p) => p && p.id !== pit.p.id) || null : null;
+    const reliefName = relief ? relief.name : '救援陣';
+    let wpStarter = false, wpRelief = false, lpStarter = false;
+    if (result.win) { if (ip >= 5 && lead) wpStarter = true; else wpRelief = true; }
+    else if (trail || ip === 9) lpStarter = true;
+    const g = pit.g;
+    g.pg = 1;
+    g.outs = ip * 3;
+    g.er = Math.round(spRuns * S.earnedRate);
+    g.w = wpStarter ? 1 : 0;
+    g.l = lpStarter ? 1 : 0;
+    const reliefLine = relief ? { pg: 1, outs: (9 - ip) * 3, er: Math.round(rpRuns * S.earnedRate), w: wpRelief ? 1 : 0, l: !result.win && !lpStarter ? 1 : 0 } : null;
+    return {
+      line: { my: my, opp: opp }, cg: ip === 9, relief: relief, reliefLine: reliefLine,
+      starter: { id: pit.p.id, name: pit.p.name, outs: ip * 3, runs: spRuns, stamina: Math.round(pit.p.abilities.stamina) },
+      reliefBox: ip < 9 ? { id: relief ? relief.id : null, name: reliefName, outs: (9 - ip) * 3, runs: rpRuns } : null,
+      wp: result.win ? (wpStarter ? pit.p.name : reliefName) : null,
+      lp: result.win ? null : (lpStarter ? pit.p.name : reliefName),
+      wpStarter: wpStarter, wpRelief: wpRelief && !!relief,
+    };
+  }
+  // 新入部員モード:先発の投球回と救援の候補(控えの本職の投手を総合値の高い順)
+  function heroPitchOpts(state, starters, final) {
+    if (!state.hero || !CONFIG.heroMode.stamina.enabled) return null;
+    const ids = new Set(starters.map((p) => p.id));
+    const bench = activeMembers(state).filter((p) => p.position === 'P' && !ids.has(p.id)).sort((a, b) => rating(b) - rating(a) || a.id - b.id);
+    return { bench: bench, final: !!final };
   }
 
   // ---------- 世代の基準(同世代の上位○%) ----------
@@ -1343,6 +1414,7 @@
     plateAppearances: plateAppearances,
     plateAppearance: plateAppearance,
     recordGameStats: recordGameStats,
+    heroInnings: heroInnings,
   };
 
   const Generation = {
@@ -2176,7 +2248,8 @@
       }
       countGame(state, starters);
       // 試合の中身(成績用の乱数)。成績に含めるかは設定で選ぶ
-      const box = withStatRng(state, (srng) => recordGameStats(srng, state.year, slots, order, res, { record: PG.includeInStats }).box);
+      const hpo = heroPitchOpts(state, starters, false);
+      const box = withStatRng(state, (srng) => recordGameStats(srng, state.year, slots, order, res, hpo ? { record: PG.includeInStats, heroPitch: hpo } : { record: PG.includeInStats }).box);
       const tag = noteGameResult(state, pred, res.win);
       games.push({ title: '練習試合' + (i + 1), pred: pred, win: res.win, tag: tag, box: box, highlights: buildHighlights(state, box) });
       state.stats.practiceGames.played++;
@@ -2309,7 +2382,8 @@
       countGame(state, members_);
       // 簡易成績(成績専用の乱数を使う)
       const before = members_.map((p) => statLinesFor(p, state.year)[1]).map((l) => [l.ab, l.h]);
-      const rg = recordGameStats(srng, state.year, slots, order, res);
+      const hpo = heroPitchOpts(state, members_, r === T.rounds);
+      const rg = recordGameStats(srng, state.year, slots, order, res, hpo ? { heroPitch: hpo } : undefined);
       const paByOrder = rg.paByOrder;
       games[games.length - 1].box = rg.box;
       games[games.length - 1].highlights = buildHighlights(state, rg.box);
@@ -2396,6 +2470,15 @@
   }
 
   // 年度末(卒業・進級・名鑑への記録)
+  // 1人の卒業:進路を決めて、名鑑に記録する(年度末と、新入部員モードの主人公の卒業で共通)
+  function graduatePlayer(state, rng, p) {
+    const career = decideCareer(rng, p);
+    takeSnapshot(p, state.year);
+    addTimeline(p, '卒業');
+    addHistory(p, state.year, '卒業', career + '(総合値 ' + rating(p) + ')');
+    state.alumni.push(makeAlumniRecord(p, { graduatedYear: state.year, career: career }));
+    return career;
+  }
   function runYearEnd(state, rng) {
     const lines = [];
     for (const p of state.players) {
@@ -2440,12 +2523,8 @@
     const summaries = [];
     let pros = 0;
     for (const p of graduates) {
-      const career = decideCareer(rng, p);
+      const career = graduatePlayer(state, rng, p);
       if (career === CONFIG.career.paths[0].label) pros++;
-      takeSnapshot(p, state.year);
-      addTimeline(p, '卒業');
-      addHistory(p, state.year, '卒業', career + '(総合値 ' + rating(p) + ')');
-      state.alumni.push(makeAlumniRecord(p, { graduatedYear: state.year, career: career }));
       lines.push(p.name + '(' + POSITION_SHORT[p.position] + '・総合値' + rating(p) + ')→ ' + career);
       if (p.watched) summaries.push.apply(summaries, watchSummary(state, p, career));
     }
@@ -2665,6 +2744,7 @@
     monthIndexOf: monthIndexOf,
     newGame: newGame,
     confirmPolicies: confirmPolicies,
+    graduatePlayer: graduatePlayer,
     drawRecruitBatch: drawRecruitBatch,
     newPlayer: newPlayer,
     hashSeed: hashSeed,

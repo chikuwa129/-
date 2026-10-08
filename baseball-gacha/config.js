@@ -364,7 +364,7 @@
 
     // ---- 新入部員モード(hero.html / play-hero.html)。数値はすべて仮の値。育成監督モードでは使わない ----
     heroMode: {
-      saveVersion: 1,               // 保存キー bbgacha_hero_v{saveVersion}_*
+      saveVersion: 2,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2 に)
       seedSalt: 0x4e52b1d3,         // このモード専用の乱数(引き直し・主人公の作成・物語の文面・転向と再起の抽選)
       rerollMax: 2,                 // 新入部員の一覧の引き直しの回数
       stopOnStory: true,            // 主人公の山場の物語で、自動進行を止める
@@ -403,9 +403,27 @@
         campBonus: 0.10,            // 再起のあと最初の合宿で「大きく伸びる」に加える確率
         maxBoosts: 2,               // 後押しの3年間の上限
       },
+      // 数値の見せ方(パワプロ式。表示だけ。能力の内部の値と計算は変えない)
+      display: {
+        style: 'pawapuro',          // 'pawapuro'(ランク文字・km/h・球種)/ 'plain'(大きな数字のボックス)
+        rank: { S: 100, A: 80, B: 65, C: 50, D: 35, E: 20, F: 10 },   // これ以上でそのランク(F未満は G)
+        kmh: { base: 112, per: 0.45, overBase: 157, overPer: 0.1, max: 170 },   // 球速の換算(100以下:base + 値×per / 100超:overBase + (値−100)×overPer)。仕様の仮値 110 / 0.5 / 160 から調整(天才・転生の上位を150km/h台に)
+        breakRatio: 0.12,           // 総変化量 = round(変化球の値 × これ)
+        newPitchRate: 0.35,         // 総変化量が増えたとき、新しい球種を覚える確率
+        maxPitches: 4,              // 球種の数の上限
+        pitchMax: 7,                // 1球種の変化量の上限
+      },
+      // 先発の投球回(このモードの成績だけ。得点・勝敗は変えない)
+      stamina: {
+        enabled: true,              // false で、従来どおり先発はすべて完投として記録(テスト用)
+        base: 3.7,                  // 投球回の基準 = base + スタミナ ÷ perPoint(minInnings〜9)。仕様の仮値 3.5 から調整(スタミナ20〜50の平均を5回以上に)
+        perPoint: 15,
+        minInnings: 3,
+        finalBonus: true,           // 決勝では、スタミナが B 以上の投手を +1回
+      },
       story: {
         bigMonthGain: 6,            // 「成長が大きい月」の総合値の増分
-        bigMonthGap: 3,             // 「成長が大きい月」の物語の最短間隔(月。毎月続かないように)
+        bigMonthGap: 2,             // 「成長が大きい月」の物語の最短間隔(月。毎月続かないように)。H1.1 で 3 → 2(卒業が夏になり止まる回数が減ったため)
         recentNoRepeat: 3,          // 同じ文を繰り返さない直近の回数
       },
       // tools/hero-sim.js の目安(遊ぶ画面には出さない)
@@ -415,7 +433,14 @@
         created_vs_twoway: { max: 0.90, label: '作った二刀流の卒業時の平均 / 引きの二刀流の平均', tune: 'heroMode.create.twoWayLevels' },
         stopsPerYear: { min: 6, max: 12, label: '山場の物語で止まる回数(1年あたり)', tune: 'heroMode.stopOnStory / heroMode.stopsPerYearMax' },
         contestP: { min: 0.50, label: 'ポジション争いが成立した割合(投手)', pct: true, tune: 'heroMode.twoWay.batWeightInPitcherSlot' },
-        contestIF: { min: 0.10, max: 0.40, label: 'ポジション争いが成立した割合(内野)', pct: true, tune: 'lineup.IF / positionDeficit' },
+        contestIF: { min: 0.10, max: 0.55, label: 'ポジション争いが成立した割合(内野)', pct: true, tune: 'lineup.IF / positionDeficit' },
+        ipLow: { max: 5.0, label: '先発の平均投球回(スタミナ20未満)', tune: 'heroMode.stamina.base / perPoint' },
+        cgLow: { max: 0.05, label: '完投率(スタミナ20未満)', pct: true, tune: 'heroMode.stamina.base / perPoint' },
+        ipMid: { min: 5.0, max: 7.5, label: '先発の平均投球回(スタミナ20〜50)', tune: 'heroMode.stamina.base / perPoint' },
+        ipHigh: { min: 8.0, label: '先発の平均投球回(スタミナ70以上)', tune: 'heroMode.stamina.base / perPoint' },
+        cgHigh: { min: 0.40, label: '完投率(スタミナ70以上)', pct: true, tune: 'heroMode.stamina.base / perPoint / finalBonus' },
+        rankUps: { min: 6, max: 20, label: '主人公のランクアップの回数(3年間)', tune: 'heroMode.display.rank' },
+        newPitches: { min: 0, max: 3, label: '投手の主人公が覚えた新球種(3年間)', tune: 'heroMode.display.newPitchRate / breakRatio' },
         contestOF: { min: 0.20, max: 0.60, label: 'ポジション争いが成立した割合(外野)', pct: true, tune: 'lineup.OF / positionDeficit' },
         contestC: { min: 0.20, max: 0.60, label: 'ポジション争いが成立した割合(捕手)', pct: true, tune: 'positionDeficit.C' },
         lostBench: { min: 0.20, max: 0.50, label: '争いに敗れて控えが続いた割合(争い成立のうち)', pct: true, tune: 'heroMode.contest.benchStory' },
@@ -704,6 +729,28 @@
     ['heroMode.rebound.campBonus', 'hero', '再起のあと最初の合宿で「大きく伸びる」に加える確率'],
     ['heroMode.rebound.maxBoosts', 'hero', '再起の後押しの3年間の上限'],
     ['heroMode.story.bigMonthGain', 'hero', '「成長が大きい月」の総合値の増分'],
+    ['heroMode.display.style', 'hero', '数値の見せ方(pawapuro = ランク文字・km/h・球種 / plain = 大きな数字のボックス)', true, ['pawapuro', 'plain']],
+    ['heroMode.display.rank.S', 'hero', 'ランク S の下限', true],
+    ['heroMode.display.rank.A', 'hero', 'ランク A の下限', true],
+    ['heroMode.display.rank.B', 'hero', 'ランク B の下限', true],
+    ['heroMode.display.rank.C', 'hero', 'ランク C の下限', true],
+    ['heroMode.display.rank.D', 'hero', 'ランク D の下限', true],
+    ['heroMode.display.rank.E', 'hero', 'ランク E の下限', true],
+    ['heroMode.display.rank.F', 'hero', 'ランク F の下限(未満は G)', true],
+    ['heroMode.display.kmh.base', 'hero', '球速の換算:値0のときの km/h', true],
+    ['heroMode.display.kmh.per', 'hero', '球速の換算:値1あたりの km/h(100以下)', true],
+    ['heroMode.display.kmh.overBase', 'hero', '球速の換算:値100を超えたときの起点の km/h', true],
+    ['heroMode.display.kmh.overPer', 'hero', '球速の換算:100を超えた値1あたりの km/h', true],
+    ['heroMode.display.kmh.max', 'hero', '球速の換算:上限の km/h', true],
+    ['heroMode.display.breakRatio', 'hero', '総変化量 = 変化球の値 × これ', true],
+    ['heroMode.display.newPitchRate', 'hero', '総変化量が増えたとき、新しい球種を覚える確率'],
+    ['heroMode.display.maxPitches', 'hero', '球種の数の上限'],
+    ['heroMode.display.pitchMax', 'hero', '1球種の変化量の上限'],
+    ['heroMode.stamina.enabled', 'hero', '先発の投球回をスタミナで決める(オン/オフ)'],
+    ['heroMode.stamina.base', 'hero', '先発の投球回の基準(base + スタミナ ÷ perPoint)'],
+    ['heroMode.stamina.perPoint', 'hero', '先発の投球回:スタミナ何ごとに1回か'],
+    ['heroMode.stamina.minInnings', 'hero', '先発の投球回の下限(失点による減少の前)'],
+    ['heroMode.stamina.finalBonus', 'hero', '決勝でスタミナ B 以上の投手を +1回(オン/オフ)'],
     ['heroMode.story.bigMonthGap', 'hero', '「成長が大きい月」の物語の最短間隔(月)'],
     ['heroMode.story.recentNoRepeat', 'hero', '同じ文を繰り返さない直近の回数'],
   ].map((x) => ({ path: x[0], group: x[1], desc: x[2], displayOnly: !!x[3], options: x[4] || null }));
