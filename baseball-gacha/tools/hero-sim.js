@@ -472,7 +472,9 @@ function bonjinRun(group, seed, mode) {
     for (let y = H.enrolledYear; y <= H.enrolledYear + 2; y++) for (const k of ['summer', 'autumn']) { const v = st.yearRecords[y] && st.yearRecords[y][k]; if (v) best = Math.max(best, Math.max(0, RANKS.findIndex((x) => v.indexOf(x) >= 0))); }
     const storyMonths = new Set(H.stories.filter((x) => x.kind !== 'quiet').map((x) => x.s)).size;
     const stops = Object.keys(H.stopsByYear).reduce((x, k) => x + H.stopsByYear[k], 0);
-    return { starts: H.starterMonths, none: none, tNone: tNone, tNoPlay: tNoPlay, tMonths: tMonths.length, tPlay: tPlay, pa: c.pa || 0, ip: (c.outs || 0) / 3, storyMonths: storyMonths, stops: stops,
+    const relT = H.appear.filter((e) => e.kind === 'tourney' && e.pit && !e.pit.start).length;   // 救援での登板(H1.5b)
+    const relP = H.appear.filter((e) => e.kind === 'practice' && e.pit && !e.pit.start).length;
+    return { relT: relT, relP: relP, starts: H.starterMonths, none: none, tNone: tNone, tNoPlay: tNoPlay, tMonths: tMonths.length, tPlay: tPlay, pa: c.pa || 0, ip: (c.outs || 0) / 3, storyMonths: storyMonths, stops: stops,
       sameUp: sameUp, senUp: senUp, best: best, diff: startDiff == null ? null : -startDiff, contest: Object.keys(H.contestEver).length > 0, swap: (H.rankSwaps || 0) > 0, hasRival: H.rivalId != null };
   } finally { CONFIG.heroMode.rival.selectMode = prev; }
 }
@@ -503,6 +505,7 @@ for (const g of BGROUPS) {
   log('   2. 出番なしの月数(試合のある月のうち、ベンチ入りも出場もない月):' + d4(L, (x) => x.none) + ' / 大会のある月 ' + f1(mean(L.map((x) => x.tMonths))) + 'か月のうち、ベンチ入りもない月 ' + d4(L, (x) => x.tNone)
     + ' / 出場しなかった月(ベンチ入りだけを含む)' + d4(L, (x) => x.tNoPlay) + '(練習試合は、主人公は毎月必ず出場する)');
   log('   3. 大会の出場試合数:' + d4(L, (x) => x.tPlay) + (g.pitch ? ' / 大会の投球回:' + d4(L, (x) => x.ip) : ' / 大会の打席数:' + d4(L, (x) => x.pa)) + ' / 大会に1試合も出ていない ' + share(L, (x) => x.tPlay === 0));
+  if (g.pitch) log('   3b. 救援での登板(3年間):大会 ' + d4(L, (x) => x.relT) + ' / 練習試合 ' + d4(L, (x) => x.relP));
   log('   4. 物語が出た月数:' + d4(L, (x) => x.storyMonths) + ' / 山場で止まった回数:' + d4(L, (x) => x.stops));
   log('   5. 入学時、同じ守備区分で自分より強い選手:同学年 ' + d4(L, (x) => x.sameUp) + ' / 上級生 ' + d4(L, (x) => x.senUp) + ' / 上級生に3人以上 ' + share(L, (x) => x.senUp >= 3));
   log('   6. 大会の最高成績:' + RANKS.map((r, i) => r + ' ' + share(L, (x) => x.best === i)).join(' / '));
