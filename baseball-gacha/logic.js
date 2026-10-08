@@ -18,6 +18,26 @@
   }
 })(typeof self !== 'undefined' ? self : this, function (CONFIG, BENCHMARK) {
   'use strict';
+  // ---------- 部員の構成の版(H1.5a) ----------
+  //   'v2' なら overlay で CONFIG を上書きする(調整画面の初期値 DEFAULTS より前に、1回だけ)。'legacy' は H1.4 のまま
+  (function applyRosterVersion() {
+    const RO = CONFIG.roster;
+    if (!RO) return;
+    const env = typeof process !== 'undefined' && process.env && process.env.BBGACHA_ROSTER;
+    if (env) RO.version = env;
+    if (RO.version === 'legacy' || RO.applied) return;
+    const merge = (dst, src) => { for (const k of Object.keys(src)) { if (src[k] && typeof src[k] === 'object' && !Array.isArray(src[k]) && dst[k] && typeof dst[k] === 'object') merge(dst[k], src[k]); else dst[k] = src[k]; } };
+    merge(CONFIG, RO.v2.overlay);
+    RO.applied = true;
+  })();
+  // 世代の基準は、版ごとに持つ(benchmark.js の legacy に、legacy 版の基準)
+  if (BENCHMARK) {
+    const legacy = BENCHMARK.legacy;
+    BENCHMARK = Object.assign({}, BENCHMARK);
+    delete BENCHMARK.legacy;
+    if (CONFIG.roster && CONFIG.roster.version === 'legacy' && legacy) BENCHMARK = legacy;
+  }
+  const isV2 = () => !!CONFIG.roster && CONFIG.roster.version !== 'legacy';
 
   // ===========================================================
   // 共通モジュール(Core)
@@ -1436,6 +1456,9 @@
     recordGameStats: recordGameStats,
     heroInnings: heroInnings,
     heroRunsAllowed: heroRunsAllowed,
+    isV2: isV2,
+    drawInitialRating: drawInitialRating,
+    rosterCap: () => CONFIG.newcomers.rosterCap,
   };
 
   const Generation = {
@@ -1942,6 +1965,7 @@
 
   // 新入生の人数を決める
   function newcomerCount(state, rng) {
+    if (isV2()) return newcomerCountV2(state, rng);
     const N = CONFIG.newcomers;
     const strength = state.prevSummerStrength != null ? state.prevSummerStrength : calcTeamStrength(state.players, undefined, lineupOpts(state));
     let n = N.base + Math.round((strength - N.strengthPivot) * N.perStrength) + rng.int(-N.noise, N.noise);
@@ -1950,6 +1974,43 @@
     return { count: Math.min(n, room), strength: strength, capped: n > room };
   }
 
+  // v2:評判(基準との差)の帯から平均を決め、±countNoise。基準以下は最小の帯(マイナスの補正はしない)
+  function repGap(state) { return state.fixedRep ? 0 : Math.max(0, state.schoolRep - CONFIG.reputation.baseline); }
+  function newcomerMean(gap) {
+    const B = CONFIG.roster.v2.countBands;
+    if (gap <= B[0][0]) return B[0][1];
+    for (let i = 1; i < B.length; i++) if (gap <= B[i][0]) return B[i - 1][1] + (B[i][1] - B[i - 1][1]) * (gap - B[i - 1][0]) / (B[i][0] - B[i - 1][0]);
+    return B[B.length - 1][1];
+  }
+  function newcomerCountV2(state, rng) {
+    const V = CONFIG.roster.v2;
+    const m = newcomerMean(repGap(state));
+    let n = Math.floor(m) + (rng.chance(m - Math.floor(m)) ? 1 : 0) + rng.int(-V.countNoise, V.countNoise);
+    n = clamp(n, V.countMin, V.countMax);
+    const room = Math.max(0, CONFIG.newcomers.rosterCap - members(state).length);
+    return { count: Math.min(n, room), strength: null, rep: state.schoolRep, capped: n > room };
+  }
+  // v2:新入生 n 人の守備区分の人数を先に決める(目標の割合 ± classNoise、最低人数、合計 n)
+  function classCounts(rng, n) {
+    const V = CONFIG.roster.v2;
+    const c = {};
+    for (const pos of POSITIONS) {
+      const b = V.classShare[pos] * n;
+      c[pos] = Math.max(V.minPerClass[pos] || 0, Math.floor(b) + (rng.chance(b - Math.floor(b)) ? 1 : 0) + rng.int(-V.classNoise, V.classNoise));
+    }
+    // 合計を n にそろえる(多ければ、最低人数を超えている区分のうち多い順に減らす。少なければ、目標との差が大きい区分に足す)
+    let sum = POSITIONS.reduce((a, k) => a + c[k], 0);
+    for (let g = 0; sum > n && g < 100; g++) {
+      const k = POSITIONS.filter((x) => c[x] > (V.minPerClass[x] || 0)).sort((a, b) => (c[b] - V.classShare[b] * n) - (c[a] - V.classShare[a] * n))[0];
+      if (!k) break;
+      c[k]--; sum--;
+    }
+    for (let g = 0; sum < n && g < 100; g++) {
+      const k = POSITIONS.slice().sort((a, b) => (c[a] - V.classShare[a] * n) - (c[b] - V.classShare[b] * n))[0];
+      c[k]++; sum++;
+    }
+    return c;
+  }
   // 新入生を引く
   function drawRecruits(state) {
     withRng(state, (rng) => {
@@ -1965,12 +2026,24 @@
   // 新入生を count 人抽選して、pendingRecruits に加える(入学時と、新入部員モードの引き直しで共通)
   function drawRecruitBatch(state, rng, count, quality) {
     {
+      // v2:区分ごとの人数を先に決めて、その区分の選手を作る(順番は無作為)
+      let plan = null;
+      const batch = [];
+      if (isV2()) {
+        const cc = classCounts(rng, count);
+        plan = [];
+        for (const pos of POSITIONS) for (let i = 0; i < cc[pos]; i++) plan.push(pos);
+        plan = rng.shuffle(plan);
+      }
       for (let i = 0; i < count; i++) {
-        const counts = countByPosition(members(state).concat(state.pendingRecruits));
         const weights = {};
-        for (const pos of POSITIONS) {
-          const d = CONFIG.positionDeficit[pos];
-          weights[pos] = CONFIG.positionRates[pos] * (counts[pos] < d.min ? d.mult : 1);
+        if (plan) { for (const pos of POSITIONS) weights[pos] = pos === plan[i] ? 1 : 0; }
+        else {
+          const counts = countByPosition(members(state).concat(state.pendingRecruits));
+          for (const pos of POSITIONS) {
+            const d = CONFIG.positionDeficit[pos];
+            weights[pos] = CONFIG.positionRates[pos] * (counts[pos] < d.min ? d.mult : 1);
+          }
         }
         const p = newPlayer(state, rng, { positionWeights: weights, quality: quality });
         p.origin = 'recruit';
@@ -1980,6 +2053,26 @@
         p.policy = POLICIES[policySetOf(p)][POLICIES[policySetOf(p)].length - 1].key; // バランス / 両方
         computeLimitCaps(p);
         state.pendingRecruits.push(p);
+        if (plan) batch.push(p);
+      }
+      // v2:転生・二刀流で守備区分が計画からずれて、投手・捕手の最低人数を割ったら、内野・外野の通常の選手と入れ替える
+      if (plan) {
+        const V = CONFIG.roster.v2;
+        for (const pos of ['P', 'C']) {
+          for (let g = 0; g < 5 && batch.filter((q) => q.position === pos).length < (V.minPerClass[pos] || 0); g++) {
+            const out = batch.filter((q) => (q.position === 'IF' || q.position === 'OF') && !q.reincarnation && !q.twoWay && q.talent !== 'genius').sort((a, b) => rating(a) - rating(b) || b.id - a.id)[0];
+            if (!out) break;
+            const w = {};
+            for (const k of POSITIONS) w[k] = k === pos ? 1 : 0;
+            const np = newPlayer(state, rng, { positionWeights: w, quality: quality, noReincarnation: true, forceTwoWay: false });
+            np.origin = 'recruit';
+            np.recruitX = quality.x;
+            np.policy = POLICIES[policySetOf(np)][POLICIES[policySetOf(np)].length - 1].key;
+            computeLimitCaps(np);
+            state.pendingRecruits[state.pendingRecruits.indexOf(out)] = np;
+            batch[batch.indexOf(out)] = np;
+          }
+        }
       }
     }
   }
@@ -2794,6 +2887,7 @@
     confirmPolicies: confirmPolicies,
     graduatePlayer: graduatePlayer,
     drawRecruitBatch: drawRecruitBatch,
+    drawRecruits: drawRecruits,
     newPlayer: newPlayer,
     hashSeed: hashSeed,
     tryConvert: tryConvert,

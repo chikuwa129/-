@@ -3,6 +3,7 @@
 //   node tests/hero-fingerprint.js > tests/fixtures/h12-fingerprint.json で、基準を作り直せる(H1.2 の時点で作成済み)
 //   node tests/hero-fingerprint.js stories > tests/fixtures/h13-fingerprint.json は、物語の文面も含める(H1.3 の時点で作成済み。
 //   H1.4 のライバルの旧方式 'strongest' が、H1.3 と完全に一致することの確認用)
+//   node tests/hero-fingerprint.js stories 20 > tests/fixtures/h14b-fingerprint.json は、H1.5a の roster.version 'legacy' の確認用(H1.4b の時点で作成済み)
 const path = require('path');
 const Logic = require(path.join(__dirname, '..', 'logic.js'));
 const Hero = require(path.join(__dirname, '..', 'hero.js'));
@@ -20,7 +21,7 @@ function fingerprint(i, opts) {
   const st = Hero.newHeroGame(seed);
   if (i % 2 === 0) {
     const r = new Core.Rng((seed * 40503) >>> 0);
-    Hero.pickHero(st, r.pick(st.pendingRecruits).id);
+    Hero.pickHero(st, r.pick(Hero.pickable(st)).id);
   } else {
     const k = (i >> 1) % 4;
     const c = k === 0 ? { pos: 'pitcher', type: 'gouwan', level: 'high', talent: 'normal' } : k === 1 ? { pos: 'pitcher', type: 'gikou', level: 'mid', talent: 'genius' }
@@ -54,7 +55,8 @@ function fingerprint(i, opts) {
 }
 if (require.main === module) {
   const out = [];
-  for (let i = 0; i < 100; i++) out.push(fingerprint(i, { stories: process.argv[2] === 'stories' }));
+  const n = Number(process.argv[3] || 100);
+  for (let i = 0; i < n; i++) out.push(fingerprint(i, { stories: process.argv[2] === 'stories' }));
   console.log(JSON.stringify(out));
 }
 module.exports = { fingerprint: fingerprint, N: 100 };

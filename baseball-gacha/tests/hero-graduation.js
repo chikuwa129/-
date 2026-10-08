@@ -5,7 +5,7 @@ const Hero = require(path.join(__dirname, '..', 'hero.js'));
 const { Core } = require(path.join(__dirname, '..', 'logic.js'));
 function run(i) {
   const st = Hero.newHeroGame(6000 + i);
-  if (i % 2) { const r = new Core.Rng(((6000 + i) * 40503) >>> 0); Hero.pickHero(st, r.pick(st.pendingRecruits).id); }
+  if (i % 2) { const r = new Core.Rng(((6000 + i) * 40503) >>> 0); Hero.pickHero(st, r.pick(Hero.pickable(st)).id); }
   else { Hero.createHero(st, [{ pos: 'pitcher', type: 'gouwan', level: 'mid', talent: 'normal' }, { pos: 'fielder', type: 'kouda', level: 'mid', talent: 'normal' }][(i >> 1) % 2]); Hero.confirmRival(st, 'auto'); }
   Hero.startPlay(st);
   for (let g = 0; st.hero.phase === 'play' && g < 200; g++) Hero.advance(st, 'event');

@@ -29,7 +29,7 @@ function run(kind, seed) {
   const st = Hero.newHeroGame(seed, kind.coachLv ? { coachLv: kind.coachLv } : null);
   if (kind.pick) {
     const r = new Core.Rng((seed * 40503) >>> 0);
-    Hero.pickHero(st, r.pick(st.pendingRecruits).id);
+    Hero.pickHero(st, r.pick(Hero.pickable(st)).id);
   } else {
     const err = Hero.createHero(st, choiceFor(kind, seed));
     if (err) throw new Error(err);
@@ -247,7 +247,7 @@ function measureGames(enabled) {
     for (let i = 1; i <= NE; i++) for (let ki = 0; ki < EKINDS.length; ki++) {
       const k = EKINDS[ki];
       const st = Hero.newHeroGame(i * 7 + 3);
-      if (k.pick) { const r = new Core.Rng((i * 40503) >>> 0); Hero.pickHero(st, r.pick(st.pendingRecruits).id); }
+      if (k.pick) { const r = new Core.Rng((i * 40503) >>> 0); Hero.pickHero(st, r.pick(Hero.pickable(st)).id); }
       else { const e = Hero.createHero(st, k); if (e) throw new Error(e); Hero.confirmRival(st, 'auto'); }
       Hero.startPlay(st);
       for (let guard = 0; st.hero.phase === 'play' && guard < 80; guard++) {
@@ -432,7 +432,7 @@ function bonjinRun(group, seed, mode) {
     const st = Hero.newHeroGame(seed);
     const wantP = group.pitch;
     if (group.pick) {
-      const L = st.pendingRecruits.filter((p) => p.talent !== 'genius' && !p.reincarnation && !Core.isTwoWayKnown(p) && (p.position === 'P') === wantP && Core.rating(p) >= 80 && Core.rating(p) <= 120);
+      const L = Hero.pickable(st).filter((p) => p.talent !== 'genius' && !p.reincarnation && !Core.isTwoWayKnown(p) && (p.position === 'P') === wantP && Core.rating(p) >= 80 && Core.rating(p) <= 120);
       if (!L.length) return null;
       const r = new Core.Rng((seed * 40503) >>> 0);
       Hero.pickHero(st, r.pick(L).id);

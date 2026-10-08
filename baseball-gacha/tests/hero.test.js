@@ -11,7 +11,12 @@ const STORY = require('../story.js');
 
 let failed = 0;
 let passed = 0;
-function test(name, fn) {
+// H1.5a:roster.version 'legacy' での一致の確認(旧版の指紋と比べる)は、legacy の別プロセスで行う
+//   node tests/hero.test.js は、v2 なら最後に BBGACHA_ROSTER=legacy で '--legacy-only' を起動する
+const LEGACY_ONLY = process.argv.indexOf('--legacy-only') >= 0;
+function test(name, fn, opts) {
+  const legacy = !!(opts && opts.legacy);
+  if (LEGACY_ONLY ? !legacy : legacy && Core.isV2()) return;
   try { fn(); passed++; console.log('✓ ' + name); } catch (e) { failed++; console.log('✕ ' + name + '\n   ' + (e && e.stack ? e.stack.split('\n').slice(0, 3).join('\n   ') : e)); }
 }
 // 主人公の3年間を自動で進める(kind:{ pick:true } か 作成の内容)
@@ -19,7 +24,7 @@ function play(seed, kind, opts) {
   opts = opts || {};
   const st = Hero.newHeroGame(seed);
   for (let i = 0; i < (opts.rerolls || 0); i++) Hero.reroll(st);
-  if (kind.pick) Hero.pickHero(st, st.pendingRecruits[kind.index || 0].id);
+  if (kind.pick) Hero.pickHero(st, Hero.pickable(st)[kind.index || 0].id);
   else {
     Hero.drawName(st);
     const err = Hero.createHero(st, kind);
@@ -38,7 +43,7 @@ const TW = { pos: 'twoWay', pitchType: 'gikou', batType: 'kyouda', level: 'mid',
 // 3年間を通した実行(いくつかのテストで共有)
 const RUNS = [];
 // 3年間を通した実行(200回)
-for (let s = 1; s <= 100; s++) {
+for (let s = 1; s <= (LEGACY_ONLY ? 0 : 100); s++) {
   RUNS.push(play(s, { pick: true }));
   RUNS.push(play(1000 + s, s % 3 === 0 ? TW : s % 3 === 1 ? FIELD : PITCH));
 }
@@ -61,12 +66,12 @@ test('引き直し・作成・名前の引き直しは、ゲーム本体の乱�
     const s0 = base.statRngState;
     // 一覧から選ぶ(引き直しなし)
     const a = Hero.newHeroGame(seed);
-    Hero.pickHero(a, a.pendingRecruits[0].id);
+    Hero.pickHero(a, Hero.pickable(a)[0].id);
     // 引き直してから選ぶ
     const b = Hero.newHeroGame(seed);
     Hero.reroll(b); Hero.reroll(b);
     assert.strictEqual(b.rngState, r0, '引き直しのあとも同じ');
-    Hero.pickHero(b, b.pendingRecruits[0].id);
+    Hero.pickHero(b, Hero.pickable(b)[0].id);
     // 作る(名前を何度も引き直す)
     const c = Hero.newHeroGame(seed);
     for (let i = 0; i < 5; i++) Hero.drawName(c);
@@ -149,7 +154,7 @@ test('ライバルは同学年の選手で、3年間変わらない。旧方式(
   withRivalMode('strongest', () => {
     for (let s = 1; s <= 40; s++) {
       const st = Hero.newHeroGame(s);
-      Hero.pickHero(st, st.pendingRecruits[s % st.pendingRecruits.length].id);
+      Hero.pickHero(st, Hero.pickable(st)[s % Hero.pickable(st).length].id);
       const h = Hero.heroOf(st);
       const mates = st.players.filter((p) => p !== h && !p.helper && p.enrolledYear === h.enrolledYear);
       const role = Core.isTwoWayKnown(h) ? 'P' : h.position;
@@ -172,7 +177,7 @@ test('ライバルの新方式(chaseable):主人公より強い候補のうち�
   withRivalMode('chaseable', () => {
     for (let s = 1; s <= 120; s++) {
       const st = Hero.newHeroGame(s);
-      if (s % 3) Hero.pickHero(st, st.pendingRecruits[s % st.pendingRecruits.length].id);
+      if (s % 3) Hero.pickHero(st, Hero.pickable(st)[s % Hero.pickable(st).length].id);
       else { Hero.createHero(st, s % 2 ? PITCH : (s % 9 === 0 ? TW : FIELD)); Hero.confirmRival(st, 'auto'); }
       const h = Hero.heroOf(st);
       const mates = st.players.filter((p) => p !== h && !p.helper && p.enrolledYear === h.enrolledYear);
@@ -223,13 +228,13 @@ test('ライバルの旧方式(strongest)は、H1.3 と一致する(勝敗・能
   withRivalMode('strongest', () => {
     for (let i = 0; i < FP.N; i++) assert.deepStrictEqual(strip(FP.fingerprint(i, { stories: true })), strip(ref[i]), i + '回目');
   });
-});
+}, { legacy: true });
 
 test('H1.3b(スタメン表・打順の変化のひとこと)は、勝敗・能力・進路・本体の乱数が H1.4 と一致する(100回)', () => {
   const FP = require('./hero-fingerprint.js');
   const ref = require('./fixtures/h14-fingerprint.json');
   for (let i = 0; i < FP.N; i++) assert.deepStrictEqual(FP.fingerprint(i), ref[i], i + '回目');
-});
+}, { legacy: true });
 
 test('争いの軸:投手×二刀流=投手枠 / 二刀流×外野手=外野枠 / 二刀流×二刀流=投手枠と野手側の区分', () => {
   const pit = { position: 'P', twoWay: false, twoWayRevealed: false, abilities: {} };
@@ -262,7 +267,7 @@ test('転向:条件をすべて満たしたときだけ。3年間で最大1回�
   let found = null;
   for (let s = 1; s <= 60 && !found; s++) {
     const st = Hero.newHeroGame(s);
-    const h0 = st.pendingRecruits.find((p) => !p.twoWay && p.position !== 'P');
+    const h0 = Hero.pickable(st).find((p) => !p.twoWay && p.position !== 'P');
     if (!h0) continue;
     Hero.pickHero(st, h0.id);
     const h = Hero.heroOf(st);
@@ -465,7 +470,7 @@ test('練習試合の出場保証:主人公はスタメンでない月も練習�
   let checked = 0;
   for (let seed = 1; seed <= 30 && checked < 5; seed++) {
     const st = Hero.newHeroGame(seed);
-    const low = st.pendingRecruits.slice().sort((a, b) => Core.rating(a) - Core.rating(b))[0];   // 控えになりやすい選手
+    const low = Hero.pickable(st).slice().sort((a, b) => Core.rating(a) - Core.rating(b))[0];   // 控えになりやすい選手
     Hero.pickHero(st, low.id);
     Hero.startPlay(st);
     const h = Hero.heroOf(st);
@@ -594,7 +599,8 @@ test('物語の数字は、その時点の値(ランクアップは上がった�
     const a = st.alumni.find((x) => x.id === H.id);
     for (const x of H.stories.filter((y) => y.kind === 'abilityUp' && y.meta)) {
       const v = Hero.getValueAt(a, x.s);
-      if (x.meta.key === 'velocity') assert.ok(Hero.toKmh(v.velocity) >= x.meta.v.k && Hero.toKmh(v.velocity) < x.meta.v.k + 5, '球速は上がった月の値');
+      // 月ごとの記録は 0.1 単位で丸めて持つので、境目では 1km/h ずれることがある
+      if (x.meta.key === 'velocity') assert.ok(Hero.toKmh(v.velocity) >= x.meta.v.k - 1 && Hero.toKmh(v.velocity) < x.meta.v.k + 5, '球速は上がった月の値');
       else if (x.meta.key !== 'breaking') assert.strictEqual(Hero.getRank(v[x.meta.key]), x.meta.v.rank, 'ランクは上がった月の値:' + x.text);
       ups++;
     }
@@ -636,7 +642,7 @@ test('試合の山:年・大会・ラウンド・結果が記録と一致し、�
     assert.ok(line && line.indexOf(G.roundLabel) >= 0 && !/[((](勝利|敗戦)[))]/.test(line), '年・大会・ラウンドが文に入り、括弧書きがない:' + line);
     assert.strictEqual(G.when, G.grade + '年' + CONFIG.tournaments[G.tkey].name);
   }
-  assert.ok(n > 100);
+  assert.ok(n > 50, '試合の山がある試行 ' + n);   // H1.5a:部員が増え、主人公が出場しない試行が増えたため 100 → 50
 });
 
 test('主人公の出場と成績が記録と一致し、練習試合の成績は大会の通算に混ざらない(200回)', () => {
@@ -662,8 +668,8 @@ test('気になる選手は2人まで。ひとことと止まる回数に影響�
   for (const seed of [31, 32, 33]) {
     const a = Hero.newHeroGame(seed);
     const b = Hero.newHeroGame(seed);
-    Hero.pickHero(a, a.pendingRecruits[0].id);
-    Hero.pickHero(b, b.pendingRecruits[0].id);
+    Hero.pickHero(a, Hero.pickable(a)[0].id);
+    Hero.pickHero(b, Hero.pickable(b)[0].id);
     const others = b.players.filter((p) => p.id !== b.hero.id && p.id !== b.hero.rivalId && !p.helper);
     assert.ok(Hero.toggleWatch(b, others[0].id).ok);
     assert.ok(Hero.toggleWatch(b, others[1].id).ok);
@@ -694,7 +700,7 @@ test('失点の組み直し:勝敗・自校の得点・能力・進路・本体�
   const ref = require('./fixtures/h12-fingerprint.json');
   assert.strictEqual(ref.length, FP.N);
   withRivalMode('strongest', () => { for (let i = 0; i < FP.N; i++) assert.deepStrictEqual(FP.fingerprint(i), ref[i], i + '回目'); });   // H1.4 の新しいライバルの選び方では展開が変わるため、旧方式で比べる
-});
+}, { legacy: true });
 
 test('失点の組み直し:勝てば 0〜得点−1、負ければ得点+1 以上。先発+救援 = 失点、ラインスコアの合計 = 失点', () => {
   let n = 0, shifted = 0;
@@ -702,7 +708,7 @@ test('失点の組み直し:勝てば 0〜得点−1、負ければ得点+1 以�
     const st = Hero.newHeroGame(800 + i);
     const r = new Core.Rng(((800 + i) * 40503) >>> 0);
     if (i % 2) { Hero.createHero(st, { pos: 'pitcher', type: 'gouwan', level: 'mid', talent: i % 4 === 1 ? 'genius' : 'normal' }); Hero.confirmRival(st, 'auto'); }
-    else Hero.pickHero(st, r.pick(st.pendingRecruits).id);
+    else Hero.pickHero(st, r.pick(Hero.pickable(st)).id);
     Hero.startPlay(st);
     for (let guard = 0; st.hero.phase === 'play' && guard < 200; guard++) {
       Hero.advance(st, 'event');
@@ -776,7 +782,7 @@ test('卒業の通算成績:主人公とライバルの大会・練習試合の�
   for (let i = 0; i < 200; i++) {
     const seed = 3000 + i;
     const st = Hero.newHeroGame(seed);
-    if (i % 2) Hero.pickHero(st, st.pendingRecruits[i % st.pendingRecruits.length].id);
+    if (i % 2) Hero.pickHero(st, Hero.pickable(st)[i % Hero.pickable(st).length].id);
     else { Hero.createHero(st, [FIELD, PITCH, TW][i % 3]); Hero.confirmRival(st, 'auto'); }
     Hero.startPlay(st);
     const H = st.hero;
@@ -807,7 +813,7 @@ test('スタメン表:各行の指標が、能力と簡易成績と一致する�
   let rows = 0, faint = 0, dash = 0;
   for (let i = 0; i < 20; i++) {
     const st = Hero.newHeroGame(4000 + i);
-    Hero.pickHero(st, st.pendingRecruits[i % st.pendingRecruits.length].id);
+    Hero.pickHero(st, Hero.pickable(st)[i % Hero.pickable(st).length].id);
     Hero.startPlay(st);
     for (let k = 0; k < 4 + (i % 8); k++) Hero.advance(st, 'event');
     if (st.hero.phase !== 'play') continue;
@@ -840,7 +846,7 @@ test('打順の変化のひとこと:2つ以上動いた月だけ、年に3回�
   let n = 0;
   for (let i = 0; i < 20; i++) {
     const st = Hero.newHeroGame(4100 + i);
-    Hero.pickHero(st, st.pendingRecruits[i % st.pendingRecruits.length].id);
+    Hero.pickHero(st, Hero.pickable(st)[i % Hero.pickable(st).length].id);
     Hero.startPlay(st);
     for (let k = 0; k < 200 && st.hero.phase === 'play'; k++) Hero.advance(st, 'event');
     const H = st.hero;
@@ -875,7 +881,7 @@ test('3年の7月は卒業画面へ自動で進まず(卒業待ち)、「卒業�
     const H = st.hero;
     assert.strictEqual(H.phase, 'graduate');
     assert.strictEqual(H.gradPending, true, '7月の画面で止まる(卒業待ち)');
-    assert.strictEqual(o.grad, ref[i], i + '回目:卒業画面の中身');
+    if (!Core.isV2()) assert.strictEqual(o.grad, ref[i], i + '回目:卒業画面の中身(legacy で比べる)');
     const ret = H.lastStories.find((x) => x.kind === 'retire');
     assert.ok(ret, '引退の一言は7月のひとこと');
     assert.ok(H.graduation.lines.indexOf(ret.text) < 0, '卒業画面の読み物には引退の一言はない');
@@ -887,6 +893,102 @@ test('3年の7月は卒業画面へ自動で進まず(卒業待ち)、「卒業�
   }
   assert.ok(Object.keys(kinds).length >= 2, JSON.stringify(kinds));
 });
+
+test('卒業画面の中身は H1.3b と一致する(20回。legacy)', () => {
+  const G = require('./hero-graduation.js');
+  const ref = require('./fixtures/h13b-graduation.json');
+  for (let i = 0; i < G.N; i++) assert.strictEqual(G.run(i).grad, ref[i], i + '回目');
+}, { legacy: true });
+
+test("roster.version 'legacy' は H1.4b と完全に一致する(勝敗・能力・進路・本体の乱数・物語。20回)", () => {
+  const FP = require('./hero-fingerprint.js');
+  const ref = require('./fixtures/h14b-fingerprint.json');
+  for (let i = 0; i < ref.length; i++) assert.deepStrictEqual(FP.fingerprint(i, { stories: true }), ref[i], i + '回目');
+}, { legacy: true });
+
+// ---------- H1.5a:部員の構成(v2) ----------
+test('構成(v2):30シード × 5年で、各学年の新入生の本職の投手2人以上・捕手1人以上。開始時の部員全体で投手6人以上・捕手3人以上。部員は45人まで', () => {
+  if (!Core.isV2()) return;
+  const V = CONFIG.roster.v2;
+  for (let seed = 1; seed <= 30; seed++) {
+    const st = HighSchool.newGame({ seed: seed });
+    const all = st.players.concat(st.pendingRecruits).filter((p) => !p.helper);
+    assert.ok(all.filter((p) => p.position === 'P').length >= 6, seed + ':開始時の投手');
+    assert.ok(all.filter((p) => p.position === 'C').length >= 3, seed + ':開始時の捕手');
+    for (let y = 0; y < 5; y++) {
+      const R = st.pendingRecruits;
+      assert.ok(R.filter((p) => p.position === 'P').length >= V.minPerClass.P || R.length < V.countMin, seed + ':' + y + ' 投手');
+      assert.ok(R.filter((p) => p.position === 'C').length >= V.minPerClass.C || R.length < V.countMin, seed + ':' + y + ' 捕手');
+      HighSchool.confirmPolicies(st, HighSchool.autoPolicies(st));
+      assert.ok(HighSchool.members(st).length <= CONFIG.newcomers.rosterCap, '部員は45人まで');
+      for (let g = 0; g < 40 && !(st.awaiting && st.policyContext === 'enrollment'); g++) {
+        if (st.awaiting) HighSchool.confirmPolicies(st, HighSchool.autoPolicies(st)); else HighSchool.advanceToNextEvent(st, null, { autoReview: true });
+      }
+    }
+  }
+});
+
+test('新入生の人数(v2):評判の帯ごとの目安に収まり、評判が上がるほど人数と投手が増える', () => {
+  if (!Core.isV2()) return;
+  const want = [[0, 8, 9], [15, 12, 14], [30, 17, 20], [45, 22, 24]];
+  let prevN = 0, prevP = 0;
+  for (const [gap, lo, hi] of want) {
+    let n = 0, pn = 0;
+    const K = 200;
+    for (let i = 0; i < K; i++) {
+      const st = HighSchool.newGame({ seed: 9000 + i });
+      st.schoolRep = CONFIG.reputation.baseline + gap;
+      st.players = st.players.slice(0, 10);   // 部員の上限で人数が削られないように
+      st.pendingRecruits = [];
+      HighSchool.drawRecruits(st);
+      n += st.pendingRecruits.length;
+      pn += st.pendingRecruits.filter((p) => p.position === 'P').length;
+    }
+    const avg = n / K, avgP = pn / K;
+    assert.ok(avg >= lo && avg <= hi, '評判+' + gap + ':平均 ' + avg.toFixed(2) + '(目安 ' + lo + '〜' + hi + ')');
+    assert.ok(avg > prevN && avgP > prevP, '人数と投手が増える');
+    prevN = avg; prevP = avgP;
+  }
+});
+
+test('天才・転生・天才かつ転生の入学時の総合値(v2。各100人)', () => {
+  if (!Core.isV2()) return;
+  const r = new Core.Rng(5);
+  const R = CONFIG.rating;
+  for (let i = 0; i < 100; i++) {
+    const g = Core.drawInitialRating(r, 'genius', null);
+    const c = Core.drawInitialRating(r, 'normal', 'x');
+    const b = Core.drawInitialRating(r, 'genius', 'x');
+    assert.ok(g >= 200 && g <= 300 && c >= 250 && c <= 350 && b >= 250 && b <= 350, g + ' / ' + c + ' / ' + b);
+  }
+  assert.strictEqual(R.genius.min, 200);
+});
+
+test('入口(v2):ピックアップは8人以下(上位5人を含む)。主人公に選べるのはピックアップだけ。引き直しで作り直す', () => {
+  if (!Core.isV2()) return;
+  for (let seed = 1; seed <= 20; seed++) {
+    const st = Hero.newHeroGame(seed);
+    const P = Hero.pickable(st);
+    assert.ok(P.length <= CONFIG.heroMode.entranceMax && P.length === Math.min(CONFIG.heroMode.entranceMax, st.pendingRecruits.length));
+    const top = st.pendingRecruits.slice().sort((a, b) => Core.rating(b) - Core.rating(a) || a.id - b.id).slice(0, CONFIG.heroMode.entrancePickTop);
+    for (const p of top) assert.ok(P.indexOf(p) >= 0, '上位5人');
+    const other = st.pendingRecruits.find((p) => P.indexOf(p) < 0);
+    if (other) assert.strictEqual(Hero.pickHero(st, other.id), false, 'ピックアップ以外は選べない');
+    Hero.reroll(st);
+    assert.ok(Hero.pickable(st).every((p) => st.pendingRecruits.indexOf(p) >= 0) && Hero.pickable(st).length > 0, '引き直しで作り直す');
+    assert.ok(Hero.pickHero(st, Hero.pickable(st)[0].id));
+  }
+});
+
+// legacy の一致の確認(別プロセス)
+if (!LEGACY_ONLY && Core.isV2()) {
+  test("roster.version 'legacy' の一致の確認(BBGACHA_ROSTER=legacy の別プロセスで、legacy の指紋のテストを実行)", () => {
+    const cp = require('child_process');
+    const out = cp.execFileSync(process.execPath, [__filename, '--legacy-only'], { env: Object.assign({}, process.env, { BBGACHA_ROSTER: 'legacy' }), encoding: 'utf8' });
+    console.log(out.trim().split('\n').map((l) => '   [legacy] ' + l).join('\n'));
+    assert.ok(/すべて成功/.test(out), out);
+  });
+}
 
 console.log(failed ? '\n失敗 ' + failed + '件' : '\nすべて成功(' + passed + '件)');
 process.exit(failed ? 1 : 0);

@@ -81,7 +81,21 @@
       prevOrder: null, orderLog: [], orderChanges: {},
     };
     trng(st, (r) => { for (const p of st.players.concat(st.pendingRecruits)) syncPitches(r, p); });
+    if (Core.isV2()) { st.hero.prng = HighSchool.hashSeed(st.seed ^ 0x7c15e3a1, HM().seedSalt); makePickup(st); }
     return st;
+  }
+  // 入口のピックアップ(v2):総合値の上位 entrancePickTop 人 + 残りから無作為に(このモード専用の乱数)。合計 entranceMax 人まで
+  function makePickup(st) {
+    const H = st.hero;
+    const all = st.pendingRecruits.slice().sort((a, b) => Core.rating(b) - Core.rating(a) || a.id - b.id);
+    const top = all.slice(0, HM().entrancePickTop);
+    const rest = hrng(st, (r) => r.shuffle(all.slice(HM().entrancePickTop)), 'prng').slice(0, Math.max(0, HM().entranceMax - top.length));
+    H.pickup = top.concat(rest).map((p) => p.id);
+  }
+  // 主人公に選べる新入生(v2 はピックアップだけ。legacy は全員)
+  function pickable(st) {
+    const H = st.hero;
+    return H.pickup ? st.pendingRecruits.filter((p) => H.pickup.indexOf(p.id) >= 0) : st.pendingRecruits;
   }
 
   // 引き直し:新入生の一覧を作り直す(このモード専用の乱数。人数と評判による質は同じ)
@@ -93,6 +107,7 @@
     const q = HighSchool.recruitQuality(st.newcomerInfo ? st.newcomerInfo.x : 0);
     hrng(st, (r) => HighSchool.drawRecruitBatch(st, r, n, q));
     trng(st, (r) => { for (const p of st.pendingRecruits) syncPitches(r, p); });
+    if (H.pickup) makePickup(st);
     // 引き直しで消えた新入生の「気になる」は外す
     H.watch = (H.watch || []).filter((id) => st.players.some((p) => p.id === id));
     for (const k of Object.keys(H.watchLog || {})) if (!st.players.some((p) => p.id === Number(k))) delete H.watchLog[k];
@@ -222,7 +237,7 @@
   // 一覧から選ぶ
   function pickHero(st, id) {
     const H = st.hero;
-    if (H.phase !== 'select' || !st.pendingRecruits.some((p) => p.id === id)) return false;
+    if (H.phase !== 'select' || !pickable(st).some((p) => p.id === id)) return false;
     H.id = id;
     H.created = false;
     enroll(st);
@@ -1621,9 +1636,13 @@
       let html = '<div class="row2">' + btn('grade', '学年順') + btn('rating', '総合値順') + btn('pos', '守備区分順') + '</div>';
       const list = rosterList(st);
       if (sort === 'grade') {
+        const hg = (heroOf(st) || {}).grade;
         for (const g of [3, 2, 1]) {
           const L = list.filter((p) => p.grade === g).sort(by);
-          html += '<div class="sublabel">' + g + '年生(' + L.length + '人)</div>' + L.map(row).join('');
+          // 学年ごとの折りたたみ(初期は主人公の学年だけ開く。開閉は記憶する)
+          const key = 'rg' + g;
+          if (ui.open[key] == null && g === hg) ui.open[key] = true;
+          html += renderCollapsible(key, g + '年生(' + L.length + '人)', () => L.map(row).join(''));
         }
       } else html += list.slice().sort(by).map(row).join('');
       return html + '<div class="small">◯ は今月のスタメン。名前を押すと選手詳細。</div>';
@@ -1635,13 +1654,16 @@
         + '<div class="btns"><button class="btn sub small" id="hReroll"' + (H.rerollsLeft > 0 ? '' : ' disabled') + '>引き直す(残り' + H.rerollsLeft + '回)</button>'
         + '<button class="btn sub small" id="hCreate">自分で作る</button></div>'
         + renderCollapsible('seniors', '先輩たち', () => seniorsTop(5)) + '</div>';
-      html += '<div class="card">' + st.pendingRecruits.map((p) => {
+      const picks = pickable(st);
+      const rest = st.pendingRecruits.filter((p) => picks.indexOf(p) < 0).sort((a, b) => Core.rating(b) - Core.rating(a) || a.id - b.id);
+      html += '<div class="card">' + (rest.length ? '<div class="small">ピックアップ(' + picks.length + '人)。主人公に選べるのは、この中の1人です。</div>' : '') + picks.slice().sort((a, b) => H.pickup ? Core.rating(b) - Core.rating(a) || a.id - b.id : 0).map((p) => {
         let c = '<div class="player">' + starBtn(p) + '<span class="pname">' + esc(p.name) + '</span>' + posTag(p.position) + extraTags(p) + ' <span class="small">' + ratingHtml(p) + '</span>'
           + '<div class="impress">' + esc(impression(p)) + '</div>' + boxes(p);
         if (p.reincarnation && p.reincarnationRevealed) c += '<div class="reveal">……!? この新入生、ただ者ではない。<br>【' + esc(Core.reincarnationName(p.reincarnation)) + '】の転生者だ!</div>';
         if (p.twoWay && p.twoWayRevealed) c += '<div class="reveal">投げても打っても本職級……! <br>【二刀流】の素質を持っている!</div>';
         return c + '<div class="btns"><button class="btn small" data-pick="' + p.id + '">この選手で始める</button></div></div>';
-      }).join('') + '</div><div class="small">ライバル:同じポジションの、最も強い選手(自動)</div>';
+      }).join('') + (rest.length ? renderCollapsible('selOthers', '他の新入生(' + rest.length + '人)', () => rest.map((p) => compactRow(p)).join('')) : '')
+        + '</div><div class="small">ライバル:' + (HM().rival.selectMode === 'strongest' ? '同じポジションの、最も強い選手(自動)' : '同じポジションで、少し上の追える相手(自動)') + '</div>';
       return html;
     }
     // ---------- 自分で作る ----------
@@ -1793,7 +1815,9 @@
       html += '<div class="sublabel">今年の新入生(' + recs.length + '人)' + (N.trend ? '・傾向:' + esc(N.trend) : '') + '</div>';
       html += top.map((p) => '<div class="player">' + starBtn(p) + '<span class="pname">' + esc(p.name) + '</span>' + posTag(p.position) + extraTags(p) + (samePos(p) ? ' <span class="mk sp">同じポジション</span>' : '')
         + ' <span class="small">' + ratingHtml(p) + '</span>' + boxes(p) + '</div>').join('');
-      html += recs.filter((p) => top.indexOf(p) < 0).map((p) => compactRow(p, samePos(p) ? ' <span class="mk sp">同じポジション</span>' : '')).join('');
+      const others = recs.filter((p) => top.indexOf(p) < 0);
+      const otherRows = () => others.map((p) => compactRow(p, samePos(p) ? ' <span class="mk sp">同じポジション</span>' : '')).join('');
+      html += others.length > HM().newYearOthersOpen ? renderCollapsible('nyOthers', '他の新入生(' + others.length + '人)', otherRows) : otherRows();
       return html + '<div class="btns"><button class="btn" id="hNewYearOk">始める</button></div></div>';
     }
     // ---------- ホーム ----------
@@ -2137,7 +2161,7 @@
     autoRival: autoRival, getValueAt: getValueAt, gamePeak: gamePeak, monthAppearance: monthAppearance, lineText: lineText, emptyLine: emptyLine, addLine: addLine, toggleWatch: toggleWatch, swapWatch: swapWatch, addWatch: addWatch, diffSentence: diffSentence, getRank: getRank, toKmh: toKmh, breakTotal: breakTotal, syncPitches: syncPitches, pitchCountFor: pitchCountFor, closeNewYear: closeNewYear, rosterList: rosterList, makeHeroPlayer: makeHeroPlayer, contestOf: contestOf, convertEligible: convertEligible, heroOf: heroOf, rivalOf: rivalOf, statusLabel: statusLabel,
     rivalLine: rivalLine, contestAxisNow: contestAxisNow, keys: keys, save: save, load: load, wipeKeys: wipeKeys,
     startNew: startNew, resetSameSeed: resetSameSeed, resetNewSeed: resetNewSeed, wipeAll: wipeAll, startup: startup,
-    goGraduate: goGraduate, summerResultLine: summerResultLine, playerMonthLine: playerMonthLine, ratingSeries: ratingSeries, autoRival: autoRival, lineupRows: lineupRows, statCells: statCells,
+    pickable: pickable, makePickup: makePickup, goGraduate: goGraduate, summerResultLine: summerResultLine, playerMonthLine: playerMonthLine, ratingSeries: ratingSeries, autoRival: autoRival, lineupRows: lineupRows, statCells: statCells,
     pickText: pickText, fill: fill, typeOf: typeOf, setback: setback, tryRebound: tryRebound, hrng: hrng, serialOf: serialOf,
     mountUI: mountUI,
   };

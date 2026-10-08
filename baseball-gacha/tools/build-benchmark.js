@@ -19,16 +19,31 @@ while (!runner.step()) {
   if (pct !== last) { process.stdout.write(pct * 10 + '% '); last = pct; }
 }
 const bench = runner.result();
+// 部員の構成の版(config.js の roster.version)ごとに持つ。'v2' は本体、'legacy' は legacy に入れる(もう一方は残す)
+let prev = null;
+try { prev = require('../benchmark.js'); } catch (e) { prev = null; }
+const ver = (CONFIG.roster && CONFIG.roster.version) || 'legacy';
+let saved;
+if (ver === 'legacy') {
+  saved = prev ? Object.assign({}, prev) : {};
+  if (!prev || !prev.rows) Object.assign(saved, bench);
+  saved.legacy = bench;
+} else {
+  saved = Object.assign({}, bench);
+  // 初めて v2 で作るときは、それまでの本体(legacy の基準)を legacy に移す
+  if (prev) saved.legacy = prev.legacy || (prev.hash !== bench.hash ? Object.assign({}, prev) : undefined);
+  if (saved.legacy) delete saved.legacy.legacy;
+}
 const out = '// このファイルは tools/build-benchmark.js が生成します。直接編集しないこと\n'
   + '// 世代の基準:学年-月 ごとの総合値の分布(p50 / p90 / p97 / p99 / p99.9)\n'
   + '(function (root) {\n'
-  + '  const BENCHMARK = ' + JSON.stringify(bench) + ';\n'
+  + '  const BENCHMARK = ' + JSON.stringify(saved) + ';\n'
   + "  if (typeof module === 'object' && module.exports) module.exports = BENCHMARK;\n"
   + '  else root.BENCHMARK = BENCHMARK;\n'
   + "})(typeof self !== 'undefined' ? self : this);\n";
 fs.writeFileSync(path.join(__dirname, '..', 'benchmark.js'), out);
 const r = bench.rows;
-console.log('\nbenchmark.js を作成しました(' + ((Date.now() - t0) / 1000).toFixed(1) + '秒、ハッシュ ' + bench.hash + '、'
+console.log('\nbenchmark.js を作成しました(版 ' + ver + '、' + ((Date.now() - t0) / 1000).toFixed(1) + '秒、ハッシュ ' + bench.hash + '、'
   + CONFIG.benchmarkRuns.seeds + 'シード × ' + CONFIG.benchmarkRuns.years + '年)');
 for (const g of [1, 2, 3]) {
   for (const m of [4, 7, 12, 3]) {

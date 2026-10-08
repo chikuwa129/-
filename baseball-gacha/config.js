@@ -59,6 +59,37 @@
       rosterCap: 30,               // 部員の総数の上限(超える分は新入生を減らす)
     },
 
+    // ---- 部員の構成の版(H1.5a) ----
+    //   version:'v2'(評判に連動した新入生の人数・守備区分の構成・天才の初期値)/ 'legacy'(H1.4 までと完全に同じ)
+    //   'v2' のとき、overlay の値で、この設定の同じ場所を上書きする(logic.js の読み込み時に1回だけ)
+    //   node では、環境変数 BBGACHA_ROSTER=legacy で、一時的に 'legacy' にできる(テスト用)
+    roster: {
+      version: 'v2',
+      v2: {
+        // 新入生の人数の平均:評判 − baseline(reputation.baseline)ごとの点を、直線でつなぐ。基準以下は最小
+        countBands: [[0, 8.5], [15, 13], [30, 18.5], [45, 23]],
+        countNoise: 1,               // ±の一様な整数
+        countMin: 8,
+        countMax: 24,
+        // 新入生の守備区分の構成(目標の割合。区分ごとの人数を先に決める。±classNoise 人のばらつき)
+        classShare: { P: 0.28, C: 0.08, IF: 0.32, OF: 0.32 },
+        classNoise: 1,
+        minPerClass: { P: 2, C: 1, IF: 0, OF: 0 },
+        overlay: {
+          saveVersion: 11,             // 育成監督モードの保存(部員の構成が変わるため。legacy は 10 のまま)
+          newcomers: { rosterCap: 45 },
+          rating: { genius: { min: 200, max: 300 }, reincarnation: { min: 250, max: 350 }, geniusReincarnationMax: 350 },
+          tournaments: { summer: { oppBase: 46 }, autumn: { oppBase: 37 } },
+          targets: {
+            geniusGrad: { min: 500, max: 540 },
+            reincGrad: { min: 540, max: 580 },
+            bothGrad: { min: 580, max: 670 },
+            over600: { max: 0.02 },
+          },
+        },
+      },
+    },
+
     // ---- 守備区分 ----
     positionRates: { P: 0.22, C: 0.12, IF: 0.36, OF: 0.30 },
     positionDeficit: {
@@ -364,7 +395,7 @@
 
     // ---- 新入部員モード(hero.html / play-hero.html)。数値はすべて仮の値。育成監督モードでは使わない ----
     heroMode: {
-      saveVersion: 6,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5、H1.4b で 6:卒業待ち)
+      saveVersion: 7,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5、H1.4b で 6:卒業待ち、H1.5a で 7:ピックアップ)
       seedSalt: 0x4e52b1d3,         // このモード専用の乱数(引き直し・主人公の作成・物語の文面・転向と再起の抽選)
       rerollMax: 2,                 // 新入部員の一覧の引き直しの回数
       stopOnStory: true,            // 主人公の山場の物語で、自動進行を止める
@@ -421,6 +452,9 @@
       // 練習試合で途中出場したときの、主人公の成績の抽選(成績用の乱数。大会の通算には含めない)
       practiceSub: { paMin: 1, paExtraRate: 0.5, reliefInnings: 1, reliefRunRate: 0.3 },
       watchMax: 2,                  // 気になる選手の上限(主人公とライバルは別枠)
+      entranceMax: 8,               // 入口で大きなカードで出す新入生(ピックアップ)の最大人数(roster.version 'v2' のとき)
+      entrancePickTop: 5,           // ピックアップのうち、総合値の上位から選ぶ人数(残りは無作為)
+      newYearOthersOpen: 5,         // 新年度の画面:上位3人以外の新入生がこの人数を超えたら、折りたたみにする
       totals: { minAb: 20, minOuts: 27 },   // 卒業の通算成績:打数・アウト数がこれ未満なら「参考」と添える
       // スタメン表・部員名簿の指標と、主人公の打順の変化のひとこと
       lineup: {
@@ -601,6 +635,7 @@
     { id: 'policy', label: '見直し画面' },
     { id: 'pre', label: '前史' },
     { id: 'rep', label: '評判' },
+    { id: 'roster', label: '部員の構成(v2)' },
     { id: 'hero', label: '新入部員モード' },
   ];
   CONFIG.paramMeta = [
@@ -789,6 +824,19 @@
     ['heroMode.practiceSub.reliefInnings', 'hero', '練習試合の途中出場:投手の登板の回数'],
     ['heroMode.practiceSub.reliefRunRate', 'hero', '練習試合の途中出場:投手が1点取られる確率'],
     ['heroMode.watchMax', 'hero', '気になる選手の上限(主人公とライバルは別枠)'],
+    ['roster.v2.countMin', 'roster', '新入生の人数の下限(v2)'],
+    ['roster.v2.countMax', 'roster', '新入生の人数の上限(v2)'],
+    ['roster.v2.countNoise', 'roster', '新入生の人数のばらつき(±人。v2)'],
+    ['roster.v2.classShare.P', 'roster', '新入生の守備区分の目標の割合:投手(v2)'],
+    ['roster.v2.classShare.C', 'roster', '新入生の守備区分の目標の割合:捕手(v2)'],
+    ['roster.v2.classShare.IF', 'roster', '新入生の守備区分の目標の割合:内野(v2)'],
+    ['roster.v2.classShare.OF', 'roster', '新入生の守備区分の目標の割合:外野(v2)'],
+    ['roster.v2.classNoise', 'roster', '新入生の区分ごとの人数のばらつき(±人。v2)'],
+    ['roster.v2.minPerClass.P', 'roster', '各学年の新入生の本職の投手の最低人数(v2)'],
+    ['roster.v2.minPerClass.C', 'roster', '各学年の新入生の本職の捕手の最低人数(v2)'],
+    ['heroMode.entranceMax', 'hero', '入口のピックアップの最大人数(主人公に選べるのはピックアップだけ)'],
+    ['heroMode.entrancePickTop', 'hero', '入口のピックアップのうち、総合値の上位から選ぶ人数'],
+    ['heroMode.newYearOthersOpen', 'hero', '新年度の画面:上位3人以外の新入生がこの人数を超えたら折りたたむ'],
     ['heroMode.lineup.minAb', 'hero', 'スタメン表の打率:打数がこれ未満なら薄い文字(参考値)'],
     ['heroMode.lineup.orderChangeMin', 'hero', '主人公の打順の変化:これ以上動いた月だけ、ひとことにする'],
     ['heroMode.lineup.orderChangeMax', 'hero', '主人公の打順の変化のひとこと:1年あたりの上限'],
