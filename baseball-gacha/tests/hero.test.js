@@ -864,5 +864,29 @@ test('打順の変化のひとこと:2つ以上動いた月だけ、年に3回�
   assert.ok(n > 0, '打順の変化のひとことが出ている');
 });
 
+// ---------- H1.4b:3年の夏の大会を見てから、卒業へ(確認は20回) ----------
+test('3年の7月は卒業画面へ自動で進まず(卒業待ち)、「卒業へ進む」で進む。卒業の中身は H1.3b と一致。引退の一言は7月のひとこと(20回)', () => {
+  const G = require('./hero-graduation.js');
+  const ref = require('./fixtures/h13b-graduation.json');
+  const kinds = {};
+  for (let i = 0; i < G.N; i++) {
+    const o = G.run(i);
+    const st = o.st;
+    const H = st.hero;
+    assert.strictEqual(H.phase, 'graduate');
+    assert.strictEqual(H.gradPending, true, '7月の画面で止まる(卒業待ち)');
+    assert.strictEqual(o.grad, ref[i], i + '回目:卒業画面の中身');
+    const ret = H.lastStories.find((x) => x.kind === 'retire');
+    assert.ok(ret, '引退の一言は7月のひとこと');
+    assert.ok(H.graduation.lines.indexOf(ret.text) < 0, '卒業画面の読み物には引退の一言はない');
+    const line = Hero.summerResultLine(st);
+    kinds[line.replace(/^夏の地区大会:/, '').replace(/\uFF08.+\uFF09$/, '')] = true;
+    assert.ok(/^夏の地区大会:(優勝|.+で敗退|出場なし)/.test(line), line);
+    assert.ok(Hero.advance(st, 'event') === null, '卒業待ちでは、それ以上進まない');
+    assert.ok(Hero.goGraduate(st) && H.gradPending === false, '卒業へ進む');
+  }
+  assert.ok(Object.keys(kinds).length >= 2, JSON.stringify(kinds));
+});
+
 console.log(failed ? '\n失敗 ' + failed + '件' : '\nすべて成功(' + passed + '件)');
 process.exit(failed ? 1 : 0);

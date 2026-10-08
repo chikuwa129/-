@@ -106,6 +106,8 @@
   table.stm td.rc { text-align: center; line-height: 1.05; } table.stm td.rc b { display: block; font-size: 14px; } table.stm td.rc span { display: block; font-size: 10px; color: var(--sub); } table.stm td.rc i { font-style: normal; font-size: 8px; }
   table.stm td.nm { line-height: 1.2; } table.stm td.nm .gr { font-size: 10px; color: var(--sub); font-weight: normal; }
   .faint { opacity: 0.45; }
+  .linkbtn { background: none; border: none; color: var(--accent); font-size: 12px; padding: 4px 0; cursor: pointer; text-decoration: underline; }
+  .result1 { margin: 2px 0 4px; }
   .rrow .r1 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 4px; } .rrow .r2 { padding-left: 2px; }
   .rst { margin-left: auto; font-size: 12px; white-space: nowrap; } .rst b { font-size: 13px; margin-left: 1px; } .rst i { font-style: normal; font-size: 9px; }
   @media (max-width: 340px) { table.stm:not(.wide) .col-r { display: none; } }
@@ -506,7 +508,7 @@
 
     // ---- 新入部員モード(hero.html / play-hero.html)。数値はすべて仮の値。育成監督モードでは使わない ----
     heroMode: {
-      saveVersion: 5,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5)
+      saveVersion: 6,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5、H1.4b で 6:卒業待ち)
       seedSalt: 0x4e52b1d3,         // このモード専用の乱数(引き直し・主人公の作成・物語の文面・転向と再起の抽選)
       rerollMax: 2,                 // 新入部員の一覧の引き直しの回数
       stopOnStory: true,            // 主人公の山場の物語で、自動進行を止める
@@ -5018,7 +5020,7 @@
       stories: [], recent: [], stopsByYear: {},
       starterMonths: 0, slotMonths: { P: 0, bat: 0, bench: 0 }, contestEver: {},
       bestGame: null, retiredTold: false, rivalMovedTold: false,
-      practiceApps: 0, graduation: null,
+      practiceApps: 0, graduation: null, gradPending: false,
       prevOrder: null, orderLog: [], orderChanges: {},
     };
     trng(st, (r) => { for (const p of st.players.concat(st.pendingRecruits)) syncPitches(r, p); });
@@ -6077,7 +6079,7 @@
       for (const s of out) H.stories.push(s);
       // 3年生の夏の大会が終わったら(引退)、その月のうちに卒業
       const h = heroOf(st);
-      if (h && h.retired) { withPrevMonth(st, () => graduateHero(st)); break; }
+      if (h && h.retired) { withPrevMonth(st, () => graduateHero(st)); H.gradPending = true; break; }   // 卒業の処理は済ませ、7月の画面(卒業待ち)で止まる
       if (mode === 'month') break;
       const yk = String(st.year);
       const storyStop = HM().stopOnStory && out.some((s) => s.imp >= 3) && (H.stopsByYear[yk] || 0) < HM().stopsPerYearMax;
@@ -6110,6 +6112,24 @@
   }
   // 部員名簿に載せる選手(助っ人を除く全員)
   function rosterList(st) { return st.players.filter((p) => !p.helper); }
+  // 「卒業へ進む」:7月の画面(卒業待ち)から、卒業画面へ
+  function goGraduate(st) { if (st.hero.phase !== 'graduate') return false; st.hero.gradPending = false; return true; }
+  // 3年の夏の大会の最終結果の1行(7月の画面用)
+  function summerResultLine(st) {
+    const T = CONFIG.tournaments.summer;
+    let card = null;
+    for (const m of st.lastEvents || []) for (const c of (m && m.cards) || []) if (c.type === 'tournament' && c.title && c.title.indexOf(T.name) >= 0) card = c;
+    const games = (card && card.games) || [];
+    if (!games.length) return T.name + ':出場なし';
+    const w = games.filter((g) => g.win).length;
+    const l = games.length - w;
+    const last = games[games.length - 1];
+    const r = last.roundNo || games.length;
+    const rec = games.length > 1 ? '(' + w + '勝' + l + '敗)' : '';
+    if (!l) return T.name + ':優勝' + rec;
+    const where = r === 1 ? '初戦' : r === T.rounds ? '決勝' : r === T.rounds - 1 ? '準決勝' : r + '回戦';
+    return T.name + ':' + where + 'で敗退' + rec;
+  }
   function closeNewYear(st) { if (st.hero.newYear) st.hero.newYear.closed = true; }
   // 主人公の卒業(3年の夏の大会の直後):進路を決めて、名鑑に記録し、読み物を作る
   function graduateHero(st) {
@@ -6332,7 +6352,7 @@
   // ---------- 画面用の小さな関数 ----------
   function statusLabel(st) {
     const h = heroOf(st);
-    if (!h) return '';
+    if (!h) return st.hero.phase === 'graduate' ? '引退' : '';
     if (h.retired) return '引退';
     const s = st.hero.slot;
     if (twoWayKnown(h)) return s === 'P' ? '投手兼打者' : s ? '野手として出場' : '控え';
@@ -6375,6 +6395,7 @@
     let rivalPick = 'auto';
     let rivalTab = 'pitch';
     let ui = {};
+    let julyView = false;   // 卒業画面から「7月の画面に戻る」で見返しているとき(保存しない)
     const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const int = (v) => Math.round(v);
     const vClass = (v) => (v > 100 ? 'v100' : v >= 80 ? 'v80' : v >= 60 ? 'v60' : v >= 40 ? 'v40' : 'v0');
@@ -6462,11 +6483,34 @@
       const pool = STORY.impression.find((x) => r >= x[0])[1];
       return pool[p.id % pool.length];
     }
-    function monthBand() {
-      // 主人公の3年目は、夏の大会(7月)まで
+    function monthBand(nowIdx) {
+      // 主人公の3年目は、夏の大会(7月)まで。7月の画面(卒業待ち)は 7月を今月にする
       const h = heroOf(st);
-      const last3 = h && st.year >= (st.hero.enrolledYear || 1) + 2;
-      return '<div class="months">' + HighSchool.CALENDAR.map((c, i) => (last3 && i > 3 ? '' : '<span class="' + (i < st.month ? 'done' : i === st.month ? 'now' : '') + '">' + c.month + '月</span>')).join('') + '</div>';
+      const last3 = nowIdx != null || (h && st.year >= (st.hero.enrolledYear || 1) + 2);
+      const now = nowIdx != null ? nowIdx : st.month;
+      return '<div class="months">' + HighSchool.CALENDAR.map((c, i) => (last3 && i > 3 ? '' : '<span class="' + (i < now ? 'done' : i === now ? 'now' : '') + '">' + c.month + '月</span>')).join('') + '</div>';
+    }
+    // 卒業した主人公を、7月の画面で表示するための見え方(卒業時の能力)
+    function heroView() {
+      const h = heroOf(st);
+      if (h) return h;
+      const H = st.hero;
+      const a = (st.alumni || []).find((x) => x.id === H.id);
+      return a ? Object.assign({}, a, { abilities: H.finalAbilities || a.finalAbilities, pitches: H.finalPitches || a.pitches || [], grade: 3 }) : null;
+    }
+    function rivalView() {
+      const H = st.hero;
+      return rivalOf(st) || (H.rivalId != null ? (st.alumni || []).find((a) => a.id === H.rivalId) || null : null);
+    }
+    // 7月の画面:在籍中の通算(大会)
+    function careerLines(h) {
+      const c = (h.stats && h.stats.career) || Core.emptyStatLine();
+      const pitcher = Core.sideOf(h.position) === 'pitch';
+      const tw = twoWayKnown(h);
+      const L = [];
+      if (pitcher || tw) L.push('3年間の通算(大会):防御率 ' + (c.outs ? Core.formatEra(c) : '-.--') + ' ' + c.w + '勝' + c.l + '敗');
+      if (!pitcher || tw) L.push('3年間の通算(大会):打率 ' + Core.formatAverage(c) + ' 本塁打 ' + c.hr + ' 打点 ' + c.rbi);
+      return L.map((t) => '<div class="small">' + esc(t) + '</div>').join('');
     }
     // 先輩たち(学年ごとの上位)と、部員名簿
     function starBtn(p) {
@@ -6696,28 +6740,29 @@
       return html + '<div class="btns"><button class="btn" id="hNewYearOk">始める</button></div></div>';
     }
     // ---------- ホーム ----------
-    function renderHome() {
+    function renderHome(july) {
       const H = st.hero;
-      const h = heroOf(st);
-      let html = monthBand();
-      html += '<div class="card">' + heroCard(h, true) + '</div>';
+      const h = july ? heroView() : heroOf(st);
+      let html = monthBand(july ? 3 : null);
+      html += '<div class="card">' + heroCard(h, true).replace(/<\/div>$/, '') + (july ? careerLines(h) : '') + '</div></div>';
       const ls = (H.lastStories || []).slice().sort((a, b) => b.imp - a.imp || b.s - a.s).slice(0, 2);
       html += '<div class="card"><div class="small">今月のひとこと</div>' + (ls.length ? ls.map((x) => '<div class="story">' + esc(x.text) + '</div>').join('')
         : '<div class="story quiet">' + esc(H.lastQuiet || '(静かな1か月だった)') + '</div>')
         + (H.watchNote ? '<div class="small wnote">★ ' + esc(H.watchNote) + '</div>' : '') + '</div>';
-      html += gamesCard();
-      html += rivalCompare();
-      html += '<div class="btns"><button class="btn" id="hNextEvent">次のイベントまで</button><button class="btn sub" id="hNextMonth">次の月へ</button></div>';
+      html += gamesCard(july ? summerResultLine(st) : null);
+      html += rivalCompare(july);
+      html += july ? '<div class="btns"><button class="btn" id="hToGrad">卒業へ進む</button></div>'
+        : '<div class="btns"><button class="btn" id="hNextEvent">次のイベントまで</button><button class="btn sub" id="hNextMonth">次の月へ</button></div>';
       // 折りたたみの並び(1つのブロック)
       html += '<div class="card">' + renderCollapsible('team', 'チームの様子', lineupTable) + watchCollapsible()
         + renderCollapsible('chron', '主人公の年表', chronicle) + renderCollapsible('roster', '部員名簿', rosterView) + '</div>';
       return html;
     }
     // ライバルとの比較の1行(2人の総合値・差・矢印・今月のスタメン)
-    function rivalCompare() {
+    function rivalCompare(july) {
       const H = st.hero;
-      const h = heroOf(st);
-      const rv = rivalOf(st);
+      const h = july ? heroView() : heroOf(st);
+      const rv = july ? rivalView() : rivalOf(st);
       if (!h || !rv) return '';
       const ax = H.mainAxis || 'X';
       const a = Math.round(sideRating(h, ax)), b = Math.round(sideRating(rv, ax));
@@ -6726,8 +6771,9 @@
       const arrow = Math.abs(d) < Math.abs(prev) || (prev < 0 && d >= 0) ? '↑ 縮んだ' : Math.abs(d) > Math.abs(prev) ? '↓ 広がった' : '→ 同じ';
       const axis = contestAxisNow(st);
       const slots = Core.buildLineup(st.players, { heroTwoWay: true });
-      const on = (p) => (slots.some((x) => x.player === p) ? 'スタメン' : '控え');
       const ml = playerMonthLine(st, rv);
+      // 7月の画面では、3年生は引退して名簿にいないので、その月の記録(主人公の枠、ライバルの出場)で書く
+      const on = (p) => (july ? (p.id === H.id ? (() => { const sv = (st.lastEvents || []).map((m) => m && m.serial); const L = H.appear.filter((e) => e.kind === 'tourney' && sv.indexOf(e.s) >= 0); return L.some((e) => e.role === 'start') ? 'スタメン' : L.some((e) => e.role === 'sub') ? '途中出場' : '控え'; })() : ml && ml.text !== '控え(出番なし)' ? '出場' : '控え') : slots.some((x) => x.player === p) ? 'スタメン' : '控え');
       return '<div class="card small">ライバル:<button class="namebtn" data-pdet="' + rv.id + '">' + esc(rv.name) + '</button>(' + POS_LABEL[rv.position] + ')'
         + '<div class="cmp">あなた <b>' + a + '</b> / ' + esc(rv.name) + ' <b>' + b + '</b> / 差 <b>' + (d > 0 ? '+' : '') + d + '</b> <span class="arrow2">' + arrow + '</span></div>'
         + '<div>' + (axis ? '同じ' + AXIS_LABEL[axis] + 'を争っている。' : '') + '今月:あなた ' + on(h) + '・' + esc(rv.name) + ' ' + on(rv) + '</div>'
@@ -6773,10 +6819,10 @@
       }).join(''));
     }
     // 今月の大会の試合(結果と、先発の投球回。「詳しく」で救援と勝敗投手)
-    function gamesCard() {
+    function gamesCard(resultLine) {
       const games = [];
       for (const m of st.lastEvents || []) for (const c of (m && m.cards) || []) if (c.type === 'tournament' && c.games) for (const g of c.games) games.push(g);
-      if (!games.length) return '';
+      if (!games.length) return resultLine ? '<div class="card"><div class="small">今月の試合</div><div class="appear">' + esc(resultLine) + '</div></div>' : '';
       const ip = (o) => Math.floor(o / 3) + '回';
       const sv = st.lastEvents[0] ? st.lastEvents[0].serial : 0;
       const sers = (st.lastEvents || []).map((m) => m && m.serial);
@@ -6789,7 +6835,7 @@
       const nS = mine.filter((e) => e.role === 'start').length, nB = mine.filter((e) => e.role === 'sub').length;
       const head = nS + nB ? (nS ? 'スタメン ' + nS + '試合 ' : '') + (nB ? '途中出場 ' + nB + '試合 ' : '') + lineText(tot)
         : mine.some((e) => e.role === 'bench') ? 'ベンチ入り(出番なし)' : 'ベンチ外';
-      return '<div class="card"><div class="small">今月の試合</div><div class="appear">あなた:' + esc(head) + '</div>' + games.map((g, i) => {
+      return '<div class="card"><div class="small">今月の試合</div>' + (resultLine ? '<div class="result1"><b>' + esc(resultLine) + '</b></div>' : '') + '<div class="appear">あなた:' + esc(head) + '</div>' + games.map((g, i) => {
         const b = g.box || {};
         const hd = esc((g.round || '') + ' 対' + (g.opp || '') + ' ' + (b.my != null ? b.my + '対' + b.opp : '') + 'で' + (g.win ? '勝利' : '敗戦'));
         const sp = b.starter ? '先発 ' + esc(b.starter.name) + ' ' + ip(b.starter.outs) + b.starter.runs + '失点' : '';
@@ -6881,7 +6927,7 @@
       const num = (x) => '<div class="bignum"><b>' + x + '</b></div>';
       const sides = (o) => (o.sides && G.twoWay ? '投' + o.sides.pitch + ' / 打' + o.sides.bat : String(o.rating));
       const abil = st.hero.finalAbilities || (a && a.finalAbilities);
-      return '<div class="card"><h2>🎓 卒業</h2>' + G.lines.map((l) => '<div class="story">' + esc(l) + '</div>').join('')
+      return '<div class="small"><button class="linkbtn" id="hBackJuly">← 7月の画面に戻る</button></div><div class="card"><h2>🎓 卒業</h2>' + G.lines.map((l) => '<div class="story">' + esc(l) + '</div>').join('')
         + '<div class="grad"><div><div class="small">入学時</div>' + num(sides(G.init)) + '<div class="small">' + (G.init.top != null ? '同世代 上位' + Generation.formatTop(G.init.top) : '同世代 上位50%より下') + '</div></div>'
         + '<div class="arrow">→</div><div><div class="small">卒業時(3年夏)</div>' + num(sides(G.fin)) + '<div class="small">' + (G.fin.top != null ? '同世代 上位' + Generation.formatTop(G.fin.top) : '同世代 上位50%より下') + '</div></div></div>'
         + (a && abil ? boxes(Object.assign({}, a, { abilities: abil, pitches: st.hero.finalPitches || [] }), null, abil) : '')
@@ -6942,7 +6988,7 @@
     function render() {
       const H = st.hero;
       const h = heroOf(st);
-      doc.getElementById('meta').innerHTML = H.phase === 'graduate' ? '<b>' + HighSchool.formatYear(st.year) + ' 7月(卒業)</b>'
+      doc.getElementById('meta').innerHTML = H.phase === 'graduate' ? '<b>' + HighSchool.formatYear(st.year) + ' 7月' + (H.gradPending || julyView ? '' : '(卒業)') + '</b>'
         : '<b>' + HighSchool.formatYear(st.year) + ' ' + esc(HighSchool.monthLabel(st.month)) + '</b>' + (h ? ' ・ ' + esc(h.name) + '(' + (h.grade || 1) + '年)' : '');
       let html;
       if (screen === 'settings') html = renderSettings();
@@ -6950,7 +6996,7 @@
       else if (screen === 'roster') html = '<div class="card"><h2>部員名簿</h2>' + rosterView() + '<div class="btns"><button class="btn sub small" id="hRosterClose">戻る</button></div></div>';
       else if (H.phase === 'rival') html = renderRival();
       else if (H.phase === 'start') html = renderStart();
-      else if (H.phase === 'graduate') html = renderGraduate();
+      else if (H.phase === 'graduate') html = H.gradPending || julyView ? renderHome(true) : renderGraduate();
       else if (H.newYear && !H.newYear.closed) html = renderNewYear();
       else html = renderHome();
       doc.getElementById('main').innerHTML = renderDev() + html + renderDetail() + renderModal();
@@ -6982,6 +7028,8 @@
       if (id === 'hDetailClose') { detail = null; render(); return; }
       if (ds.rsort) { ui.rosterSort = ds.rsort; saveUi(); render(); return; }
       if (id === 'hRoster') { screen = 'roster'; render(); return; }
+      if (id === 'hToGrad') { goGraduate(st); julyView = false; save(storage, st); window.scrollTo(0, 0); render(); return; }
+      if (id === 'hBackJuly') { julyView = true; window.scrollTo(0, 0); render(); return; }
       if (id === 'hLuDetail') { ui.luDetail = !ui.luDetail; saveUi(); render(); return; }
       if (id === 'hRosterClose') { screen = null; render(); return; }
       if (id === 'hNewYearOk') { act(() => closeNewYear(st)); window.scrollTo(0, 0); return; }
@@ -7032,7 +7080,7 @@
     autoRival: autoRival, getValueAt: getValueAt, gamePeak: gamePeak, monthAppearance: monthAppearance, lineText: lineText, emptyLine: emptyLine, addLine: addLine, toggleWatch: toggleWatch, swapWatch: swapWatch, addWatch: addWatch, diffSentence: diffSentence, getRank: getRank, toKmh: toKmh, breakTotal: breakTotal, syncPitches: syncPitches, pitchCountFor: pitchCountFor, closeNewYear: closeNewYear, rosterList: rosterList, makeHeroPlayer: makeHeroPlayer, contestOf: contestOf, convertEligible: convertEligible, heroOf: heroOf, rivalOf: rivalOf, statusLabel: statusLabel,
     rivalLine: rivalLine, contestAxisNow: contestAxisNow, keys: keys, save: save, load: load, wipeKeys: wipeKeys,
     startNew: startNew, resetSameSeed: resetSameSeed, resetNewSeed: resetNewSeed, wipeAll: wipeAll, startup: startup,
-    playerMonthLine: playerMonthLine, ratingSeries: ratingSeries, autoRival: autoRival, lineupRows: lineupRows, statCells: statCells,
+    goGraduate: goGraduate, summerResultLine: summerResultLine, playerMonthLine: playerMonthLine, ratingSeries: ratingSeries, autoRival: autoRival, lineupRows: lineupRows, statCells: statCells,
     pickText: pickText, fill: fill, typeOf: typeOf, setback: setback, tryRebound: tryRebound, hrng: hrng, serialOf: serialOf,
     mountUI: mountUI,
   };

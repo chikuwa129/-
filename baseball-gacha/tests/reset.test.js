@@ -246,7 +246,7 @@ test('新入部員モード:保存データ(bbgacha_hero_v*)は3種類のリセ�
   const Hero = require('../hero.js');
   const st = memoryStorage();
   const K = Hero.keys();
-  assert.ok(K.save.indexOf(CONFIG.storagePrefix + 'hero_v' + CONFIG.heroMode.saveVersion + '_') === 0 && CONFIG.heroMode.saveVersion === 5, '保存キーの接頭辞');
+  assert.ok(K.save.indexOf(CONFIG.storagePrefix + 'hero_v' + CONFIG.heroMode.saveVersion + '_') === 0 && CONFIG.heroMode.saveVersion === 6, '保存キーの接頭辞');
   const progress = (seed) => {
     const s = Hero.startNew(st, seed);
     Hero.reroll(s);
@@ -294,6 +294,31 @@ test('新入部員モード:保存データ(bbgacha_hero_v*)は3種類のリセ�
   assert.strictEqual(st.getItem(K.save), null, '育成監督モードの完全に消すでも消える');
   // 育成監督モードの保存とは別のキー
   assert.notStrictEqual(K.save, Persist.KEYS.save);
+});
+
+test('新入部員モード:「卒業待ち」(3年の7月の画面)は保存・復元され、3種類のリセットと ?reset=1 で消える', () => {
+  const Hero = require('../hero.js');
+  const st = memoryStorage();
+  const toPending = (seed) => {
+    const s = Hero.startNew(st, seed);
+    Hero.pickHero(s, s.pendingRecruits[0].id);
+    Hero.startPlay(s);
+    for (let i = 0; i < 200 && s.hero.phase === 'play'; i++) Hero.advance(s, 'event');
+    Hero.save(st, s);
+    const ld = Hero.load(st);
+    assert.ok(ld.hero.phase === 'graduate' && ld.hero.gradPending === true, '再読み込みしても卒業待ち');
+    return s;
+  };
+  const fresh = (s) => JSON.stringify(s) === JSON.stringify(Hero.newHeroGame(s.seed));
+  let s = Hero.resetSameSeed(st, toPending(71));
+  assert.ok(fresh(s) && !Hero.load(st).hero.gradPending, '同じシードでやり直す');
+  toPending(72);
+  assert.ok(fresh(Hero.resetNewSeed(st, 73)) && !Hero.load(st).hero.gradPending, '新しいシードで始める');
+  toPending(74);
+  assert.ok(fresh(Hero.wipeAll(st, 75)) && Hero.load(st) == null || !Hero.load(st).hero.gradPending, '完全に消す');
+  toPending(76);
+  const r = Hero.startup(st, '?reset=1');
+  assert.ok(r.reset && r.state.hero.phase === 'select' && !Hero.load(st).hero.gradPending, '?reset=1');
 });
 
 Tuning.applyOverrides({});
