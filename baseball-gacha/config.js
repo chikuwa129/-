@@ -425,6 +425,16 @@
         minInnings: 3,
         finalBonus: true,           // 決勝では、スタミナが B 以上の投手を +1回
       },
+      // 先発の能力を失点に効かせる(このモードだけ。勝敗と自校の得点は変えない。成績用の乱数を使う)
+      //   ずらす量 d = coef × (P − refStrength) ÷ 100 ± noise(一様)。P は先発の投手側の総合値(100超は overCapWeight で割引)
+      //   d × 先発の投球回 ÷ 9 を、±maxShift で抑えて四捨五入。勝った試合は 0〜得点−1、負けた試合は 得点+1 以上に収める
+      pitching: {
+        enabled: true,              // false で、H1.2 までと同じ失点(テスト用)
+        coef: 1.3,                  // 仮の値(hero-sim の防御率の目安に合わせて 1.0 から調整)
+        refStrength: 410,           // この総合値の先発では、平均して失点は変わらない。仕様の仮値 300 から調整(係数1つで、弱い先発の失点を増やし、強い先発を下げすぎないため)
+        noise: 1.5,                 // ばらつき(±の一様乱数)。0.5 から調整(強い先発でも打ち込まれる日を残す)
+        maxShift: 3.0,              // ずらす点数の絶対値の上限
+      },
       story: {
         bigMonthGain: 6,            // 「成長が大きい月」の総合値の増分
         bigMonthGap: 2,             // 「成長が大きい月」の物語の最短間隔(月。毎月続かないように)。H1.1 で 3 → 2(卒業が夏になり止まる回数が減ったため)
@@ -452,6 +462,15 @@
         reboundShare: { min: 0.60, label: '挫折のうち、再起の物語が出た割合', pct: true, tune: 'heroMode.rebound.windowMonths' },
         setbackOver: { max: 0, label: '挫折の物語が3年間で2回を超えた主人公の数', tune: 'heroMode.setbackMax' },
         badShare: { max: 0.20, label: '悪い物語(挫折・転向の失敗)が物語全体に占める割合', pct: true, tune: 'heroMode.setbackMax' },
+        era1: { min: 5.0, max: 5.8, label: '大会の先発の防御率(総合値〜150)', tune: 'heroMode.pitching.coef / refStrength' },
+        era2: { min: 4.0, max: 4.8, label: '大会の先発の防御率(総合値150〜250)', tune: 'heroMode.pitching.coef / refStrength' },
+        era3: { min: 3.0, max: 3.8, label: '大会の先発の防御率(総合値250〜350)', tune: 'heroMode.pitching.coef / refStrength' },
+        era4: { min: 2.2, max: 3.0, label: '大会の先発の防御率(総合値350〜450)', tune: 'heroMode.pitching.coef / refStrength' },
+        era5: { min: 1.5, max: 2.2, label: '大会の先発の防御率(総合値450以上)', tune: 'heroMode.pitching.coef / maxShift' },
+        aceBadYear: { max: 0.005, label: '総合値450以上の先発:年度の大会防御率が5.63以上の割合', pct: true, tune: 'heroMode.pitching.coef / noise' },
+        aceTwo12: { max: 0.008, label: '総合値450以上の先発:大会の2試合で合計12失点以上の確率', pct: true, tune: 'heroMode.pitching.coef / maxShift' },
+        aceMedian: { max: 1.7, label: '総合値450以上の先発:1試合ごとの防御率(9回あたりの自責点)の中央値', tune: 'heroMode.pitching.coef' },
+        aceP75: { min: 3, label: '総合値450以上の先発:1試合ごとの防御率の75%点(打ち込まれる日も残す)', tune: 'heroMode.pitching.noise / maxShift' },
       },
     },
 
@@ -756,6 +775,11 @@
     ['heroMode.practiceSub.reliefRunRate', 'hero', '練習試合の途中出場:投手が1点取られる確率'],
     ['heroMode.watchMax', 'hero', '気になる選手の上限(主人公とライバルは別枠)'],
     ['heroMode.rival.revealAtGraduation', 'hero', '卒業のときに、ライバルの素質を明かす(オン/オフ)'],
+    ['heroMode.pitching.enabled', 'hero', '先発の能力を失点に効かせる(オン/オフ。勝敗と自校の得点は変えない)'],
+    ['heroMode.pitching.coef', 'hero', '失点のずらし:係数(総合値100あたりの点数。9回換算)'],
+    ['heroMode.pitching.refStrength', 'hero', '失点のずらし:基準の総合値(これより強い先発は失点が減る)'],
+    ['heroMode.pitching.noise', 'hero', '失点のずらし:ばらつき(±の一様乱数)'],
+    ['heroMode.pitching.maxShift', 'hero', '失点のずらし:1試合でずらす点数の上限'],
     ['heroMode.stamina.enabled', 'hero', '先発の投球回をスタミナで決める(オン/オフ)'],
     ['heroMode.stamina.base', 'hero', '先発の投球回の基準(base + スタミナ ÷ perPoint)'],
     ['heroMode.stamina.perPoint', 'hero', '先発の投球回:スタミナ何ごとに1回か'],

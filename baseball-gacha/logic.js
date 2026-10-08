@@ -1147,7 +1147,9 @@
     }
     // 投手(先発のみ。完投とみなす)。新入部員モードでは、スタミナに応じた投球回と救援(heroPitching)
     const pit = bat.find((b) => b.pos === 'P');
-    const hp = opts && opts.heroPitch && pit ? heroPitching(rng, pit, result, opts.heroPitch) : null;
+    // 新入部員モード:先発の能力で自校の失点をずらす(勝敗と自校の得点は変えない)。以降の失点はすべて result2 を使う
+    const result2 = opts && opts.heroPitch && pit && CONFIG.heroMode.pitching.enabled ? heroRunsAllowed(rng, pit.p, result, opts.heroPitch) : result;
+    const hp = opts && opts.heroPitch && pit ? heroPitching(rng, pit, result2, opts.heroPitch) : null;
     if (pit && !hp) {
       pit.g.pg = 1;
       if (result.win) pit.g.w = 1; else pit.g.l = 1;
@@ -1168,12 +1170,13 @@
       return inn;
     };
     const box = {
-      my: result.my, opp: result.opp, win: result.win,
-      line: hp ? hp.line : { my: spread(result.my), opp: spread(result.opp) },
+      my: result.my, opp: result2.opp, win: result.win,
+      line: hp ? hp.line : { my: spread(result.my), opp: spread(result2.opp) },
       unearned: unearned,
       batters: bat.filter((b) => b.pos !== 'P' || b.g.pa > 0).map((b) => ({ id: b.p.id, name: b.p.name, num: b.num, pos: b.pos, ab: b.g.ab, h: b.g.h, hr: b.g.hr, rbi: b.g.rbi })),
-      pitcher: pit ? { id: pit.p.id, name: pit.p.name, outs: pit.g.outs, runs: result.opp, win: result.win } : null,
+      pitcher: pit ? { id: pit.p.id, name: pit.p.name, outs: pit.g.outs, runs: result2.opp, win: result.win } : null,
     };
+    if (result2 !== result) { box.oppBase = result.opp; box.shift = result.opp - result2.opp; }
     if (hp) {
       box.starter = hp.starter;
       box.relief = hp.reliefBox;
@@ -1199,11 +1202,24 @@
     if (final && S.finalBonus && stamina >= CONFIG.heroMode.display.rank.B) ip = Math.min(9, ip + 1);
     return ip;
   }
+  // 新入部員モード:先発の投手力で、自校の失点をずらす(成績用の乱数)。勝敗と自校の得点は保つ
+  //   P = 先発の投手側の総合値(100超は overCapWeight で割引)。d = coef × (P − refStrength) ÷ 100 ± noise
+  //   先発が投げる分だけ効かせる(d × 投球回 ÷ 9。投球回は元の失点で見積もる)。±maxShift に抑えて四捨五入
+  function heroRunsAllowed(rng, p, result, o) {
+    const C = CONFIG.heroMode.pitching;
+    const P = PITCH_KEYS.reduce((a, k) => a + effAbility(p.abilities[k]), 0) / PITCH_KEYS.length * CONFIG.ratingMultiplier;
+    const ip = heroInnings(p.abilities.stamina, result.opp, o.final);
+    const d0 = C.coef * (P - C.refStrength) / 100 + (rng.next() * 2 - 1) * C.noise;
+    const k = Math.round(clamp(d0 * ip / 9, -C.maxShift, C.maxShift));
+    const opp = result.win ? clamp(result.opp - k, 0, result.my - 1) : Math.max(result.my + 1, result.opp - k);
+    return { win: result.win, my: result.my, opp: opp };
+  }
   function heroPitching(rng, pit, result, o) {
     const V = CONFIG.visual;
     const S = CONFIG.stats;
     const ip = heroInnings(pit.p.abilities.stamina, result.opp, o.final);
-    const spRuns = Math.ceil(result.opp * ip / 9);   // 端数は先発に寄せる
+    // 先発と救援の失点:投球回の割合で分け、端数は四捨五入(H1.2 までは先発に寄せていた。pitching.enabled が false なら従来どおり)。合計は失点のまま
+    const spRuns = CONFIG.heroMode.pitching.enabled ? Math.round(result.opp * ip / 9) : Math.ceil(result.opp * ip / 9);
     const rpRuns = result.opp - spRuns;
     const spreadIn = (runs, from, to) => {
       const inn = new Array(9).fill(0);
@@ -1419,6 +1435,7 @@
     plateAppearance: plateAppearance,
     recordGameStats: recordGameStats,
     heroInnings: heroInnings,
+    heroRunsAllowed: heroRunsAllowed,
   };
 
   const Generation = {
@@ -2414,6 +2431,7 @@
       const before = members_.map((p) => statLinesFor(p, state.year)[1]).map((l) => [l.ab, l.h]);
       const hpo = heroPitchOpts(state, members_, r === T.rounds);
       const rg = recordGameStats(srng, state.year, slots, order, res, hpo ? { heroPitch: hpo } : undefined);
+      if (rg.box.opp !== res.opp) games[games.length - 1].text = games[games.length - 1].text.replace(' ' + res.my + '対' + res.opp + 'で', ' ' + res.my + '対' + rg.box.opp + 'で');   // 新入部員モード:組み直した失点
       const paByOrder = rg.paByOrder;
       games[games.length - 1].box = rg.box;
       games[games.length - 1].highlights = buildHighlights(state, rg.box);

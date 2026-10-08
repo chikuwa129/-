@@ -1,6 +1,6 @@
 // =============================================================
 // tools/hero-sim.js : 新入部員モードの検証(画面なし)
-//   使い方: node tools/hero-sim.js [回数=200] [最初のシード=1]
+//   使い方: node tools/hero-sim.js [回数=200] [最初のシード=1] [防御率・打撃の測定の回数=520]
 //   引きの主人公と、作った主人公(レベル感 × 素質、二刀流)を、それぞれ指定の回数だけ3年間進めて、
 //   config.js の heroMode.targets と比べて ✓ / △ / ✕ を出す。同じ引数なら同じ結果になる。
 //   測定の時点は「3年の夏の大会の直後」(主人公の卒業の時点)。比較先の引きの選手も同じ時点で測る。
@@ -221,6 +221,119 @@ const normalP = cohort.filter((a) => a.position === 'P' && a.talent !== 'genius'
 const specialP = cohort.filter((a) => a.position === 'P' && ((a.talent === 'genius' && !a.geniusBust) || a.reincarnation));
 log('  球速:通常の新入生(投手)平均 ' + f1(mean(normalP.map((a) => kmh(a.velo0)))) + 'km/h / 通常の3年夏 平均 ' + f1(mean(normalP.map((a) => kmh(a.velo))))
   + 'km/h / 天才・転生の3年夏 最高 ' + (specialP.length ? Math.max.apply(null, specialP.map((a) => kmh(a.velo))) : '-') + 'km/h(平均 ' + f1(mean(specialP.map((a) => kmh(a.velo)))) + ')');
+// 先発の能力と失点(H1.3)、打者の能力と打撃成績(H1.3 の4。調査のみ)
+//   先発の総合値は、その試合の月の成長の前の値(投手側の見える能力の平均 × ratingMultiplier。100超も割り引かない)
+//   heroMode.pitching.enabled を切り替えて、同じシードで H1.2(組み直しなし)と並べる
+const NE = Number(process.argv[4] || 520);
+const PBANDS = [[0, 150], [150, 250], [250, 350], [350, 450], [450, 1e9]];
+const bandOf = (r) => PBANDS.findIndex((b) => r >= b[0] && r < b[1]);
+const bandLabel = (b) => (b[1] > 1e8 ? b[0] + '以上' : (b[0] ? b[0] + '〜' : '〜') + b[1]);
+const EKINDS = [
+  { pick: true },
+  { pos: 'pitcher', type: 'gouwan', level: 'high', talent: 'normal' },
+  { pos: 'pitcher', type: 'gikou', level: 'mid', talent: 'genius' },
+  { pos: 'pitcher', type: 'gouwan', level: 'mid', talent: 'genius' },
+];
+const quant = (a, f) => { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y); const i = (b.length - 1) * f, lo = Math.floor(i); return b[lo] + (b[Math.ceil(i)] - b[lo]) * (i - lo); };
+function measureGames(enabled) {
+  const prev = CONFIG.heroMode.pitching.enabled;
+  CONFIG.heroMode.pitching.enabled = enabled;
+  const G = { tourney: PBANDS.map(() => []), practice: PBANDS.map(() => []) };
+  const B = PBANDS.map(() => []);
+  const seasons = {};
+  const bseasons = {};
+  const lineups = [];
+  try {
+    for (let i = 1; i <= NE; i++) for (let ki = 0; ki < EKINDS.length; ki++) {
+      const k = EKINDS[ki];
+      const st = Hero.newHeroGame(i * 7 + 3);
+      if (k.pick) { const r = new Core.Rng((i * 40503) >>> 0); Hero.pickHero(st, r.pick(st.pendingRecruits).id); }
+      else { const e = Hero.createHero(st, k); if (e) throw new Error(e); Hero.confirmRival(st, 'auto'); }
+      Hero.startPlay(st);
+      for (let guard = 0; st.hero.phase === 'play' && guard < 80; guard++) {
+        const pr = new Map(st.players.map((p) => [p.id, Core.ratingOfKeys(p.abilities, Core.PITCH_KEYS)]));
+        const br = new Map(st.players.map((p) => [p.id, Core.ratingOfKeys(p.abilities, Core.BAT_KEYS)]));
+        if (guard % 3 === 0) { const sl = Core.buildLineup(st.players, { heroTwoWay: true }); if (sl.some((x) => x.pos === 'P' && x.player)) lineups.push(sl); }
+        Hero.advance(st, 'month');
+        for (const m of st.lastEvents || []) {
+          const push = (kind, g) => {
+            const b = g.box;
+            if (!b || !b.starter) return;
+            const r = pr.get(b.starter.id);
+            if (r == null) return;
+            const er = Math.round(b.starter.runs * CONFIG.stats.earnedRate);
+            G[kind][bandOf(r)].push({ outs: b.starter.outs, er: er, sp: b.starter.runs, opp: b.opp, win: b.win });
+            if (kind === 'tourney' && r >= 450) { const key = i + ':' + ki + ':' + b.starter.id + ':' + st.year; const S = seasons[key] = seasons[key] || { er: 0, outs: 0 }; S.er += er; S.outs += b.starter.outs; }
+            if (kind === 'tourney') for (const x of b.batters || []) {
+              if (x.pos === 'P') continue;   // 投手枠(投手と二刀流の投手)は除く
+              const rb = br.get(x.id);
+              if (rb == null) continue;
+              B[bandOf(rb)].push({ ab: x.ab, h: x.h, hr: x.hr, rbi: x.rbi });
+              const key = i + ':' + ki + ':' + x.id;
+              const S = bseasons[key] = bseasons[key] || { band: bandOf(rb), ab: 0, h: 0 };
+              S.band = Math.max(S.band, bandOf(rb)); S.ab += x.ab; S.h += x.h;
+            }
+          };
+          for (const c of m.cards || []) if (c.type === 'tournament' && c.games) c.games.forEach((g) => push('tourney', g));
+          for (const g of m.practice || []) push('practice', g);
+        }
+      }
+    }
+  } finally { CONFIG.heroMode.pitching.enabled = prev; }
+  return { G: G, B: B, seasons: Object.values(seasons), bseasons: Object.values(bseasons), lineups: lineups };
+}
+const eraOf = (L) => L.reduce((a, g) => a + g.er, 0) * 27 / L.reduce((a, g) => a + g.outs, 0);
+function bandRow(L) {
+  if (!L.length) return '0試合';
+  const e = L.map((g) => g.er * 27 / g.outs);
+  return L.length + '試合 防御率 ' + eraOf(L).toFixed(2) + '(1試合ごと 中央値 ' + quant(e, 0.5).toFixed(2) + ' 25%点 ' + quant(e, 0.25).toFixed(2) + ' 75%点 ' + quant(e, 0.75).toFixed(2)
+    + ')勝率 ' + pct(mean(L.map((g) => (g.win ? 1 : 0)))) + ' 失点 平均 ' + mean(L.map((g) => g.opp)).toFixed(2) + ' 中央値 ' + quant(L.map((g) => g.opp), 0.5).toFixed(1) + ' 75%点 ' + quant(L.map((g) => g.opp), 0.75).toFixed(1);
+}
+function aceStats(R) {
+  const L = R.G.tourney[4];
+  const se = R.seasons.map((x) => x.er * 27 / x.outs);
+  const rr = new Core.Rng(7);
+  let hit = 0;
+  // 2試合の合計は、先発の失点で数える。1試合ごとの値は、その試合の先発の防御率(自責点 × 27 ÷ アウト数)
+  for (let i = 0; i < 20000; i++) { const a = L[Math.floor(rr.next() * L.length)], b = L[Math.floor(rr.next() * L.length)]; if (a.sp + b.sp >= 12) hit++; }
+  const e = L.map((g) => g.er * 27 / g.outs);
+  return { badYear: se.filter((v) => v >= 5.63).length / (se.length || 1), seMed: quant(se, 0.5), se90: quant(se, 0.9), n: se.length, two12: hit / 20000,
+    med: quant(e, 0.5), p75: quant(e, 0.75), runsMed: quant(L.map((g) => g.sp), 0.5), runsP75: quant(L.map((g) => g.sp), 0.75) };
+}
+// 感度:実際の編成のまま、投手枠の選手の投手能力だけを、総合値 150 / 300 / 470 に置き換える(夏の1〜5回戦を均等に)
+function sensitivity(lineups, enabled) {
+  const prev = CONFIG.heroMode.pitching.enabled;
+  CONFIG.heroMode.pitching.enabled = enabled;
+  const T = CONFIG.tournaments.summer;
+  const out = {};
+  try {
+    for (const target of [150, 300, 470]) {
+      const rr = new Core.Rng(12345);
+      let runs = 0, n = 0;
+      for (const slots of lineups) {
+        const s2 = slots.map((x) => { if (x.pos !== 'P' || !x.player) return x; const p = JSON.parse(JSON.stringify(x.player)); for (const k of Core.PITCH_KEYS) p.abilities[k] = target / CONFIG.ratingMultiplier; return Object.assign({}, x, { player: p }); });
+        const pit = s2.find((x) => x.pos === 'P').player;
+        for (let rep = 0; rep < 10; rep++) {
+          const round = 1 + Math.floor(rr.next() * T.rounds);
+          const my = Core.evaluateLineup(s2, { gameNo: round }).strength;
+          const m = Core.playMatch(rr, my, rr.normal(T.oppBase + T.oppStep * (round - 1), T.oppSd));
+          runs += enabled ? Core.heroRunsAllowed(rr, pit, m, { final: false }).opp : m.opp;
+          n++;
+        }
+      }
+      out[target] = runs / n;
+    }
+  } finally { CONFIG.heroMode.pitching.enabled = prev; }
+  return out;
+}
+const RE1 = measureGames(false);   // H1.2(組み直しなし)
+const RE2 = measureGames(true);    // H1.3
+PBANDS.forEach((b, i) => { M['era' + (i + 1)] = eraOf(RE2.G.tourney[i]); });
+const ACE1 = aceStats(RE1), ACE2 = aceStats(RE2);
+M.aceBadYear = ACE2.badYear;
+M.aceTwo12 = ACE2.two12;
+M.aceMedian = ACE2.med;
+M.aceP75 = ACE2.p75;
 // 目安
 log('');
 log('■ 目安との比較(✓ 範囲内 / △ 目安の±20%以内 / ✕ それ以外)');
@@ -230,6 +343,39 @@ for (const k of Object.keys(T)) {
   const vd = judge(v, t);
   log('  ' + vd + ' ' + t.label + ' ' + fmt(v, t) + '  目安 ' + tgt(t) + (vd !== '✓' && vd !== '−' ? '  → ' + t.tune : ''));
 }
+// 先発の能力と失点(H1.3)の出力
+log('');
+log('■ 先発の総合値の帯別の防御率(' + NE + '×' + EKINDS.length + '回。H1.2 = 組み直しなし → H1.3)');
+for (const kind of ['tourney', 'practice']) {
+  log('  ' + (kind === 'tourney' ? '【大会】' : '【練習試合】'));
+  PBANDS.forEach((b, i) => {
+    log('   ' + bandLabel(b) + ' H1.2:' + bandRow(RE1.G[kind][i]));
+    log('   ' + ''.padEnd(bandLabel(b).length) + ' H1.3:' + bandRow(RE2.G[kind][i]));
+  });
+}
+const mono = PBANDS.every((b, i) => i === 0 || eraOf(RE2.G.tourney[i]) < eraOf(RE2.G.tourney[i - 1]));
+log('  大会の防御率は帯が上がるほど下がる(単調):' + (mono ? 'はい' : 'いいえ') + ' / 練習試合 − 大会:' + PBANDS.map((b, i) => (eraOf(RE2.G.practice[i]) - eraOf(RE2.G.tourney[i])).toFixed(2)).join('、'));
+const aceTxt = (A) => '年度の大会防御率(' + A.n + '人・年度)中央値 ' + A.seMed.toFixed(2) + ' 90%点 ' + A.se90.toFixed(2) + ' 5.63以上 ' + pct(A.badYear)
+  + ' / 2試合で12失点以上 ' + pct(A.two12) + ' / 1試合ごとの防御率 中央値 ' + A.med.toFixed(2) + ' 75%点 ' + A.p75.toFixed(2) + ' / 先発の1試合の失点 中央値 ' + A.runsMed.toFixed(1) + ' 75%点 ' + A.runsP75.toFixed(1);
+log('  総合値450以上の先発 H1.2:' + aceTxt(ACE1));
+log('  総合値450以上の先発 H1.3:' + aceTxt(ACE2));
+const SEN1 = sensitivity(RE2.lineups, false), SEN2 = sensitivity(RE2.lineups, true);
+log('  感度(実際の編成 ' + RE2.lineups.length + '件で先発の投手能力だけを置き換え。大会の1試合の平均失点)H1.2:150→' + SEN1[150].toFixed(2) + ' 300→' + SEN1[300].toFixed(2) + ' 470→' + SEN1[470].toFixed(2)
+  + ' / H1.3:150→' + SEN2[150].toFixed(2) + ' 300→' + SEN2[300].toFixed(2) + ' 470→' + SEN2[470].toFixed(2));
+// 打者の能力と大会の打撃成績(調査のみ。H1.3 の変更は打撃に影響しないので H1.3 の試行で測る)
+log('');
+log('■ 打者の総合値(野手側)の帯別の大会の打撃成績(投手枠を除く。1試合 = 打者として出場した試合)');
+PBANDS.forEach((b, i) => {
+  const L = RE2.B[i];
+  if (!L.length) { log('  ' + bandLabel(b) + ' 0試合'); return; }
+  const ab = L.reduce((a, x) => a + x.ab, 0), h = L.reduce((a, x) => a + x.h, 0);
+  const g = L.filter((x) => x.ab > 0).map((x) => x.h / x.ab);
+  const S = RE2.bseasons.filter((x) => x.band === i && x.ab >= 10).map((x) => x.h / x.ab);
+  const q3 = (a) => '中央値 ' + quant(a, 0.5).toFixed(2) + ' 25%点 ' + quant(a, 0.25).toFixed(2) + ' 75%点 ' + quant(a, 0.75).toFixed(2);
+  log('  ' + bandLabel(b).padEnd(8) + L.length + '試合 打率 ' + (h / ab).toFixed(3) + '(1試合ごと ' + q3(g) + ')/ 本塁打 1試合 ' + mean(L.map((x) => x.hr)).toFixed(3)
+    + ' / 打点 1試合 ' + mean(L.map((x) => x.rbi)).toFixed(2) + '(' + q3(L.map((x) => x.rbi)) + ')/ 選手ごとの通算打率(10打数以上 ' + S.length + '人)' + q3(S)
+    + ' / 6打数0安打の確率 ' + pct(Math.pow(1 - h / ab, 6)));
+});
 // 4. 同世代の順位の調査(測定のみ。値は変えない)
 //   上位% は小さいほど上。変化 = 3年夏の上位% − 入学時の上位%(正 = 順位が下がった)
 const q = (a, f) => { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y); const i = (b.length - 1) * f; const lo = Math.floor(i); return b[lo] + (b[Math.ceil(i)] - b[lo]) * (i - lo); };

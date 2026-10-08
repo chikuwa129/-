@@ -620,5 +620,75 @@ test('卒業:3年の夏の大会のあとに、読み物(4〜7文)と結果が�
   }
 });
 
+// ---------- H1.3:先発の能力で失点を組み直す ----------
+test('失点の組み直し:勝敗・自校の得点・能力・進路・本体の乱数の状態が H1.2 と一致する(100回)', () => {
+  const FP = require('./hero-fingerprint.js');
+  const ref = require('./fixtures/h12-fingerprint.json');
+  assert.strictEqual(ref.length, FP.N);
+  for (let i = 0; i < FP.N; i++) assert.deepStrictEqual(FP.fingerprint(i), ref[i], i + '回目');
+});
+
+test('失点の組み直し:勝てば 0〜得点−1、負ければ得点+1 以上。先発+救援 = 失点、ラインスコアの合計 = 失点', () => {
+  let n = 0, shifted = 0;
+  for (let i = 0; i < 40; i++) {
+    const st = Hero.newHeroGame(800 + i);
+    const r = new Core.Rng(((800 + i) * 40503) >>> 0);
+    if (i % 2) { Hero.createHero(st, { pos: 'pitcher', type: 'gouwan', level: 'mid', talent: i % 4 === 1 ? 'genius' : 'normal' }); Hero.confirmRival(st, 'auto'); }
+    else Hero.pickHero(st, r.pick(st.pendingRecruits).id);
+    Hero.startPlay(st);
+    for (let guard = 0; st.hero.phase === 'play' && guard < 200; guard++) {
+      Hero.advance(st, 'event');
+      for (const m of st.lastEvents || []) {
+        const list = [].concat.apply([], (m.cards || []).filter((c) => c.type === 'tournament' && c.games).map((c) => c.games)).concat(m.practice || []);
+        for (const g of list) {
+          const b = g.box;
+          if (!b.starter) { assert.ok(b.shift == null, '投手枠が空なら組み直さない'); continue; }   // 投手枠が空の試合(先発なし)
+          n++;
+          if (b.win) assert.ok(b.opp >= 0 && b.opp < b.my, '勝ち:' + b.my + '対' + b.opp);
+          else assert.ok(b.opp >= b.my + 1, '負け:' + b.my + '対' + b.opp);
+          assert.strictEqual(b.starter.runs + (b.relief ? b.relief.runs : 0), b.opp, '先発+救援 = 失点');
+          assert.strictEqual(b.line.opp.reduce((a, x) => a + x, 0), b.opp, 'ラインスコアの合計 = 失点');
+          assert.strictEqual(b.line.my.reduce((a, x) => a + x, 0), b.my);
+          if (b.shift) shifted++;
+          if (g.text) assert.ok(g.text.indexOf(b.my + '対' + b.opp + 'で') >= 0, '大会の結果の文も組み直した失点:' + g.text);
+        }
+      }
+    }
+  }
+  assert.ok(n > 1000 && shifted > n * 0.2, '試合 ' + n + ' / ずらした ' + shifted);
+});
+
+test('失点の組み直し:先発の総合値が高いほど、平均失点が低い(150 < 300 < 470)', () => {
+  const st = Hero.newHeroGame(77);
+  const base = st.players.find((p) => p.position === 'P');
+  const mean = (target) => {
+    const p = JSON.parse(JSON.stringify(base));
+    for (const k of Core.PITCH_KEYS) p.abilities[k] = target / CONFIG.ratingMultiplier;
+    const r = new Core.Rng(31);
+    let sum = 0;
+    for (let i = 0; i < 4000; i++) {
+      const m = Core.playMatch(r, 50, 50);
+      const o = Core.heroRunsAllowed(r, p, m, { final: false });
+      assert.strictEqual(o.win, m.win);
+      assert.strictEqual(o.my, m.my);
+      sum += o.opp;
+    }
+    return sum / 4000;
+  };
+  const a = mean(150), b = mean(300), c = mean(470);
+  assert.ok(a > b && b > c, a.toFixed(2) + ' / ' + b.toFixed(2) + ' / ' + c.toFixed(2));
+});
+
+test('失点の組み直しは、育成監督モードでは起きない(heroMode.pitching はこのモードだけ)', () => {
+  const st = HighSchool.newGame({ seed: 21 });
+  let n = 0;
+  for (let i = 0; i < 40; i++) {
+    if (st.awaiting) HighSchool.confirmPolicies(st, HighSchool.autoPolicies(st));
+    else HighSchool.advanceToNextEvent(st, null, { autoReview: true });
+    for (const m of st.lastEvents || []) for (const c of m.cards || []) if (c.type === 'tournament' && c.games) for (const g of c.games) { n++; assert.ok(g.box.shift == null && g.box.oppBase == null && !g.box.starter); }
+  }
+  assert.ok(n > 0);
+});
+
 console.log(failed ? '\n失敗 ' + failed + '件' : '\nすべて成功(' + passed + '件)');
 process.exit(failed ? 1 : 0);
