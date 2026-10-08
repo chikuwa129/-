@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>野球ガチャ 新入部員モード</title>
+<style>
+  :root {
+    --bg: #f4f1ea; --card: #fffdf8; --ink: #222; --sub: #777; --line: #ddd5c6;
+    --accent: #1f5f8b; --win: #1d7a3a; --lose: #b03a2e; --gold: #b07d00; --special: #8a2be2;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; font-size: 15px; line-height: 1.5; }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 0 12px 80px; }
+  header { position: sticky; top: 0; background: var(--bg); padding: 10px 0 6px; z-index: 5; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+  header .t { flex: 1; min-width: 0; }
+  header h1 { font-size: 17px; margin: 0; }
+  header .meta { font-size: 13px; color: var(--sub); }
+  header .meta b { color: var(--ink); }
+  .gear { border: 1px solid var(--line); background: var(--card); border-radius: 6px; padding: 6px 10px; font-size: 13px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+  .card h2 { font-size: 16px; margin: 0 0 6px; }
+  .btns { display: flex; gap: 8px; margin: 10px 0; }
+  .btn { flex: 1; padding: 14px 8px; font-size: 16px; border: none; border-radius: 8px; background: var(--accent); color: #fff; font-weight: bold; }
+  .btn.sub { background: #fff; color: var(--accent); border: 1px solid var(--accent); }
+  .btn.danger { background: #fff; color: var(--lose); border: 1px solid var(--lose); }
+  .btn.small { padding: 10px 6px; font-size: 14px; }
+  .btn:disabled { opacity: .4; }
+  .minibtn { font-size: 12px; padding: 3px 8px; border: 1px solid var(--line); background: #fff; border-radius: 6px; margin-left: 6px; }
+  .player { border-top: 1px solid var(--line); padding: 8px 0; }
+  .player:first-child { border-top: none; }
+  .pname { font-weight: bold; }
+  .pnamebtn { border: none; background: none; padding: 0; font-size: 16px; font-weight: bold; color: var(--accent); text-decoration: underline dotted; cursor: pointer; }
+  .tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 8px; margin-left: 4px; vertical-align: middle; border: 1px solid var(--line); color: var(--sub); }
+  .tag.P { border-color: #c77; color: #a33; } .tag.C { border-color: #7a7; color: #363; } .tag.IF { border-color: #79c; color: #357; } .tag.OF { border-color: #c9a040; color: #8a6400; }
+  .tag.twoway { border-color: #d4006a; color: #d4006a; } .tag.reinc { border-color: var(--special); color: var(--special); } .tag.conv { border-style: dashed; }
+  .abil { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 4px; margin-top: 4px; }
+  .abil div { min-width: 0; overflow-wrap: anywhere; background: #f6f2e9; border-radius: 4px; padding: 2px 4px; text-align: center; font-size: 12px; color: var(--sub); }
+  .abil b { display: block; font-size: 16px; color: var(--ink); }
+  .v80 b { color: #c0392b; } .v60 b { color: #d35400; } .v40 b { color: #222; } .v0 b { color: #999; }
+  .v100 b { color: #b8860b; text-shadow: 0 0 1px #f5d76e; }
+  .abil div.v100 { box-shadow: inset 0 0 0 1px #e0b84d; }
+  .small { font-size: 12px; color: var(--sub); }
+  .sublabel { font-size: 11px; color: var(--sub); margin-top: 6px; }
+  .rt { font-weight: bold; }
+  .rlabel { font-size: 11px; margin-left: 3px; padding: 0 5px; border-radius: 8px; background: #fff4d6; color: #8a6400; border: 1px solid #e6c56a; white-space: nowrap; }
+  .rlabel.r200 { background: #fde8e8; color: #b03a2e; border-color: #e6a39b; }
+  .rlabel.r400 { background: #2b2b2b; color: #ffd84d; border-color: #2b2b2b; }
+  .gen { font-size: 10px; color: var(--sub); margin-left: 3px; white-space: nowrap; }
+  .reveal { margin-top: 6px; padding: 6px; border: 1px dashed var(--special); color: var(--special); font-weight: bold; border-radius: 6px; font-size: 14px; }
+  .impress { font-size: 13px; color: #555; margin-top: 2px; }
+  .needpol { color: var(--lose); font-size: 12px; font-weight: bold; }
+  .months { display: grid; grid-template-columns: repeat(12, 1fr); gap: 2px; margin: 10px 0 4px; }
+  .months span { font-size: 10px; text-align: center; padding: 3px 0; border-radius: 4px; background: #e8e2d5; color: var(--sub); }
+  .months span.done { color: #bbb; }
+  .months span.now { background: var(--accent); color: #fff; font-weight: bold; }
+  .status { font-size: 11px; padding: 0 6px; border-radius: 8px; background: #e8f0f7; color: var(--accent); white-space: nowrap; }
+  .story { font-size: 15px; margin: 4px 0; }
+  .story.quiet { color: var(--sub); }
+  .row2 { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+  .row2 > span { min-width: 5.5em; font-size: 13px; color: var(--sub); }
+  .row2 select { flex: 1; min-width: 0; padding: 6px; font-size: 15px; border-radius: 6px; border: 1px solid var(--line); background: #fff; }
+  .info { margin-top: 8px; padding: 6px 8px; background: #f6f2e9; border-radius: 6px; font-size: 13px; }
+  label.rv { display: block; padding: 6px 0; border-top: 1px solid #eee; font-size: 14px; }
+  .axis { font-size: 11px; color: var(--lose); white-space: nowrap; }
+  .col { margin: 2px 0; }
+  .colhead { display: block; width: 100%; text-align: left; background: none; border: none; padding: 5px 0; font-size: 14px; color: var(--ink); cursor: pointer; }
+  .colhead .ar { display: inline-block; width: 1.1em; color: var(--accent); }
+  .colhead .more { font-size: 11px; color: var(--accent); margin-left: 4px; }
+  .colbody { padding: 2px 0 6px; }
+  .scroll { overflow-x: auto; }
+  table.lu { border-collapse: collapse; width: 100%; font-size: 13px; }
+  table.lu th { font-size: 11px; color: var(--sub); font-weight: normal; text-align: left; padding: 2px 4px; border-bottom: 1px solid var(--line); }
+  table.lu td { border-bottom: 1px dotted #eee; padding: 3px 4px; }
+  table.lu td.num { text-align: right; }
+  table.lu tr.oop td { color: var(--lose); }
+  table.lu tr.me td { font-weight: bold; background: #fff6dc; }
+  .hist { font-size: 12px; color: #444; margin: 4px 0 0 0; padding-left: 16px; }
+  .grad { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 10px 0; text-align: center; }
+  .bignum b { font-size: 26px; }
+  .arrow { font-size: 20px; color: var(--sub); }
+  .dev { background: #eef; font-family: ui-monospace, monospace; font-size: 10px; word-break: break-all; }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal { background: #fff; border-radius: 10px; padding: 16px; max-width: 420px; width: 100%; }
+  .modal p { margin: 0 0 12px; font-size: 15px; }
+  .modal.pdetail { max-height: 85vh; overflow-y: auto; }
+  .btn.small { color: #fff; } .btn.sub.small { color: var(--accent); } .btn.danger.small { color: var(--lose); }
+  .bignum { white-space: nowrap; } .bignum b { font-size: 22px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="t"><h1>野球ガチャ 新入部員モード</h1><div class="meta" id="meta"></div></div>
+    <button class="gear" id="hSettings">設定</button>
+  </header>
+  <main id="main"></main>
+</div>
+<script src="config.js"></script>
+<script src="benchmark.js"></script>
+<script src="logic.js"></script>
+<script src="story.js"></script>
+<script src="hero.js"></script>
+<script>
+  window.Hero.mountUI();
+</script>
+</body>
+</html>

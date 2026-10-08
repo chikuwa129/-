@@ -285,10 +285,11 @@
     const T = CONFIG.talent;
     const q = opts.quality || {};
     const tm = q.talentMult || 1;
-    const reincarnation = rng.chance(T.reincarnationRate * tm)
+    // opts.forceTalent / forceBust / noReincarnation は、新入部員モードで主人公を作るときだけ使う(省くと従来どおりの抽選)
+    const reincarnation = opts.noReincarnation ? null : rng.chance(T.reincarnationRate * tm)
       ? rng.pick(Object.keys(CONFIG.reincarnationTypes)) : null;
-    const talent = rng.chance(T.geniusRate * tm) ? 'genius' : 'normal';
-    const geniusBust = talent === 'genius' && rng.chance(T.geniusBustRate);
+    const talent = opts.forceTalent != null ? opts.forceTalent : rng.chance(T.geniusRate * tm) ? 'genius' : 'normal';
+    const geniusBust = opts.forceBust != null ? (talent === 'genius' && opts.forceBust) : talent === 'genius' && rng.chance(T.geniusBustRate);
     const twoWay = opts.forceTwoWay != null ? opts.forceTwoWay : rng.chance(T.twoWayRate);
 
     let position;
@@ -452,7 +453,7 @@
   function talentMult(p) {
     const T = CONFIG.growth.talentMult;
     if (isBloomingGenius(p) && p.reincarnation) return T.both;
-    if (isBloomingGenius(p)) return T.genius;
+    if (isBloomingGenius(p)) return T.genius * (p.heroGrowthRatio || 1);   // heroGrowthRatio は新入部員モードで作った天才だけが持つ
     if (p.reincarnation) return T.reincarnation;
     return 1;
   }
@@ -695,8 +696,73 @@
   //   1) 区分ごと(捕手→投手→内野→外野)に、本職の選手を総合値の高い順に必要人数まで(判明した二刀流は投手枠で最優先)
   //   2) 埋まらなかった枠だけ、残った選手から適性の高い順に補う(不足人数が多い区分から)
   //   3) offPositionStarGap > 0 のときだけ、控えの選手を本職外で起用してよい(総合値の差と適性の条件つき)
-  function buildLineup(players) {
+  // 新入部員モード:二刀流(判明済み)の野手側の守備区分(作成した主人公はタイプから。それ以外は適性の最も高い区分を固定)
+  function twoWayBatPos(p) {
+    if (!p.batPos) {
+      let best = 'IF';
+      for (const pos of ['IF', 'OF', 'C']) if (aptitude(p, pos) > aptitude(p, best)) best = pos;
+      p.batPos = best;
+    }
+    return p.batPos;
+  }
+  // 投手枠の評価値(新入部員モード):投手側の総合値 + 野手側の総合値 × batWeightInPitcherSlot
+  function pitcherSlotValue(p) {
+    return ratingOfKeys(p.abilities, PITCH_KEYS) + ratingOfKeys(p.abilities, BAT_KEYS) * CONFIG.heroMode.twoWay.batWeightInPitcherSlot;
+  }
+  // 新入部員モードの、その枠の本職とみなすか(判明済みの二刀流は、投手と野手側の守備区分の両方)
+  function heroPrimaryOf(p, pos) {
+    if (isTwoWayKnown(p)) return pos === 'P' || twoWayBatPos(p) === pos;
+    return p.position === pos;
+  }
+  // 編成の順位に使う総合値(二刀流が野手側の枠に入るときは、野手側の総合値)
+  function heroSlotRating(p, pos) {
+    return isTwoWayKnown(p) && pos !== 'P' ? ratingOfKeys(p.abilities, BAT_KEYS) : rating(p);
+  }
+  // 新入部員モードの編成:投手枠を評価値で先に決め、投手枠を取れなかった二刀流は野手側の区分の本職として扱う
+  function buildLineupHero(avail) {
+    const used = new Set();
+    const chosen = { P: [], C: [], IF: [], OF: [] };
+    const pc = avail.filter((p) => p.position === 'P').sort((a, b) => pitcherSlotValue(b) - pitcherSlotValue(a) || a.id - b.id);
+    for (const p of pc.slice(0, CONFIG.lineup.P)) { chosen.P.push(p); used.add(p.id); }
+    for (const pos of CONFIG.lineupOrder) {
+      if (pos === 'P') continue;
+      const prim = avail.filter((p) => !used.has(p.id) && p.position !== 'P' && p.position === pos)
+        .concat(avail.filter((p) => !used.has(p.id) && isTwoWayKnown(p) && twoWayBatPos(p) === pos));
+      prim.sort((a, b) => heroSlotRating(b, pos) - heroSlotRating(a, pos) || a.id - b.id);
+      for (const p of prim.slice(0, CONFIG.lineup[pos])) { chosen[pos].push(p); used.add(p.id); }
+    }
+    const short = {};
+    for (const pos of POSITIONS) short[pos] = CONFIG.lineup[pos] - chosen[pos].length;
+    const order = CONFIG.lineupOrder.slice().sort((a, b) => short[b] - short[a] || CONFIG.lineupOrder.indexOf(a) - CONFIG.lineupOrder.indexOf(b));
+    for (const pos of order) {
+      while (chosen[pos].length < CONFIG.lineup[pos]) {
+        const cands = avail.filter((p) => !used.has(p.id));
+        if (!cands.length) break;
+        cands.sort((a, b) => effectiveAptitude(b, pos) - effectiveAptitude(a, pos) || a.id - b.id);
+        chosen[pos].push(cands[0]);
+        used.add(cands[0].id);
+      }
+    }
+    const slots = [];
+    for (const pos of CONFIG.lineupOrder) {
+      for (let i = 0; i < CONFIG.lineup[pos]; i++) {
+        const pl = chosen[pos][i] || null;
+        slots.push({
+          pos: pos,
+          player: pl,
+          apt: pl ? effectiveAptitude(pl, pos) : null,
+          outOfPosition: pl ? !heroPrimaryOf(pl, pos) : false,
+          subRole: pl ? sideOf(pos) !== mainSide(pl) && !pl.twoWay : false,
+        });
+      }
+    }
+    return slots;
+  }
+  // 編成のオプション:新入部員モード(state.hero)のときだけ、二刀流の扱いを変える
+  function lineupOpts(state) { return state && state.hero ? { heroTwoWay: true } : undefined; }
+  function buildLineup(players, opts) {
     const avail = players.filter((p) => !p.retired && !p.excluded);
+    if (opts && opts.heroTwoWay) return buildLineupHero(avail);
     const used = new Set();
     const chosen = { P: [], C: [], IF: [], OF: [] };
     const byRating = (a, b) => rating(b) - rating(a) || a.id - b.id;
@@ -755,8 +821,9 @@
   // 編成の確認:本職外の起用と、本職の控えが、不変条件を満たしているか(テストと sim.js 用)
   //   違反1:本職外の起用が、その区分の本職が必要人数を満たしているのに起きた
   //   違反2:本職の選手が控えなのに、その区分の枠が本職だけで埋まっていない(offPositionStarGap が 0 のとき)
-  function checkLineup(players, slots) {
+  function checkLineup(players, slots, opts) {
     const avail = players.filter((p) => !p.retired && !p.excluded);
+    if (opts && opts.heroTwoWay) return checkLineupHero(avail, slots);
     const short = getPositionShortage(avail, CONFIG.lineup);
     const inLineup = new Set(slots.filter((x) => x.player).map((x) => x.player.id));
     const primFilled = { P: 0, C: 0, IF: 0, OF: 0 };
@@ -770,6 +837,44 @@
     }
     if (!(CONFIG.offPositionStarGap > 0)) {
       for (const p of avail) if (!inLineup.has(p.id) && primFilled[p.position] < CONFIG.lineup[p.position]) violations++;
+    }
+    const top3 = avail.filter((p) => !p.helper).sort((a, b) => rating(b) - rating(a) || a.id - b.id).slice(0, 3);
+    return { violations: violations, oop: oop, oopByPos: oopByPos, starters: inLineup.size, top3: top3.length, top3Out: top3.filter((p) => !inLineup.has(p.id)).length };
+  }
+
+  // 新入部員モードの編成の確認(二刀流は投手と野手側の区分の両方の本職。1人1枠)
+  function checkLineupHero(avail, slots) {
+    const need = CONFIG.lineup;
+    const inLineup = new Map();
+    let violations = 0;
+    let oop = 0;
+    const oopByPos = { P: 0, C: 0, IF: 0, OF: 0 };
+    for (const x of slots) {
+      if (!x.player) continue;
+      if (inLineup.has(x.player.id)) violations++;   // 同じ選手が複数の枠に入っている
+      inLineup.set(x.player.id, x.pos);
+    }
+    const primCount = {};
+    const primFilled = {};
+    for (const pos of POSITIONS) {
+      primCount[pos] = avail.filter((p) => heroPrimaryOf(p, pos)).length;
+      primFilled[pos] = slots.filter((x) => x.pos === pos && x.player && heroPrimaryOf(x.player, pos)).length;
+    }
+    for (const x of slots) {
+      if (!x.player || heroPrimaryOf(x.player, x.pos)) continue;
+      oop++;
+      oopByPos[x.pos]++;
+      // 本職外の起用は、その区分の本職(投手枠の候補は、投手と判明済みの二刀流)が必要人数に満たないときだけ
+      //   投手枠の候補が必要人数以上いても、その候補が別の枠(野手側)に回っている二刀流なら、不足とみなす
+      const free = avail.filter((p) => heroPrimaryOf(p, x.pos) && (!inLineup.has(p.id) || inLineup.get(p.id) === x.pos)).length;
+      if (free >= need[x.pos]) violations++;
+    }
+    for (const p of avail) {
+      if (inLineup.has(p.id)) continue;
+      if (isTwoWayKnown(p)) {
+        // 二刀流が控えになるのは、投手枠に選ばれず、かつ野手側の区分の枠が本職だけで埋まっているときだけ
+        if (primFilled[twoWayBatPos(p)] < need[twoWayBatPos(p)]) violations++;
+      } else if (primFilled[p.position] < need[p.position]) violations++;
     }
     const top3 = avail.filter((p) => !p.helper).sort((a, b) => rating(b) - rating(a) || a.id - b.id).slice(0, 3);
     return { violations: violations, oop: oop, oopByPos: oopByPos, starters: inLineup.size, top3: top3.length, top3Out: top3.filter((p) => !inLineup.has(p.id)).length };
@@ -818,8 +923,8 @@
 
   // ---------- チーム戦力(総合値スケール。表示用) ----------
   // チームの強さ(overCapWeight 適用後)を、総合値と同じ尺度(× ratingMultiplier)に換算する
-  function getTeamPower(players) {
-    const ev = evaluateLineup(buildLineup(players));
+  function getTeamPower(players, lineupOptions) {
+    const ev = evaluateLineup(buildLineup(players, lineupOptions));
     const M = CONFIG.ratingMultiplier;
     return {
       power: Math.round(ev.strength * M),
@@ -849,8 +954,8 @@
     const M = CONFIG.ratingMultiplier;
     return { avg: avg, top: (lo + hi) / 2, avgPower: Math.round(avg * M), topPower: Math.round((lo + hi) / 2 * M) };
   }
-  function calcTeamStrength(players, opts) {
-    return evaluateLineup(buildLineup(players), opts).strength;
+  function calcTeamStrength(players, opts, lineupOptions) {
+    return evaluateLineup(buildLineup(players, lineupOptions), opts).strength;
   }
 
   function winProbability(my, opp) {
@@ -1210,6 +1315,11 @@
     decideCareer: decideCareer,
     makeAlumniRecord: makeAlumniRecord,
     buildLineup: buildLineup,
+    twoWayBatPos: twoWayBatPos,
+    pitcherSlotValue: pitcherSlotValue,
+    heroPrimaryOf: heroPrimaryOf,
+    lineupOpts: lineupOpts,
+    conversionRate: conversionRate,
     checkLineup: checkLineup,
     getPositionShortage: getPositionShortage,
     evaluateLineup: evaluateLineup,
@@ -1324,10 +1434,11 @@
       if (!p.mlog) p.mlog = { s: serial, a: [] };
       p.mlog.a.push(packAbilities(p.abilities));
     }
-    const tp = getTeamPower(state.players);
+    const tp = getTeamPower(state.players, lineupOpts(state));
     const ref = opponentRef();
     // スタメン編成の確認(sim.js と試し計算の目安に使う)
-    const ck = checkLineup(state.players, buildLineup(state.players));
+    const lo = lineupOpts(state);
+    const ck = checkLineup(state.players, buildLineup(state.players, lo), lo);
     const LC = state.stats.lineupCheck;
     LC.months++;
     LC.violations += ck.violations;
@@ -1739,7 +1850,7 @@
   // 新入生の人数を決める
   function newcomerCount(state, rng) {
     const N = CONFIG.newcomers;
-    const strength = state.prevSummerStrength != null ? state.prevSummerStrength : calcTeamStrength(state.players);
+    const strength = state.prevSummerStrength != null ? state.prevSummerStrength : calcTeamStrength(state.players, undefined, lineupOpts(state));
     let n = N.base + Math.round((strength - N.strengthPivot) * N.perStrength) + rng.int(-N.noise, N.noise);
     n = clamp(n, N.min, N.max);
     const room = Math.max(0, N.rosterCap - members(state).length);
@@ -1755,7 +1866,13 @@
       info.x = quality.x;
       info.trend = recruitTrend(quality.x);
       state.newcomerInfo = info;
-      for (let i = 0; i < info.count; i++) {
+      drawRecruitBatch(state, rng, info.count, quality);
+    });
+  }
+  // 新入生を count 人抽選して、pendingRecruits に加える(入学時と、新入部員モードの引き直しで共通)
+  function drawRecruitBatch(state, rng, count, quality) {
+    {
+      for (let i = 0; i < count; i++) {
         const counts = countByPosition(members(state).concat(state.pendingRecruits));
         const weights = {};
         for (const pos of POSITIONS) {
@@ -1771,7 +1888,7 @@
         computeLimitCaps(p);
         state.pendingRecruits.push(p);
       }
-    });
+    }
   }
 
   // 月の始め:入学や方針見直しの月なら、選択待ちにする
@@ -1793,6 +1910,33 @@
     return state.players.filter((p) => !p.retired && !p.helper);
   }
 
+  // コンバートの成功率(適性から)
+  function conversionRate(p, pos) {
+    const CV = CONFIG.conversion;
+    return clamp(CV.successBase + (aptitude(p, pos) - CV.pivot) * CV.perAptitude, CV.successMin, CV.successMax);
+  }
+  // コンバートを1回試す(成否の抽選は rng で)。年度始めのコンバートと同じ処理で、選手を転向させる(新入部員モードの主人公の転向用)
+  function tryConvert(state, rng, p, pos, lines) {
+    const CV = CONFIG.conversion;
+    const from = p.position;
+    state.stats.conversion.attempts++;
+    const ok = rng.chance(conversionRate(p, pos));
+    if (ok) {
+      const sideChanged = sideOf(from) !== sideOf(pos);
+      p.position = pos;
+      p.convert = { pos: pos, penalty: CV.penaltyStart };
+      if (sideChanged) { p.policy = 'balance'; p.subRevealed = true; p.needsPolicy = true; }
+      computeLimitCaps(p);
+      state.stats.conversion.success++;
+      if (pos === 'P') state.stats.conversion.fielderToPitcher++;
+      addEvent(state, { player: p, importance: 3, text: '【転向】' + p.name + 'が' + POSITION_LABEL[from] + 'から' + POSITION_LABEL[pos] + 'に転向した。', history: { ev: 'コンバート', res: POSITION_LABEL[from] + '→' + POSITION_LABEL[pos] } });
+    } else {
+      addEvent(state, { player: p, importance: 2, text: p.name + 'の' + POSITION_LABEL[pos] + 'への転向を試したが、' + POSITION_LABEL[from] + 'に戻った。', history: { ev: 'コンバート失敗', res: POSITION_LABEL[pos] + 'を試して' + POSITION_LABEL[from] + 'に戻る' } });
+    }
+    if (lines) lines.push({ text: ok ? '【転向】' + p.name : '【転向失敗】' + p.name, cls: ok ? 'special' : 'none' });
+    return ok;
+  }
+
   // 年度始めのコンバート
   function runConversions(state, rng, lines) {
     const CV = CONFIG.conversion;
@@ -1803,15 +1947,14 @@
     for (const pos of CONFIG.lineupOrder) {
       while (getPositionShortage(pool, CV.minimum)[pos] > 0 && attempts < CV.maxPerYear) {   // 不足の判定は編成と同じ関数
         const cands = pool.filter((p) => p.position !== pos && !p.twoWay && !tried.has(p.id)
-          && counts[p.position] > CV.minimum[p.position]);
+          && counts[p.position] > CV.minimum[p.position] && !(state.hero && p.id === state.hero.id));
         if (!cands.length) break;
         cands.sort((a, b) => aptitude(b, pos) - aptitude(a, pos) || a.id - b.id);
         const p = cands[0];
         tried.add(p.id);
         attempts++;
         state.stats.conversion.attempts++;
-        const apt = aptitude(p, pos);
-        const rate = clamp(CV.successBase + (apt - CV.pivot) * CV.perAptitude, CV.successMin, CV.successMax);
+        const rate = conversionRate(p, pos);
         const from = p.position;
         if (rng.chance(rate)) {
           const sideChanged = sideOf(from) !== sideOf(pos);
@@ -2007,7 +2150,7 @@
   function runPracticeGames(state, rng) {
     const PG = CONFIG.practiceGames;
     const X = CONFIG.growth.exp;
-    const slots = buildLineup(state.players);
+    const slots = buildLineup(state.players, lineupOpts(state));
     const starters = slots.filter((s) => s.player).map((s) => s.player);
     const my = evaluateLineup(slots).strength;
     const order = battingOrder(slots);
@@ -2023,7 +2166,14 @@
       for (const p of starters) gainExp(p, X.practiceStarter, mult);
       const subs = benchOf(state, starters);
       const n = Math.round(subs.length * PG.subShare);
-      for (const p of rng.shuffle(subs).slice(0, n)) gainExp(p, X.practiceSub, mult);
+      const played = rng.shuffle(subs).slice(0, n);
+      for (const p of played) gainExp(p, X.practiceSub, mult);
+      // 新入部員モード:主人公は練習試合に必ず出場する(スタメンでなければ、控えとして途中出場)
+      if (state.hero && state.hero.id != null) {
+        const h = state.players.find((q) => q.id === state.hero.id);
+        if (h && !h.retired && starters.indexOf(h) < 0 && played.indexOf(h) < 0) gainExp(h, X.practiceSub, mult);
+        if (h && !h.retired && starters.indexOf(h) < 0) state.hero.practiceApps = (state.hero.practiceApps || 0) + 1;
+      }
       countGame(state, starters);
       // 試合の中身(成績用の乱数)。成績に含めるかは設定で選ぶ
       const box = withStatRng(state, (srng) => recordGameStats(srng, state.year, slots, order, res, { record: PG.includeInStats }).box);
@@ -2056,7 +2206,9 @@
         computeLimitCaps(p);
         addEvent(state, { player: p, importance: 3, text: '【判明】' + p.name + 'は打っても一流、二刀流の素質の持ち主だった!(方針は「両方」に)', history: { ev: '二刀流判明', res: '方針:両方' } });
       }
-      const r = campGrowth(rng, p, state.year, label, bonus);
+      let pb = bonus;
+      if (state.hero && p.heroCampBonus) { pb += CONFIG.heroMode.rebound.campBonus; p.heroCampBonus = false; state.hero.boostApplied = (state.hero.boostApplied || 0) + 1; }   // 新入部員モードだけ(1回の合宿で使い切る)
+      const r = campGrowth(rng, p, state.year, label, pb);
       addTimeline(p, p.grade + '年' + type.term);
       counts[r.outcome]++;
       const gained = formatDelta(r.delta) !== '';
@@ -2092,7 +2244,7 @@
     const st = state.stats.tournaments[key];
     const lines = [];
     ensureHelpers(state, rng);
-    const slots = buildLineup(state.players);
+    const slots = buildLineup(state.players, lineupOpts(state));
     handleSubRoles(state, rng, slots);
     const ev0 = evaluateLineup(slots);
     const myStrength = ev0.strength;
@@ -2405,7 +2557,7 @@
       // 成長の効果:月末のスタメンをそのままにして、前月末の能力と今月末の能力で比べる(引退や入れ替えの影響を除く)
       {
         const ref = opponentRef();
-        const slots = buildLineup(state.players);
+        const slots = buildLineup(state.players, lineupOpts(state));
         const prevSlots = slots.map((sl) => {
           if (!sl.player) return sl;
           // 前月の記録がなければ、今年の新入生は入学時と比べ、それ以外(ゲーム開始時の上級生)は変化なしとする
@@ -2513,6 +2665,11 @@
     monthIndexOf: monthIndexOf,
     newGame: newGame,
     confirmPolicies: confirmPolicies,
+    drawRecruitBatch: drawRecruitBatch,
+    newPlayer: newPlayer,
+    hashSeed: hashSeed,
+    tryConvert: tryConvert,
+    activeMembers: activeMembers,
     autoPolicies: autoPolicies,
     resolveReviewAuto: resolveReviewAuto,
     confirmEnrollment: confirmEnrollment,
@@ -2537,8 +2694,8 @@
     unpackAbilities: unpackAbilities,
     compressAlumniLogs: compressAlumniLogs,
     resultLabel: resultLabel,
-    lineup: (state) => lineupSummary(buildLineup(state.players)),
-    teamStrength: (state) => calcTeamStrength(state.players),
+    lineup: (state) => lineupSummary(buildLineup(state.players, lineupOpts(state))),
+    teamStrength: (state) => calcTeamStrength(state.players, undefined, lineupOpts(state)),
   };
 
   // ===========================================================

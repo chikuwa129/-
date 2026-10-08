@@ -362,6 +362,70 @@
     policyOptionHints: false,      // 方針の選択肢に、伸びやすい項目(◎○)を併記する(表示だけ)
     policyControlEnabled: false,   // 方針の選択(入学時のプルダウン・12月の見直し画面)を遊ぶ画面に出すか。false は常におまかせ(画面の切り替えだけ)
 
+    // ---- 新入部員モード(hero.html / play-hero.html)。数値はすべて仮の値。育成監督モードでは使わない ----
+    heroMode: {
+      saveVersion: 1,               // 保存キー bbgacha_hero_v{saveVersion}_*
+      seedSalt: 0x4e52b1d3,         // このモード専用の乱数(引き直し・主人公の作成・物語の文面・転向と再起の抽選)
+      rerollMax: 2,                 // 新入部員の一覧の引き直しの回数
+      stopOnStory: true,            // 主人公の山場の物語で、自動進行を止める
+      stopsPerYearMax: 12,          // 1年あたりの止まる回数の目安(超えたら、物語では止めない)
+      setbackMax: 2,                // 挫折の物語(奪われた・控えが続く・転向の失敗)の3年間の上限
+      create: {
+        typeBias: [15, 25],         // 得意項目は、平均より +15〜+25
+        levels: { low: [80, 95], mid: [95, 110], high: [110, 125] },     // レベル感ごとの初期の総合値
+        twoWayLevels: { low: [75, 88], mid: [88, 100] },                 // 二刀流の投手側・野手側それぞれ(75〜100 の中で分けた)
+        geniusGrowthRatio: 0.8,     // 作った天才の成長の倍率(既存の天才の倍率に掛ける)
+        itemMin: 5,                 // 作るときの1項目の下限
+      },
+      twoWay: {
+        batWeightInPitcherSlot: 0.20,   // 投手枠の評価値 = 投手側の総合値 + 野手側の総合値 × これ
+      },
+      rival: {
+        candidateCount: 5,          // ライバルを選び直す一覧の人数
+        swapMonths: 2,              // 総合値の順位の入れ替わりを、物語にするまでの連続の月数
+      },
+      contest: {
+        swapStoryGap: 3,            // 「奪った・奪われた」の物語の最短間隔(月)
+        benchStory: [3, 6],         // 「控えが続く」の物語を出す連続の月数
+        switchPerYear: 2,           // 役割の切り替えの物語の、1年あたりの上限
+      },
+      convert: {
+        benchMonths: 4,             // 連続して控えの月数がこれ以上
+        aptitudeRatio: 0.85,        // 他の区分の適性が、今の区分の適性のこの倍率以上
+        probability: 0.35,          // 条件を満たした月ごとの発生確率
+        maxPerRun: 1,               // 3年間の上限
+        settleMonths: 12,           // 「慣れてきた」を出せる期間(転向後の月数)
+        settleStories: 2,           // 「慣れてきた」の上限
+        settleAptGain: 4,           // 転向時より適性がこれだけ上がったら「慣れてきた」
+      },
+      rebound: {
+        windowMonths: 6,            // 挫折から再起を待つ期間(月)
+        campBonus: 0.10,            // 再起のあと最初の合宿で「大きく伸びる」に加える確率
+        maxBoosts: 2,               // 後押しの3年間の上限
+      },
+      story: {
+        bigMonthGain: 6,            // 「成長が大きい月」の総合値の増分
+        bigMonthGap: 3,             // 「成長が大きい月」の物語の最短間隔(月。毎月続かないように)
+        recentNoRepeat: 3,          // 同じ文を繰り返さない直近の回数
+      },
+      // tools/hero-sim.js の目安(遊ぶ画面には出さない)
+      targets: {
+        created_vs_normal: { max: 0.15, label: '作った凡人(高め)の卒業時の平均 / 引きの通常の平均 − 1', pct: true, tune: 'heroMode.create.levels.high / heroMode.create.typeBias' },
+        created_vs_genius: { max: 0.85, label: '作った天才の卒業時の平均 / 引きの天才(開花)の平均', tune: 'heroMode.create.geniusGrowthRatio' },
+        created_vs_twoway: { max: 0.90, label: '作った二刀流の卒業時の平均 / 引きの二刀流の平均', tune: 'heroMode.create.twoWayLevels' },
+        stopsPerYear: { min: 6, max: 12, label: '山場の物語で止まる回数(1年あたり)', tune: 'heroMode.stopOnStory / heroMode.stopsPerYearMax' },
+        contestP: { min: 0.50, label: 'ポジション争いが成立した割合(投手)', pct: true, tune: 'heroMode.twoWay.batWeightInPitcherSlot' },
+        contestIF: { min: 0.10, max: 0.40, label: 'ポジション争いが成立した割合(内野)', pct: true, tune: 'lineup.IF / positionDeficit' },
+        contestOF: { min: 0.20, max: 0.60, label: 'ポジション争いが成立した割合(外野)', pct: true, tune: 'lineup.OF / positionDeficit' },
+        contestC: { min: 0.20, max: 0.60, label: 'ポジション争いが成立した割合(捕手)', pct: true, tune: 'positionDeficit.C' },
+        lostBench: { min: 0.20, max: 0.50, label: '争いに敗れて控えが続いた割合(争い成立のうち)', pct: true, tune: 'heroMode.contest.benchStory' },
+        converted: { min: 0.05, max: 0.20, label: '転向が発生した割合', pct: true, tune: 'heroMode.convert.probability / benchMonths' },
+        reboundShare: { min: 0.60, label: '挫折のうち、再起の物語が出た割合', pct: true, tune: 'heroMode.rebound.windowMonths' },
+        setbackOver: { max: 0, label: '挫折の物語が3年間で2回を超えた主人公の数', tune: 'heroMode.setbackMax' },
+        badShare: { max: 0.20, label: '悪い物語(挫折・転向の失敗)が物語全体に占める割合', pct: true, tune: 'heroMode.setbackMax' },
+      },
+    },
+
     // ---- 見える化(表示と、成績用の乱数で決めるハイライトだけに使う。勝敗や成長には影響しない) ----
     visual: {
       opponentTournament: 'summer',  // 他校の比較に使う「相手の強さの分布」(この大会の1回戦〜決勝の相手)
@@ -477,6 +541,7 @@
     { id: 'policy', label: '見直し画面' },
     { id: 'pre', label: '前史' },
     { id: 'rep', label: '評判' },
+    { id: 'hero', label: '新入部員モード' },
   ];
   CONFIG.paramMeta = [
     ['rating.normal.mean', 'rating', '通常の新入生の総合値の平均'],
@@ -604,6 +669,43 @@
     ['reputation.trend.0', 'rep', '「新入生の傾向」がやや良になる x', true],
     ['reputation.trend.1', 'rep', '「新入生の傾向」が良になる x', true],
     ['reputation.trend.2', 'rep', '「新入生の傾向」が非常に良になる x', true],
+    ['heroMode.rerollMax', 'hero', '新入部員の一覧の引き直しの回数'],
+    ['heroMode.stopOnStory', 'hero', '主人公の山場の物語で、自動進行を止める(オン/オフ)'],
+    ['heroMode.stopsPerYearMax', 'hero', '1年あたりの止まる回数の目安(超えたら物語では止めない)'],
+    ['heroMode.setbackMax', 'hero', '挫折の物語の3年間の上限'],
+    ['heroMode.create.typeBias.0', 'hero', '作成:得意項目の上乗せの下限'],
+    ['heroMode.create.typeBias.1', 'hero', '作成:得意項目の上乗せの上限'],
+    ['heroMode.create.levels.low.0', 'hero', '作成:控えめの総合値の下限'],
+    ['heroMode.create.levels.low.1', 'hero', '作成:控えめの総合値の上限'],
+    ['heroMode.create.levels.mid.0', 'hero', '作成:普通の総合値の下限'],
+    ['heroMode.create.levels.mid.1', 'hero', '作成:普通の総合値の上限'],
+    ['heroMode.create.levels.high.0', 'hero', '作成:高めの総合値の下限'],
+    ['heroMode.create.levels.high.1', 'hero', '作成:高めの総合値の上限'],
+    ['heroMode.create.twoWayLevels.low.0', 'hero', '作成:二刀流・控えめの各側の下限'],
+    ['heroMode.create.twoWayLevels.low.1', 'hero', '作成:二刀流・控えめの各側の上限'],
+    ['heroMode.create.twoWayLevels.mid.0', 'hero', '作成:二刀流・普通の各側の下限'],
+    ['heroMode.create.twoWayLevels.mid.1', 'hero', '作成:二刀流・普通の各側の上限'],
+    ['heroMode.create.geniusGrowthRatio', 'hero', '作成:天才の成長の倍率(既存の天才の倍率に掛ける)'],
+    ['heroMode.twoWay.batWeightInPitcherSlot', 'hero', '投手枠の評価値で、野手側の総合値に掛ける重み'],
+    ['heroMode.rival.candidateCount', 'hero', 'ライバルを選び直す一覧の人数'],
+    ['heroMode.rival.swapMonths', 'hero', '総合値の順位の入れ替わりを物語にする連続の月数'],
+    ['heroMode.contest.swapStoryGap', 'hero', '「奪った・奪われた」の物語の最短間隔(月)'],
+    ['heroMode.contest.benchStory.0', 'hero', '「控えが続く」の物語(1回目)の連続の月数'],
+    ['heroMode.contest.benchStory.1', 'hero', '「控えが続く」の物語(2回目)の連続の月数'],
+    ['heroMode.contest.switchPerYear', 'hero', '役割の切り替えの物語の1年あたりの上限'],
+    ['heroMode.convert.benchMonths', 'hero', '転向:連続して控えの月数'],
+    ['heroMode.convert.aptitudeRatio', 'hero', '転向:他の区分の適性が今の区分の何倍以上か'],
+    ['heroMode.convert.probability', 'hero', '転向:条件を満たした月の発生確率'],
+    ['heroMode.convert.maxPerRun', 'hero', '転向:3年間の上限'],
+    ['heroMode.convert.settleMonths', 'hero', '転向:「慣れてきた」を出せる期間(月)'],
+    ['heroMode.convert.settleStories', 'hero', '転向:「慣れてきた」の上限'],
+    ['heroMode.convert.settleAptGain', 'hero', '転向:「慣れてきた」を出す適性の上がり幅'],
+    ['heroMode.rebound.windowMonths', 'hero', '再起を待つ期間(月)'],
+    ['heroMode.rebound.campBonus', 'hero', '再起のあと最初の合宿で「大きく伸びる」に加える確率'],
+    ['heroMode.rebound.maxBoosts', 'hero', '再起の後押しの3年間の上限'],
+    ['heroMode.story.bigMonthGain', 'hero', '「成長が大きい月」の総合値の増分'],
+    ['heroMode.story.bigMonthGap', 'hero', '「成長が大きい月」の物語の最短間隔(月)'],
+    ['heroMode.story.recentNoRepeat', 'hero', '同じ文を繰り返さない直近の回数'],
   ].map((x) => ({ path: x[0], group: x[1], desc: x[2], displayOnly: !!x[3], options: x[4] || null }));
 
   if (typeof module === 'object' && module.exports) module.exports = CONFIG;

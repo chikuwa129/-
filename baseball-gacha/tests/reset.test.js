@@ -242,6 +242,52 @@ test('方針の選択を出さないとき(policyControlEnabled = false):12月�
   }
 });
 
+test('新入部員モード:保存データ(bbgacha_hero_v*)は3種類のリセットと ?reset=1 で消え、リセット後は新規開始と同じ', () => {
+  const Hero = require('../hero.js');
+  const st = memoryStorage();
+  const K = Hero.keys();
+  assert.ok(K.save.indexOf(CONFIG.storagePrefix + 'hero_v' + CONFIG.heroMode.saveVersion + '_') === 0, '保存キーの接頭辞');
+  const progress = (seed) => {
+    const s = Hero.startNew(st, seed);
+    Hero.reroll(s);
+    Hero.pickHero(s, s.pendingRecruits[0].id);
+    Hero.startPlay(s);
+    for (let i = 0; i < 3; i++) Hero.advance(s, 'event');
+    Hero.save(st, s);
+    st.setItem(K.ui, '{"open":{"team":true}}');
+    assert.strictEqual(Hero.load(st).hero.phase, 'play', '途中の状態が保存される');
+    return s;
+  };
+  const fresh = (s) => JSON.stringify(s) === JSON.stringify(Hero.newHeroGame(s.seed));
+  // 同じシードでやり直す
+  let s = Hero.resetSameSeed(st, progress(61));
+  assert.ok(fresh(s) && s.seed === 61, '同じシードでやり直す:新規開始と同じ');
+  assert.strictEqual(st.getItem(K.ui), null, '開閉の記憶も消える');
+  assert.ok(fresh(Hero.load(st)), '保存も新規開始と同じ');
+  // 新しいシードで始める
+  progress(62);
+  s = Hero.resetNewSeed(st, 63);
+  assert.ok(fresh(s) && s.seed === 63 && st.getItem(K.ui) === null, '新しいシードで始める');
+  // 完全に消す
+  progress(64);
+  s = Hero.wipeAll(st, 65);
+  assert.strictEqual(st.keys().filter((k) => k.indexOf(CONFIG.storagePrefix + 'hero_') === 0).length, 0, '完全に消す:このモードのキーがなくなる');
+  assert.ok(fresh(s));
+  // ?reset=1
+  progress(66);
+  st.setItem(CONFIG.storagePrefix + 'hero_v0_save', 'old');   // 古い形式のキーも消える
+  const r = Hero.startup(st, '?reset=1');
+  assert.ok(r.reset && r.state.hero.phase === 'select' && r.state.hero.rerollsLeft === CONFIG.heroMode.rerollMax, '?reset=1:最初から');
+  assert.strictEqual(st.getItem(CONFIG.storagePrefix + 'hero_v0_save'), null);
+  assert.strictEqual(st.getItem(K.ui), null);
+  // 育成監督モードの「セーブを完全に消す」でも、このモードの保存は消える(同じ接頭辞 bbgacha_)
+  progress(67);
+  Persist.wipeAll(st, 1);
+  assert.strictEqual(st.getItem(K.save), null, '育成監督モードの完全に消すでも消える');
+  // 育成監督モードの保存とは別のキー
+  assert.notStrictEqual(K.save, Persist.KEYS.save);
+});
+
 Tuning.applyOverrides({});
 Generation.setBenchmark(null);
 console.log('\nすべて成功(' + passed + '件)');

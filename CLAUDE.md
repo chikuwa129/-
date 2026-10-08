@@ -26,6 +26,8 @@
   1. 成長や初期能力、新入生の抽選など、世代の基準に影響する設定やルールを変えた場合は、node tools/build-benchmark.js
   2. node build-play.js(play.html を作り直す)
 - index.html と play.html は、同じ保存キーを使う。
+- 新入部員モードは hero.html(ソース)から play-hero.html を作る。node build-play.js が、play.html と play-hero.html の両方を作り直す。
+- 新入部員モードの保存キーは bbgacha_hero_v{バージョン}_*。リセットで同時に消えること。tests/reset.test.js に、確認を含める。
 
 ## 品質のルール
 - 数値(確率、補正値)は config.js に集約する。新しい設定値には、メタ情報(group、日本語の説明)を付ける(?dev=1 の設定値一覧に出る)。
