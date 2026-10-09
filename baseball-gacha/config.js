@@ -396,7 +396,7 @@
 
     // ---- 新入部員モード(hero.html / play-hero.html)。数値はすべて仮の値。育成監督モードでは使わない ----
     heroMode: {
-      saveVersion: 11,              // H1.6b で 11:覚醒。保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5、H1.4b で 6:卒業待ち、H1.5a で 7:ピックアップ、H1.4c で 8:月ごとのスタメン、H1.5b で 9:救援、H1.6a で 10:途中出場)
+      saveVersion: 12,              // H1.7 で 12:覚醒の前後の値(演出用)。H1.6b で 11:覚醒。保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5、H1.4b で 6:卒業待ち、H1.5a で 7:ピックアップ、H1.4c で 8:月ごとのスタメン、H1.5b で 9:救援、H1.6a で 10:途中出場)
       seedSalt: 0x4e52b1d3,         // このモード専用の乱数(引き直し・主人公の作成・物語の文面・転向と再起の抽選)
       rerollMax: 2,                 // 新入部員の一覧の引き直しの回数
       stopOnStory: true,            // 主人公の山場の物語で、自動進行を止める
@@ -456,7 +456,27 @@
       watchMax: 2,                  // 気になる選手の上限(主人公とライバルは別枠)
       entranceMax: 8,               // 入口で大きなカードで出す新入生(ピックアップ)の最大人数(roster.version 'v2' のとき)
       entrancePickTop: 5,           // ピックアップのうち、総合値の上位から選ぶ人数(残りは無作為)
-      ui: { progressBar: 'bottom' },   // 進行ボタンのバー:'bottom' 下に固定 / 'top' 上に固定 / 'inline' 固定しない(H1.4b の表示)
+      ui: { progressBar: 'bottom' },
+      // 演出(H1.7。見た目だけ。勝敗・能力・進路・成績・乱数は変えない)。すべて仮の値
+      fx: {
+        enabled: true,              // false で、H1.6b と同じ見た目(演出なし)
+        entry: {
+          stepSec: 0.3,             // 入口:新入生のカードが1人ずつ出る間隔(秒)
+          totalMaxSec: 3,           // 入口:演出の総時間の上限(秒。人数が多いときは間隔を縮める)
+          cardSec: 0.45,            // 入口:1枚のカードが現れる時間(秒)
+          rerollScale: 0.5,         // 引き直しの演出の速さの倍率(間隔・総時間に掛ける。1.0 で最初と同じ)
+          flashSec: 0.5,            // 怪物級以上が出たときの、画面全体の白い光の時間(秒)
+          glow: { promising: 8, excellent: 14, monster: 22, hint: 12 },   // 光の強さ(ぼかしの px)
+        },
+        awaken: {
+          stepSec: 0.35,            // 覚醒:上がった項目の数字が、順に上がり始める間隔(秒)
+          countSec: 0.8,            // 覚醒:1項目の数字が旧い値から新しい値へ上がる時間(秒)
+          introSec: 1.2,            // 覚醒:暗転から「覚醒」の文字までの時間(秒)
+          heads: ['眠っていた力が、目を覚ました。', '何かが弾けた。もう、昨日までの{n}ではない。', '{n}の中で、殻が割れる音がした。', '別人のような動き。{n}が覚醒した。', '誰も止められない。{n}が、一段上へ跳んだ。', 'この瞬間を、{n}は一生忘れないだろう。'],
+          hintYes: ['あの一言は、本物だった。', '入学の日の予感は、当たっていた。', '最初に感じた気配は、これだったのだ。', 'ヒントは、ずっとそこにあった。', '見抜いていた目は、正しかった。', '「底が見えない」――その答えが、今出た。'],
+          hintNo: ['誰も、気づかなかった。', '入学のとき、この覚醒を予想した者はいない。', '何の気配もなかった。だからこそ、驚きは大きい。', '予兆なしの覚醒。本人がいちばん驚いている。', '見落とされていた才能が、自分で扉を開けた。', 'ヒントは、どこにもなかった。それでも、彼は跳んだ。'],
+        },
+      },   // 進行ボタンのバー:'bottom' 下に固定 / 'top' 上に固定 / 'inline' 固定しない(H1.4b の表示)
       newYearOthersOpen: 5,         // 新年度の画面:上位3人以外の新入生がこの人数を超えたら、折りたたみにする
       // 途中出場(代打・代走・守備固め)と盗塁(H1.6a)。試合結果のあとに、個人の起用と成績を割り当てる層。すべて仮の値
       substitute: {
@@ -900,6 +920,19 @@
     ['heroMode.awakening.kmhMin', 'hero', '覚醒で伸びる球速の下限(km/h)'],
     ['heroMode.awakening.kmhMax', 'hero', '覚醒で伸びる球速の上限(km/h)'],
     ['heroMode.awakening.brkGain', 'hero', '覚醒で伸びる変化球(総変化量)'],
+    ['heroMode.fx.enabled', 'hero', '演出(入口の登場・覚醒の瞬間)のオン/オフ。オフで H1.6b と同じ見た目', true],
+    ['heroMode.fx.entry.stepSec', 'hero', '入口の演出:1人ずつ出る間隔(秒)', true],
+    ['heroMode.fx.entry.totalMaxSec', 'hero', '入口の演出:総時間の上限(秒)', true],
+    ['heroMode.fx.entry.cardSec', 'hero', '入口の演出:1枚が現れる時間(秒)', true],
+    ['heroMode.fx.entry.rerollScale', 'hero', '引き直しの演出の速さの倍率(1.0 で最初と同じ)', true],
+    ['heroMode.fx.entry.flashSec', 'hero', '怪物級以上のときの白い光の時間(秒)', true],
+    ['heroMode.fx.entry.glow.promising', 'hero', '光の強さ:有望(px)', true],
+    ['heroMode.fx.entry.glow.excellent', 'hero', '光の強さ:逸材(px)', true],
+    ['heroMode.fx.entry.glow.monster', 'hero', '光の強さ:怪物級・規格外(px)', true],
+    ['heroMode.fx.entry.glow.hint', 'hero', '光の強さ:覚醒のヒント(✦。紫。px)', true],
+    ['heroMode.fx.awaken.stepSec', 'hero', '覚醒の演出:項目ごとの数字が上がり始める間隔(秒)', true],
+    ['heroMode.fx.awaken.countSec', 'hero', '覚醒の演出:1項目の数字が上がる時間(秒)', true],
+    ['heroMode.fx.awaken.introSec', 'hero', '覚醒の演出:暗転から「覚醒」の文字までの時間(秒)', true],
     ['heroMode.rival.display', 'hero', 'ライバルを画面と文面に出す(オン/オフ。内部のライバルは残す)'],
     ['heroMode.totals.minAb', 'hero', '卒業の通算成績:打数がこれ未満なら打率に「参考」と添える'],
     ['heroMode.totals.minOuts', 'hero', '卒業の通算成績:アウト数がこれ未満なら防御率に「参考」と添える'],

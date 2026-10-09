@@ -139,6 +139,57 @@
   .reveal2 { color: var(--special); font-weight: bold; }
   .btn.small { color: #fff; } .btn.sub.small { color: var(--accent); } .btn.danger.small { color: var(--lose); }
   .bignum { white-space: nowrap; } .bignum b { font-size: 22px; }
+  /* H1.7:演出(heroMode.fx。CSS のアニメーションが中心。外部の画像・音・フォントは使わない) */
+  .player.fxc { position: relative; border-radius: 8px; padding: 8px 6px; margin: 2px -6px; }
+  .player.fxc + .player.fxc { border-top-color: transparent; }
+  .fxc.fx-g1 { box-shadow: 0 0 0 1px #e6c56a, 0 0 var(--gl1, 8px) rgba(230,197,106,.55); }
+  .fxc.fx-g2 { box-shadow: 0 0 0 2px #d4a017, 0 0 var(--gl2, 14px) rgba(212,160,23,.7); background: #fffaf0; }
+  .fxc.fx-g3 { box-shadow: 0 0 0 2px #e05a2b, 0 0 0 4px #ffd84d, 0 0 var(--gl3, 22px) rgba(255,190,60,.9); background: #fff8ec; }
+  .fxc.fx-hint::after { content: ''; position: absolute; inset: -3px; border-radius: 10px; pointer-events: none; box-shadow: 0 0 0 1px rgba(138,43,226,.6), 0 0 var(--glh, 12px) rgba(138,43,226,.55); }
+  .fx-in { opacity: 0; animation-name: fxIn; animation-timing-function: ease-out; animation-fill-mode: both; }
+  .fx-in.fx-g2, .fx-in.fx-g3 { animation-name: fxBounce; }
+  @keyframes fxIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  @keyframes fxBounce { 0% { opacity: 0; transform: translateY(18px) scale(.94); } 60% { opacity: 1; transform: translateY(-4px) scale(1.04); } 100% { opacity: 1; transform: none; } }
+  .fx-flash { position: fixed; inset: 0; z-index: 61; background: #fff; pointer-events: none; opacity: 0; animation: fxFlash .5s ease-out both; }
+  @keyframes fxFlash { 0% { opacity: 0; } 15% { opacity: .95; } 100% { opacity: 0; } }
+  .fx-skip { position: fixed; inset: 0; z-index: 60; touch-action: none; display: flex; align-items: flex-end; justify-content: center; padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+  .fx-skip span { font-size: 12px; color: #fff; background: rgba(0,0,0,.55); padding: 4px 12px; border-radius: 12px; }
+  /* 覚醒の瞬間(全画面) */
+  .awfx { position: fixed; inset: 0; z-index: 70; background: rgba(8,4,20,.94); color: #fff; overflow-y: auto; animation: fxDark .5s ease-out both; }
+  .awfx-in { max-width: 480px; margin: 0 auto; padding: 24px 16px calc(96px + env(safe-area-inset-bottom)); text-align: center; }
+  .awfx-frame { border: 3px solid #ffd84d; border-radius: 14px; padding: 14px 10px; box-shadow: 0 0 24px rgba(255,216,77,.6), inset 0 0 18px rgba(255,216,77,.25); animation: fxFrame 1.2s ease-out both; }
+  .awfx-title { font-size: 52px; font-weight: 900; letter-spacing: .2em; line-height: 1.1; color: #ffe27a; text-shadow: 0 0 12px #b16cff, 0 0 26px #ffcc33; animation: fxTitle .9s cubic-bezier(.2,1.4,.4,1) both; }
+  .awfx-name { font-size: 22px; font-weight: bold; margin-top: 4px; }
+  .awfx-head { font-size: 15px; color: #e8dcff; margin-top: 6px; }
+  .awfx-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; margin-top: 14px; }
+  .awfx-it { min-width: 0; background: rgba(255,255,255,.08); border: 1px solid rgba(255,216,77,.45); border-radius: 8px; padding: 6px 4px; }
+  .awfx-it .lb { font-size: 12px; color: #cdbdf5; }
+  .awfx-it .rk { font-size: 30px; font-weight: 900; line-height: 1.05; color: #ffe27a; }
+  .awfx-it .rk.chg { color: #ff8c5a; text-shadow: 0 0 10px #ffcc33; }
+  .awfx-it .rk.chg.pop { animation: fxPop .5s ease-out both; }
+  .awfx-it .nv { font-size: 24px; font-weight: bold; line-height: 1.1; }
+  .awfx-it .nv small { font-size: 11px; font-weight: normal; }
+  .awfx-it .ov { font-size: 11px; color: #aaa; }
+  .awfx-sum { margin-top: 14px; font-size: 13px; color: #ddd; }
+  .awfx-sum b { font-size: 26px; color: #fff; }
+  .awfx-sum .ar { color: #ffd84d; margin: 0 4px; }
+  .awfx-hint { margin-top: 12px; padding: 8px; border: 1px dashed #c79bff; border-radius: 8px; color: #e7d2ff; font-size: 14px; }
+  .awfx-hint .ht { font-weight: bold; color: #ffe27a; margin-top: 2px; }
+  .awfx-late { opacity: 0; animation: fxIn .5s ease-out both; }
+  .awfx-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 71; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); background: rgba(8,4,20,.96); }
+  .awfx-bar .pbar-in { padding: 0; }
+  .awfx-bar .skiphint { flex: 1; text-align: center; font-size: 12px; color: #bbb; padding: 12px 0; }
+  .awfx-bar .btn { background: linear-gradient(90deg, #8a2be2, #d4a017); }
+  @keyframes fxDark { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes fxFrame { 0% { border-color: #8a2be2; box-shadow: 0 0 30px rgba(138,43,226,.9); } 100% { border-color: #ffd84d; box-shadow: 0 0 24px rgba(255,216,77,.6), inset 0 0 18px rgba(255,216,77,.25); } }
+  @keyframes fxTitle { 0% { opacity: 0; transform: scale(2.2); } 100% { opacity: 1; transform: none; } }
+  @keyframes fxPop { 0% { transform: scale(1); } 40% { transform: scale(1.5); } 100% { transform: scale(1); } }
+  .awfx.final, .awfx.final * { animation: none !important; }
+  .awfx.final .awfx-late { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    .fx-in, .awfx, .awfx *, .fx-flash { animation: none !important; opacity: 1; transform: none; }
+    .fx-flash { display: none; }
+  }
 </style>
 </head>
 <body>

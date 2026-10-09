@@ -140,6 +140,57 @@
   .reveal2 { color: var(--special); font-weight: bold; }
   .btn.small { color: #fff; } .btn.sub.small { color: var(--accent); } .btn.danger.small { color: var(--lose); }
   .bignum { white-space: nowrap; } .bignum b { font-size: 22px; }
+  /* H1.7:演出(heroMode.fx。CSS のアニメーションが中心。外部の画像・音・フォントは使わない) */
+  .player.fxc { position: relative; border-radius: 8px; padding: 8px 6px; margin: 2px -6px; }
+  .player.fxc + .player.fxc { border-top-color: transparent; }
+  .fxc.fx-g1 { box-shadow: 0 0 0 1px #e6c56a, 0 0 var(--gl1, 8px) rgba(230,197,106,.55); }
+  .fxc.fx-g2 { box-shadow: 0 0 0 2px #d4a017, 0 0 var(--gl2, 14px) rgba(212,160,23,.7); background: #fffaf0; }
+  .fxc.fx-g3 { box-shadow: 0 0 0 2px #e05a2b, 0 0 0 4px #ffd84d, 0 0 var(--gl3, 22px) rgba(255,190,60,.9); background: #fff8ec; }
+  .fxc.fx-hint::after { content: ''; position: absolute; inset: -3px; border-radius: 10px; pointer-events: none; box-shadow: 0 0 0 1px rgba(138,43,226,.6), 0 0 var(--glh, 12px) rgba(138,43,226,.55); }
+  .fx-in { opacity: 0; animation-name: fxIn; animation-timing-function: ease-out; animation-fill-mode: both; }
+  .fx-in.fx-g2, .fx-in.fx-g3 { animation-name: fxBounce; }
+  @keyframes fxIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  @keyframes fxBounce { 0% { opacity: 0; transform: translateY(18px) scale(.94); } 60% { opacity: 1; transform: translateY(-4px) scale(1.04); } 100% { opacity: 1; transform: none; } }
+  .fx-flash { position: fixed; inset: 0; z-index: 61; background: #fff; pointer-events: none; opacity: 0; animation: fxFlash .5s ease-out both; }
+  @keyframes fxFlash { 0% { opacity: 0; } 15% { opacity: .95; } 100% { opacity: 0; } }
+  .fx-skip { position: fixed; inset: 0; z-index: 60; touch-action: none; display: flex; align-items: flex-end; justify-content: center; padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+  .fx-skip span { font-size: 12px; color: #fff; background: rgba(0,0,0,.55); padding: 4px 12px; border-radius: 12px; }
+  /* 覚醒の瞬間(全画面) */
+  .awfx { position: fixed; inset: 0; z-index: 70; background: rgba(8,4,20,.94); color: #fff; overflow-y: auto; animation: fxDark .5s ease-out both; }
+  .awfx-in { max-width: 480px; margin: 0 auto; padding: 24px 16px calc(96px + env(safe-area-inset-bottom)); text-align: center; }
+  .awfx-frame { border: 3px solid #ffd84d; border-radius: 14px; padding: 14px 10px; box-shadow: 0 0 24px rgba(255,216,77,.6), inset 0 0 18px rgba(255,216,77,.25); animation: fxFrame 1.2s ease-out both; }
+  .awfx-title { font-size: 52px; font-weight: 900; letter-spacing: .2em; line-height: 1.1; color: #ffe27a; text-shadow: 0 0 12px #b16cff, 0 0 26px #ffcc33; animation: fxTitle .9s cubic-bezier(.2,1.4,.4,1) both; }
+  .awfx-name { font-size: 22px; font-weight: bold; margin-top: 4px; }
+  .awfx-head { font-size: 15px; color: #e8dcff; margin-top: 6px; }
+  .awfx-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; margin-top: 14px; }
+  .awfx-it { min-width: 0; background: rgba(255,255,255,.08); border: 1px solid rgba(255,216,77,.45); border-radius: 8px; padding: 6px 4px; }
+  .awfx-it .lb { font-size: 12px; color: #cdbdf5; }
+  .awfx-it .rk { font-size: 30px; font-weight: 900; line-height: 1.05; color: #ffe27a; }
+  .awfx-it .rk.chg { color: #ff8c5a; text-shadow: 0 0 10px #ffcc33; }
+  .awfx-it .rk.chg.pop { animation: fxPop .5s ease-out both; }
+  .awfx-it .nv { font-size: 24px; font-weight: bold; line-height: 1.1; }
+  .awfx-it .nv small { font-size: 11px; font-weight: normal; }
+  .awfx-it .ov { font-size: 11px; color: #aaa; }
+  .awfx-sum { margin-top: 14px; font-size: 13px; color: #ddd; }
+  .awfx-sum b { font-size: 26px; color: #fff; }
+  .awfx-sum .ar { color: #ffd84d; margin: 0 4px; }
+  .awfx-hint { margin-top: 12px; padding: 8px; border: 1px dashed #c79bff; border-radius: 8px; color: #e7d2ff; font-size: 14px; }
+  .awfx-hint .ht { font-weight: bold; color: #ffe27a; margin-top: 2px; }
+  .awfx-late { opacity: 0; animation: fxIn .5s ease-out both; }
+  .awfx-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 71; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); background: rgba(8,4,20,.96); }
+  .awfx-bar .pbar-in { padding: 0; }
+  .awfx-bar .skiphint { flex: 1; text-align: center; font-size: 12px; color: #bbb; padding: 12px 0; }
+  .awfx-bar .btn { background: linear-gradient(90deg, #8a2be2, #d4a017); }
+  @keyframes fxDark { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes fxFrame { 0% { border-color: #8a2be2; box-shadow: 0 0 30px rgba(138,43,226,.9); } 100% { border-color: #ffd84d; box-shadow: 0 0 24px rgba(255,216,77,.6), inset 0 0 18px rgba(255,216,77,.25); } }
+  @keyframes fxTitle { 0% { opacity: 0; transform: scale(2.2); } 100% { opacity: 1; transform: none; } }
+  @keyframes fxPop { 0% { transform: scale(1); } 40% { transform: scale(1.5); } 100% { transform: scale(1); } }
+  .awfx.final, .awfx.final * { animation: none !important; }
+  .awfx.final .awfx-late { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    .fx-in, .awfx, .awfx *, .fx-flash { animation: none !important; opacity: 1; transform: none; }
+    .fx-flash { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -550,7 +601,7 @@
 
     // ---- 新入部員モード(hero.html / play-hero.html)。数値はすべて仮の値。育成監督モードでは使わない ----
     heroMode: {
-      saveVersion: 11,              // H1.6b で 11:覚醒。保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5、H1.4b で 6:卒業待ち、H1.5a で 7:ピックアップ、H1.4c で 8:月ごとのスタメン、H1.5b で 9:救援、H1.6a で 10:途中出場)
+      saveVersion: 12,              // H1.7 で 12:覚醒の前後の値(演出用)。H1.6b で 11:覚醒。保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5、H1.4b で 6:卒業待ち、H1.5a で 7:ピックアップ、H1.4c で 8:月ごとのスタメン、H1.5b で 9:救援、H1.6a で 10:途中出場)
       seedSalt: 0x4e52b1d3,         // このモード専用の乱数(引き直し・主人公の作成・物語の文面・転向と再起の抽選)
       rerollMax: 2,                 // 新入部員の一覧の引き直しの回数
       stopOnStory: true,            // 主人公の山場の物語で、自動進行を止める
@@ -610,7 +661,27 @@
       watchMax: 2,                  // 気になる選手の上限(主人公とライバルは別枠)
       entranceMax: 8,               // 入口で大きなカードで出す新入生(ピックアップ)の最大人数(roster.version 'v2' のとき)
       entrancePickTop: 5,           // ピックアップのうち、総合値の上位から選ぶ人数(残りは無作為)
-      ui: { progressBar: 'bottom' },   // 進行ボタンのバー:'bottom' 下に固定 / 'top' 上に固定 / 'inline' 固定しない(H1.4b の表示)
+      ui: { progressBar: 'bottom' },
+      // 演出(H1.7。見た目だけ。勝敗・能力・進路・成績・乱数は変えない)。すべて仮の値
+      fx: {
+        enabled: true,              // false で、H1.6b と同じ見た目(演出なし)
+        entry: {
+          stepSec: 0.3,             // 入口:新入生のカードが1人ずつ出る間隔(秒)
+          totalMaxSec: 3,           // 入口:演出の総時間の上限(秒。人数が多いときは間隔を縮める)
+          cardSec: 0.45,            // 入口:1枚のカードが現れる時間(秒)
+          rerollScale: 0.5,         // 引き直しの演出の速さの倍率(間隔・総時間に掛ける。1.0 で最初と同じ)
+          flashSec: 0.5,            // 怪物級以上が出たときの、画面全体の白い光の時間(秒)
+          glow: { promising: 8, excellent: 14, monster: 22, hint: 12 },   // 光の強さ(ぼかしの px)
+        },
+        awaken: {
+          stepSec: 0.35,            // 覚醒:上がった項目の数字が、順に上がり始める間隔(秒)
+          countSec: 0.8,            // 覚醒:1項目の数字が旧い値から新しい値へ上がる時間(秒)
+          introSec: 1.2,            // 覚醒:暗転から「覚醒」の文字までの時間(秒)
+          heads: ['眠っていた力が、目を覚ました。', '何かが弾けた。もう、昨日までの{n}ではない。', '{n}の中で、殻が割れる音がした。', '別人のような動き。{n}が覚醒した。', '誰も止められない。{n}が、一段上へ跳んだ。', 'この瞬間を、{n}は一生忘れないだろう。'],
+          hintYes: ['あの一言は、本物だった。', '入学の日の予感は、当たっていた。', '最初に感じた気配は、これだったのだ。', 'ヒントは、ずっとそこにあった。', '見抜いていた目は、正しかった。', '「底が見えない」――その答えが、今出た。'],
+          hintNo: ['誰も、気づかなかった。', '入学のとき、この覚醒を予想した者はいない。', '何の気配もなかった。だからこそ、驚きは大きい。', '予兆なしの覚醒。本人がいちばん驚いている。', '見落とされていた才能が、自分で扉を開けた。', 'ヒントは、どこにもなかった。それでも、彼は跳んだ。'],
+        },
+      },   // 進行ボタンのバー:'bottom' 下に固定 / 'top' 上に固定 / 'inline' 固定しない(H1.4b の表示)
       newYearOthersOpen: 5,         // 新年度の画面:上位3人以外の新入生がこの人数を超えたら、折りたたみにする
       // 途中出場(代打・代走・守備固め)と盗塁(H1.6a)。試合結果のあとに、個人の起用と成績を割り当てる層。すべて仮の値
       substitute: {
@@ -1054,6 +1125,19 @@
     ['heroMode.awakening.kmhMin', 'hero', '覚醒で伸びる球速の下限(km/h)'],
     ['heroMode.awakening.kmhMax', 'hero', '覚醒で伸びる球速の上限(km/h)'],
     ['heroMode.awakening.brkGain', 'hero', '覚醒で伸びる変化球(総変化量)'],
+    ['heroMode.fx.enabled', 'hero', '演出(入口の登場・覚醒の瞬間)のオン/オフ。オフで H1.6b と同じ見た目', true],
+    ['heroMode.fx.entry.stepSec', 'hero', '入口の演出:1人ずつ出る間隔(秒)', true],
+    ['heroMode.fx.entry.totalMaxSec', 'hero', '入口の演出:総時間の上限(秒)', true],
+    ['heroMode.fx.entry.cardSec', 'hero', '入口の演出:1枚が現れる時間(秒)', true],
+    ['heroMode.fx.entry.rerollScale', 'hero', '引き直しの演出の速さの倍率(1.0 で最初と同じ)', true],
+    ['heroMode.fx.entry.flashSec', 'hero', '怪物級以上のときの白い光の時間(秒)', true],
+    ['heroMode.fx.entry.glow.promising', 'hero', '光の強さ:有望(px)', true],
+    ['heroMode.fx.entry.glow.excellent', 'hero', '光の強さ:逸材(px)', true],
+    ['heroMode.fx.entry.glow.monster', 'hero', '光の強さ:怪物級・規格外(px)', true],
+    ['heroMode.fx.entry.glow.hint', 'hero', '光の強さ:覚醒のヒント(✦。紫。px)', true],
+    ['heroMode.fx.awaken.stepSec', 'hero', '覚醒の演出:項目ごとの数字が上がり始める間隔(秒)', true],
+    ['heroMode.fx.awaken.countSec', 'hero', '覚醒の演出:1項目の数字が上がる時間(秒)', true],
+    ['heroMode.fx.awaken.introSec', 'hero', '覚醒の演出:暗転から「覚醒」の文字までの時間(秒)', true],
     ['heroMode.rival.display', 'hero', 'ライバルを画面と文面に出す(オン/オフ。内部のライバルは残す)'],
     ['heroMode.totals.minAb', 'hero', '卒業の通算成績:打数がこれ未満なら打率に「参考」と添える'],
     ['heroMode.totals.minOuts', 'hero', '卒業の通算成績:アウト数がこれ未満なら防御率に「参考」と添える'],
@@ -6555,6 +6639,7 @@
   const AW = () => HM().awakening || {};
   const awOn = () => !!AW().enabled;
   const arng = (st, fn) => hrng(st, fn, 'arng');
+  const fxOn = () => !!(HM().fx && HM().fx.enabled);   // H1.7:演出(見た目だけ)
   // 覚醒の素質(隠れた値)とヒントの一言を、まだ決まっていない選手に決める(id の順。入学時に呼ぶ)
   function assignAwk(st, list) {
     const A = AW();
@@ -6624,6 +6709,10 @@
     // 月ごとの記録(この月の値)にも反映する
     if (p.mlog && p.mlog.a.length && p.mlog.s + p.mlog.a.length - 1 === sv) p.mlog.a[p.mlog.a.length - 1] = HighSchool.packAbilities(p.abilities);
     p.awoken = { s: sv, y: st.year, m: HighSchool.CALENDAR[st.month].month, g: grade || p.grade };   // 学年は、その年度の学年(3月の進級より前)
+    // H1.7:覚醒の前後の値(演出用。見える能力だけ。結果には使わない)
+    const r2 = (v) => Math.round(v * 100) / 100;
+    p.awoken.b = {}; p.awoken.a = {};
+    for (const k of Object.keys(gains)) { p.awoken.b[k] = r2(before[k]); p.awoken.a[k] = r2(p.abilities[k]); }
     // ひとことの詳細:伸びの大きい順に detailMax 項目
     const items = Object.keys(gains).filter((k) => gains[k] > 0).map((k) => {
       if (k === 'velocity') return { w: 99, t: '球速が +' + (toKmh(p.abilities.velocity) - toKmh(before.velocity)) + 'km/h' };
@@ -6633,6 +6722,31 @@
     const shown = items.slice(0, A.detailMax).map((x) => x.t).join('、');
     const detail = shown + (items.length > A.detailMax ? '、ほか' + (items.length - A.detailMax) + '項目も' : '');
     return { id: p.id, name: p.name, detail: detail };
+  }
+  // H1.7:覚醒の演出に出す数値(記録した前後の値から。乱数は使わない)
+  //   items:上がった項目 [{ k, label, from, to, r0, r1, unit }](球速は km/h、変化球は総変化量。ランク文字は球速・変化球以外)
+  //   rating:入学時・覚醒前・覚醒後の総合値 / top:同世代の上位○%(覚醒前 → 覚醒後)/ hint:入学時の✦の一言(なければ null)
+  function awakenFxData(st, p) {
+    const w = p && p.awoken;
+    if (!w || !w.b) return null;
+    const base = p.finalAbilities || p.abilities;
+    const ab = (src) => { const a = Object.assign({}, base); for (const k of Object.keys(src)) a[k] = src[k]; return a; };
+    const before = ab(w.b), after = ab(w.a);
+    const ratio = HM().display.breakRatio;
+    const items = Core.ALL_KEYS.filter((k) => w.b[k] != null && w.a[k] > w.b[k]).map((k) => {
+      if (k === 'velocity') return { k: k, label: '球速', from: toKmh(w.b[k]), to: toKmh(w.a[k]), r0: null, r1: null, unit: 'km/h' };
+      if (k === 'breaking') return { k: k, label: '変化球', from: Math.round(w.b[k] * ratio), to: Math.round(w.a[k] * ratio), r0: null, r1: null, unit: '' };
+      return { k: k, label: Core.ABILITY_LABEL[k], from: Math.round(w.b[k]), to: Math.round(w.a[k]), r0: getRank(w.b[k]), r1: getRank(w.a[k]), unit: '' };
+    }).filter((x) => x.to > x.from || x.r0 !== x.r1);
+    const as = (a) => Object.assign({}, p, { abilities: a, finalAbilities: null });
+    const rk = (a) => Generation.getGenerationRank(as(a), w.g, w.m);
+    const H = st.hero;
+    return {
+      name: p.name, g: w.g, m: w.m, s: w.s, items: items,
+      rating: { init: p.id === H.id ? H.initRating : null, before: Core.rating(as(before)), after: Core.rating(as(after)) },
+      top: { before: (rk(before) || {}).top, after: (rk(after) || {}).top },
+      hint: p.awk && p.awk.h ? p.awk.h : null,
+    };
   }
 
   // ---------- ライバルの今月の出場と成績(既存の簡易成績 = 試合の記録 box から。新しい計算はしない) ----------
@@ -6887,11 +7001,11 @@
       L.push(pickText(st, r, G.result, Object.assign({ stage: best, pos: a.career }, vars)));
       // H1.6b:ライバルの段落を外して4文に満たないときは、総合値の伸びの1文を足す(実際の値。乱数は使わない)
       if (!rivalShown() && L.length < 4) L.splice(Math.max(0, L.length - 1), 0, a.name + 'の総合値は、入学時の' + H.initRating + 'から、3年夏の' + a.rating + 'まで伸びた。');
-      // H1.6b:覚醒の答え合わせ(実際の状態から。乱数は使わない)
+      // H1.6b:覚醒の答え合わせ(実際の状態から。乱数は使わない)。H1.7:演出が有効なら、覚醒した年月を添える
       if (awOn() && a.awk) {
         const hint = !!a.awk.h, aw = !!a.awoken;
         const list = hint && aw ? STORY.awaken.gradHintAwoke : aw ? STORY.awaken.gradNoHintAwoke : hint ? STORY.awaken.gradHintNone : null;
-        if (list) { const t = fill(list[a.id % list.length], vars); if (L.length < 7) L.splice(L.length - 1, 0, t); else L[L.length - 2] = t; }
+        if (list) { let t = fill(list[a.id % list.length], vars); if (fxOn() && aw && a.awoken.g) t = t.replace(/。$/, '(' + a.awoken.g + '年の' + a.awoken.m + '月)。'); if (L.length < 7) L.splice(L.length - 1, 0, t); else L[L.length - 2] = t; }
       }
       // H1.6a:途中出場の通算(出場があったときだけ。乱数は使わない)
       const sl = a.subStats && a.subStats.career;
@@ -7295,6 +7409,148 @@
       } else html += list.slice().sort(by).map(row).join('');
       return html + '<div class="small">◯ は今月のスタメン。名前を押すと選手詳細。</div>';
     }
+    // ---------- H1.7:演出(見た目だけ。ゲームの乱数・結果には触れない) ----------
+    const FX = () => HM().fx || {};
+    const reduceMotion = () => { try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; } };
+    let entryKey = null;      // 最後に演出した新入生の一覧(id の並び)
+    let entryScale = 1;       // 次の入口の演出の速さ(引き直しのときは rerollScale)
+    let entryFx = null;       // 入口の演出の後片付け { timer, els }
+    let awFx = null;          // 覚醒の演出の中身(awakenFxData)と状態 { final }
+    let awRaf = null, awTimer = null;
+    // 強さのラベルとヒントによる光り方(対応表:有望 → fx-g1、逸材 → fx-g2、怪物級・規格外 → fx-g3、✦ → fx-hint)
+    function fxGlow(p) {
+      if (!fxOn()) return '';
+      const r = rankOf(p);
+      const l = r && r.label;
+      const g = l === '規格外' || l === '怪物級' ? ' fx-g3' : l === '逸材' ? ' fx-g2' : l === '有望' ? ' fx-g1' : '';
+      const h = awOn() && p.awk && p.awk.h ? ' fx-hint' : '';
+      return g || h ? ' fxc' + g + h : '';
+    }
+    function endEntryFx() {
+      const E = entryFx;
+      if (!E) return;
+      entryFx = null;
+      clearTimeout(E.timer);
+      for (const el of E.els) { el.classList.remove('fx-in'); el.style.animationDelay = ''; el.style.animationDuration = ''; }
+      for (const el of E.extra) if (el.parentNode) el.parentNode.removeChild(el);
+      doc.body.style.overflow = '';
+    }
+    // 入口の登場演出:ピックアップのカードを上から順に出す(総時間の上限に収める)。画面を押すと、残りを一気に出す
+    function startEntryFx(scale) {
+      endEntryFx();
+      const E = FX().entry || {};
+      const els = Array.prototype.slice.call(doc.querySelectorAll('#main .player'));
+      if (!els.length) return;
+      const n = els.length;
+      const card = (E.cardSec || 0.45) * scale;
+      const step = Math.max(0, Math.min(E.stepSec || 0.3, ((E.totalMaxSec || 3) - (E.cardSec || 0.45)) / Math.max(1, n - 1))) * scale;
+      const G = E.glow || {};
+      const extra = [];
+      let flashAt = -1;
+      els.forEach((el, i) => {
+        el.style.animationDelay = (i * step).toFixed(3) + 's';
+        el.style.animationDuration = card.toFixed(3) + 's';
+        el.classList.add('fx-in');
+        if (flashAt < 0 && el.classList.contains('fx-g3')) flashAt = i * step;
+      });
+      const m = doc.getElementById('main');
+      m.style.setProperty('--gl1', (G.promising || 8) + 'px'); m.style.setProperty('--gl2', (G.excellent || 14) + 'px'); m.style.setProperty('--gl3', (G.monster || 22) + 'px'); m.style.setProperty('--glh', (G.hint || 12) + 'px');
+      if (flashAt >= 0) {   // 怪物級以上が出たときに1回だけ
+        const f = doc.createElement('div');
+        f.className = 'fx-flash';
+        f.style.animationDelay = flashAt.toFixed(3) + 's';
+        f.style.animationDuration = ((E.flashSec || 0.5) * scale).toFixed(3) + 's';
+        doc.body.appendChild(f); extra.push(f);
+      }
+      const sk = doc.createElement('div');
+      sk.className = 'fx-skip';
+      sk.innerHTML = '<span>画面を押すとスキップ</span>';
+      const skip = (e) => { if (e) e.preventDefault(); endEntryFx(); };
+      sk.addEventListener('click', skip);
+      sk.addEventListener('touchstart', skip, { passive: false });
+      sk.addEventListener('wheel', (e) => e.preventDefault(), { passive: false });
+      doc.body.appendChild(sk); extra.push(sk);
+      doc.body.style.overflow = 'hidden';
+      entryFx = { els: els, extra: extra, timer: setTimeout(endEntryFx, ((n - 1) * step + card) * 1000 + 80) };
+    }
+    // 描画のあと:入口の一覧が新しくなったら、演出を出す(最初の表示と、引き直し)
+    function afterRenderFx(isSelect) {
+      if (!isSelect) { entryScale = 1; return; }
+      const key = pickable(st).map((p) => p.id).join(',');
+      if (key === entryKey) return;
+      entryKey = key;
+      const sc = entryScale;
+      entryScale = 1;
+      if (fxOn() && !reduceMotion()) startEntryFx(sc);
+    }
+    // 覚醒の瞬間:主人公が覚醒した月のあとに1回だけ(見たかどうかは表示の設定に記録する。止まる回数は変えない)
+    function checkAwakenFx() {
+      const H = st.hero;
+      if (!fxOn() || !awOn() || awFx || screen) return;
+      if (!(H.phase === 'play' || (H.phase === 'graduate' && H.gradPending))) return;
+      const h = anyPlayer(st, H.id);
+      if (!h || !h.awoken || !h.awoken.b || ui.awFxSeen === h.awoken.s) return;
+      const d = awakenFxData(st, h);
+      if (!d) return;
+      ui.awFxSeen = h.awoken.s; saveUi();
+      awFx = Object.assign({ final: reduceMotion() }, d);
+    }
+    function awakenText(list, d, h) {
+      const L = list || [''];
+      return fill(L[(h.id + d.s) % L.length] || '', { n: d.name });   // 選手 ID と覚醒の月から決める(乱数を使わない)
+    }
+    function renderAwakenFx() {
+      if (!awFx) return '';
+      const d = awFx, A = FX().awaken || {};
+      const h = anyPlayer(st, st.hero.id) || { id: 0 };
+      const intro = A.introSec || 1.2, step = A.stepSec || 0.35, cnt = A.countSec || 0.8;
+      const late = (t) => (d.final ? '' : ' style="animation-delay:' + t.toFixed(2) + 's"');
+      const items = d.items.map((x, i) => {
+        const t0 = intro + i * step;
+        const chg = x.r0 !== x.r1;
+        return '<div class="awfx-it awfx-late"' + late(t0 - 0.2) + '><div class="lb">' + esc(x.label) + '</div>'
+          + (x.r1 ? '<div class="rk' + (chg ? ' chg' : '') + '" data-r0="' + x.r0 + '" data-r1="' + x.r1 + '">' + (d.final ? x.r1 : x.r0) + '</div>' : '')
+          + '<div class="nv"><span data-from="' + x.from + '" data-to="' + x.to + '" data-t="' + t0.toFixed(2) + '">' + (d.final ? x.to : x.from) + '</span>' + (x.unit ? '<small>' + x.unit + '</small>' : '') + '</div>'
+          + '<div class="ov">' + x.from + ' → ' + x.to + (chg ? '(' + x.r0 + '→' + x.r1 + ')' : '') + '</div></div>';
+      }).join('');
+      const tSum = intro + Math.max(0, d.items.length - 1) * step + cnt + 0.2;
+      const top = (v) => (v == null ? '50%より下' : Generation.formatTop(v));
+      const sum = '<div class="awfx-sum awfx-late"' + late(tSum) + '>総合値 ' + (d.rating.init != null ? '入学時 ' + d.rating.init + '<span class="ar">→</span>' : '')
+        + '覚醒前 ' + d.rating.before + '<span class="ar">→</span>覚醒後 <b>' + d.rating.after + '</b>'
+        + '<div>同世代 上位' + top(d.top.before) + '<span class="ar">→</span><b style="font-size:20px">上位' + top(d.top.after) + '</b></div></div>';
+      const hint = '<div class="awfx-hint awfx-late"' + late(tSum + 0.5) + '>' + (d.hint ? '入学のときの一言:✦ ' + esc(d.hint) + '<div class="ht">' + esc(awakenText(A.hintYes, d, h)) + '</div>'
+        : '<div class="ht">' + esc(awakenText(A.hintNo, d, h)) + '</div>') + '</div>';
+      return '<div class="awfx' + (d.final ? ' final' : '') + '" id="awfx"><div class="awfx-in"><div class="awfx-frame">'
+        + '<div class="awfx-title">覚醒</div><div class="awfx-name">' + esc(d.name) + '</div><div class="small" style="color:#cdbdf5">' + d.g + '年の' + d.m + '月</div>'
+        + '<div class="awfx-head awfx-late"' + late(0.6) + '>' + esc(awakenText(A.heads, d, h)) + '</div></div>'
+        + '<div class="awfx-items">' + items + '</div>' + sum + hint + '</div>'
+        + '<div class="awfx-bar"><div class="pbar-in">' + (d.final ? '<button class="btn" id="hAwFxOk">続ける</button>' : '<div class="skiphint">画面を押すとスキップ</div>') + '</div></div></div>';
+    }
+    function stopAwakenAnim() { if (awRaf) cancelAnimationFrame(awRaf); awRaf = null; clearTimeout(awTimer); awTimer = null; }
+    // 数字を旧い値から新しい値へ(rAF 1本で全項目。終わったら、最終の表示に描き直す)
+    function startAwakenAnim() {
+      stopAwakenAnim();
+      if (!awFx || awFx.final) return;
+      const A = FX().awaken || {};
+      const cnt = (A.countSec || 0.8) * 1000;
+      const nums = Array.prototype.slice.call(doc.querySelectorAll('#awfx [data-from]'));
+      const t0 = performance.now();
+      const tick = (now) => {
+        const t = now - t0;
+        nums.forEach((el, i) => {
+          const s = Number(el.dataset.t) * 1000, f = Number(el.dataset.from), to = Number(el.dataset.to);
+          const k = Math.max(0, Math.min(1, (t - s) / cnt));
+          el.textContent = String(Math.round(f + (to - f) * k));
+          const rk = el.closest('.awfx-it').querySelector('[data-r0]');
+          if (rk && k >= 1 && rk.textContent !== rk.dataset.r1) { rk.textContent = rk.dataset.r1; if (rk.dataset.r0 !== rk.dataset.r1) rk.classList.add('pop'); }
+        });
+        awRaf = requestAnimationFrame(tick);
+      };
+      awRaf = requestAnimationFrame(tick);
+      const n = awFx.items.length;
+      const total = ((A.introSec || 1.2) + Math.max(0, n - 1) * (A.stepSec || 0.35) + (A.countSec || 0.8) + 1.4) * 1000;
+      awTimer = setTimeout(() => { if (awFx) { awFx.final = true; stopAwakenAnim(); render(); } }, total);
+    }
     // ---------- 入口:新入部員の一覧 ----------
     function renderSelect() {
       const H = st.hero;
@@ -7305,7 +7561,7 @@
       const picks = pickable(st);
       const rest = st.pendingRecruits.filter((p) => picks.indexOf(p) < 0).sort((a, b) => Core.rating(b) - Core.rating(a) || a.id - b.id);
       html += '<div class="card">' + (rest.length ? '<div class="small">ピックアップ(' + picks.length + '人)。主人公に選べるのは、この中の1人です。</div>' : '') + picks.slice().sort((a, b) => H.pickup ? Core.rating(b) - Core.rating(a) || a.id - b.id : 0).map((p) => {
-        let c = '<div class="player">' + starBtn(p) + '<span class="pname">' + esc(p.name) + '</span>' + posTag(p.position) + extraTags(p) + ' <span class="small">' + ratingHtml(p) + '</span>'
+        let c = '<div class="player' + fxGlow(p) + '">' + starBtn(p) + '<span class="pname">' + esc(p.name) + '</span>' + posTag(p.position) + extraTags(p) + ' <span class="small">' + ratingHtml(p) + '</span>'
           + '<div class="impress">' + esc(impression(p)) + '</div>' + hintLine(p) + boxes(p);
         if (p.reincarnation && p.reincarnationRevealed) c += '<div class="reveal">……!? この新入生、ただ者ではない。<br>【' + esc(Core.reincarnationName(p.reincarnation)) + '】の転生者だ!</div>';
         if (p.twoWay && p.twoWayRevealed) c += '<div class="reveal">投げても打っても本職級……! <br>【二刀流】の素質を持っている!</div>';
@@ -7388,7 +7644,7 @@
     // ---------- 主人公のカード ----------
     function heroCard(h, withStatus) {
       let html = '<div class="hero"><button class="pnamebtn" data-detail="1">' + esc(h.name) + '</button>' + posTag(h.position) + extraTags(h)
-        + ' <span class="small">' + (h.grade || 1) + '年</span>' + (withStatus ? ' <span class="status">' + esc(statusLabel(st)) + '</span>' : '')
+        + ' <span class="small">' + (h.grade || 1) + '年</span>' + (fxOn() && awOn() && h.awoken ? ' <span class="mk awk">覚醒(' + h.awoken.g + '年' + h.awoken.m + '月)</span>' : '') + (withStatus ? ' <span class="status">' + esc(statusLabel(st)) + '</span>' : '')
         + '<div class="small">' + ratingHtml(h) + '</div>' + boxes(h);
       if (withStatus) {
         // 今月の出場と、今年度の成績(最大2行)
@@ -7711,7 +7967,8 @@
       return '<div class="card dev small">dev:シード ' + st.seed + ' / 保存 v' + H.v + '(' + esc(keys().save) + ')/ 引き直しの残り ' + H.rerollsLeft
         + '<br>軸 ' + (H.axisList.join('・') || 'なし') + ' / 主軸 ' + (H.mainAxis || '-') + ' / 挫折 ' + H.setbacks + '(物語 ' + H.setbackStories + ')'
         + ' / 再起の期間 ' + (H.rebound ? (H.rebound.done ? '終了(' + (H.rebound.result || '') + ')' : H.rebound.start + 'から') : 'なし') + ' / 転向 ' + H.converts
-        + ' / 後押し ' + H.boostsUsed + '<br>争いの状態 ' + esc(JSON.stringify(H.axes)) + '</div>';
+        + ' / 後押し ' + H.boostsUsed + '<br>争いの状態 ' + esc(JSON.stringify(H.axes))
+        + '<br>演出(heroMode.fx。仮の値):' + esc(JSON.stringify(FX())) + ' / 動きを減らす ' + (reduceMotion() ? 'オン' : 'オフ') + '</div>';
     }
     function renderModal() {
       if (!modal) return '';
@@ -7737,7 +7994,12 @@
       else if (H.phase === 'graduate') html = H.gradPending || julyView ? renderHome(true) : renderGraduate();
       else if (H.newYear && !H.newYear.closed) html = renderNewYear();
       else html = renderHome();
-      doc.getElementById('main').innerHTML = renderDev() + html + renderDetail() + renderModal();
+      endEntryFx();
+      stopAwakenAnim();
+      if (H.phase !== 'select') checkAwakenFx();
+      doc.getElementById('main').innerHTML = renderDev() + html + renderDetail() + renderModal() + renderAwakenFx();
+      afterRenderFx(H.phase === 'select' && !screen);
+      startAwakenAnim();
       if (doc.body && doc.body.classList) { doc.body.classList.toggle('has-pbar-bottom', pbarUsed === 'bottom'); doc.body.classList.toggle('has-pbar-top', pbarUsed === 'top'); }
     }
     function act(fn) { fn(); persist(); render(); }
@@ -7748,6 +8010,12 @@
       if (t.id === 'hDecimal') { ui.decimal = t.checked; saveUi(); render(); }
     });
     doc.getElementById('main').addEventListener('click', (e) => {
+      // H1.7:覚醒の演出の中は、スキップと「続ける」だけ
+      if (awFx) {
+        if (e.target.closest('#hAwFxOk')) { awFx = null; render(); }
+        else if (!awFx.final && e.target.closest('#awfx')) { awFx.final = true; render(); }
+        return;
+      }
       const b = e.target.closest('button');
       if (!b) return;
       const id = b.id;
@@ -7780,7 +8048,7 @@
         modal = { text: 'この選手で3年間を始めますか?', ok: '始める', action: () => { pickHero(st, pid); } };
         render(); return;
       }
-      if (id === 'hReroll') { act(() => reroll(st)); return; }
+      if (id === 'hReroll') { entryScale = (FX().entry || {}).rerollScale || 1; act(() => reroll(st)); return; }
       if (id === 'hCreate') { screen = 'create'; render(); return; }
       if (id === 'hBack') { screen = null; render(); return; }
       if (id === 'hName') { act(() => drawName(st)); return; }
@@ -7819,7 +8087,7 @@
     autoRival: autoRival, getValueAt: getValueAt, gamePeak: gamePeak, monthAppearance: monthAppearance, lineText: lineText, emptyLine: emptyLine, addLine: addLine, toggleWatch: toggleWatch, swapWatch: swapWatch, addWatch: addWatch, diffSentence: diffSentence, getRank: getRank, toKmh: toKmh, breakTotal: breakTotal, syncPitches: syncPitches, pitchCountFor: pitchCountFor, closeNewYear: closeNewYear, rosterList: rosterList, makeHeroPlayer: makeHeroPlayer, contestOf: contestOf, convertEligible: convertEligible, heroOf: heroOf, rivalOf: rivalOf, statusLabel: statusLabel,
     rivalLine: rivalLine, contestAxisNow: contestAxisNow, keys: keys, save: save, load: load, wipeKeys: wipeKeys,
     startNew: startNew, resetSameSeed: resetSameSeed, resetNewSeed: resetNewSeed, wipeAll: wipeAll, startup: startup,
-    assignAwk: assignAwk, awaken: awaken,
+    assignAwk: assignAwk, awaken: awaken, awakenFxData: awakenFxData,
     subText: subText, subStatsText: subStatsText, pickable: pickable, makePickup: makePickup, goGraduate: goGraduate, summerResultLine: summerResultLine, playerMonthLine: playerMonthLine, ratingSeries: ratingSeries, autoRival: autoRival, lineupRows: lineupRows, tourneyLineupRows: tourneyLineupRows, anyPlayer: anyPlayer, statCells: statCells,
     pickText: pickText, fill: fill, typeOf: typeOf, setback: setback, tryRebound: tryRebound, hrng: hrng, serialOf: serialOf,
     mountUI: mountUI,
