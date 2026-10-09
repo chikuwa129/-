@@ -1,272 +1,287 @@
 # 打席の試作(T1)の検証の出力
 
 ## 要約
-1. 確率の健全性:✓(14497通り)
-2. 最善の指示(野手):✓ power 43(39.1%)、contact 32(29.1%)、bunt 20(18.2%)、steal 9(8.2%)、normal 6(5.5%)
-2. 最善の指示(投手):✓ inside 47(46.5%)、breaking 36(35.6%)、normal 9(8.9%)、outside 6(5.9%)、fast 3(3.0%)
-3. 盗塁の損益分岐:79.4% / 73.3% / 61.9% / 83.7% / 83.8% / 80.8%(60〜80% に 3/6)
-4. 送りバント(無死一塁):strong 期待値の差 -0.29・1点以上 -6.9pt / normal 期待値の差 -0.22・1点以上 -4.4pt / weak 期待値の差 -0.16・1点以上 -2.3pt
-5. 中位どうし1000打席:打率 0.247 出塁率 0.300 長打率 0.348 三振率 17.6% 四球率 7.0%(本塁打 11、三塁打 5、二塁打 51)。9回あたり約 3.47点
+1. 確率の健全性:✓(14025通り)
+2. 最善の指示(野手):✓ normal 29(29.3%)、contact 27(27.3%)、power 26(26.3%)、squeeze 10(10.1%)、steal 7(7.1%)
+2. 最善の指示(投手):✓ inside 36(32.1%)、normal 31(27.7%)、outside 15(13.4%)、fast 15(13.4%)、breaking 13(11.6%)、walk 2(1.8%)
+3の目標(野手):normal 29.3%(29/99)✓、power 26.3%(26/99)✓、contact 27.3%(27/99)✓、bunt 0.0%(0/17)✕、steal 35.0%(7/20)✓、squeeze 40.0%(10/25)✓
+3の目標(投手):normal 27.7%(31/112)✓、fast 13.4%(15/112)✓、breaking 11.6%(13/112)✓、outside 13.4%(15/112)✓、inside 32.1%(36/112)✓、walk 3.3%(2/61)✕
+3. 盗塁の損益分岐:78.9% / 72.0% / 60.1% / 80.0% / 75.3% / 79.3%(60〜80% に 6/6)
+4. 送りバント(無死一塁):strong 期待値の差 -0.28・1点以上 -5.3pt / normal 期待値の差 -0.20・1点以上 -2.2pt / weak 期待値の差 -0.14・1点以上 -0.1pt
+5. 中位どうし1000打席:打率 0.247 出塁率 0.300 長打率 0.348 三振率 17.6% 四球率 7.0%(本塁打 11、三塁打 5、二塁打 51)。9回あたり約 3.53点
+7. 良い結果の確率が20〜80%:86.3% ✓
+8. 上限と下限:良い結果の最大 90.0%、悪い結果の最小 5.0% ✓
+9. 良い結果の確率が最も高い指示=最善:50.7% ✓
 6. 同じシードで同じ結果:✓
 
 ## 1. 確率の健全性
-14497 通り(能力 0〜150 の極端な値を含む)。0〜1 の外、または合計が 1 でないもの:0 件
+14025 通り(能力 0〜150 の極端な値を含む)。0〜1 の外、または合計が 1 でないもの:0 件
 
 ## 2. 場面ごとの最善の指示(プリセット 11 + ランダム 200)
-終盤の接戦(8回以降・1点差以内)は「1点以上の確率」、それ以外は得点期待値で比べる
+終盤の接戦(7回以降・2点差以内)は「1点以上の確率」、それ以外は得点期待値で比べる
 
-bat(110場面):power 43(39.1%)、contact 32(29.1%)、bunt 20(18.2%)、steal 9(8.2%)、normal 6(5.5%) → ✓
+bat(99場面):normal 29(29.3%)、contact 27(27.3%)、power 26(26.3%)、squeeze 10(10.1%)、steal 7(7.1%) → ✓
 
-  参考:すべて得点期待値で比べた場合:power 44(40.0%)、contact 34(30.9%)、bunt 19(17.3%)、steal 7(6.4%)、normal 6(5.5%) → ✓
+  参考:すべて得点期待値で比べた場合:normal 31(31.3%)、contact 29(29.3%)、power 29(29.3%)、steal 6(6.1%)、squeeze 4(4.0%) → ✓
 
-pitch(101場面):inside 47(46.5%)、breaking 36(35.6%)、normal 9(8.9%)、outside 6(5.9%)、fast 3(3.0%) → ✓
+pitch(112場面):inside 36(32.1%)、normal 31(27.7%)、outside 15(13.4%)、fast 15(13.4%)、breaking 13(11.6%)、walk 2(1.8%) → ✓
 
-  参考:すべて得点期待値で比べた場合:inside 46(45.5%)、breaking 37(36.6%)、normal 9(8.9%)、outside 6(5.9%)、fast 3(3.0%) → ✓
+  参考:すべて得点期待値で比べた場合:inside 35(31.3%)、normal 32(28.6%)、outside 15(13.4%)、fast 15(13.4%)、breaking 13(11.6%)、walk 2(1.8%) → ✓
+
+目標(bat・使える場面のうち、最善になる割合 10〜40%):normal 29.3%(29/99)✓、power 26.3%(26/99)✓、contact 27.3%(27/99)✓、bunt 0.0%(0/17)✕、steal 35.0%(7/20)✓、squeeze 40.0%(10/25)✓
+
+目標(pitch・使える場面のうち、最善になる割合 10〜40%):normal 27.7%(31/112)✓、fast 13.4%(15/112)✓、breaking 11.6%(13/112)✓、outside 13.4%(15/112)✓、inside 32.1%(36/112)✓、walk 3.3%(2/61)✕
 
 ### 場面の一覧(最善の指示と、指示ごとの得点期待値 / 1点以上の確率%)
-無死一塁	bat	3回 0死 1 差0	最善 contact(ev)	normal 0.773/38.9 power 0.767/38.5 contact 0.779/39.2 bunt 0.553/34.5 steal 0.675/39.6
-無死二塁	bat	5回 0死 2 差0	最善 contact(ev)	normal 0.924/53.9 power 0.912/52.9 contact 0.938/55.0 bunt 0.729/52.0
-一死三塁	bat	6回 1死 3 差-1	最善 bunt(ev)	normal 0.746/55.5 power 0.716/52.5 contact 0.773/58.3 bunt 0.907/83.3 squeeze 0.773/71.0
-一死二三塁	bat	7回 1死 23 差0	最善 contact(ev)	normal 1.122/56.4 power 1.087/53.4 contact 1.158/59.2 bunt 1.149/83.5 squeeze 1.017/75.9
-二死満塁・1点差	bat	8回 2死 123 差-1	最善 contact(p1)	normal 0.670/31.0 power 0.663/29.6 contact 0.681/32.4
-9回・1点リード・二死二塁(守備)	pitch	9回 2死 2 差1	最善 breaking(p1)	normal 0.253/19.0 fast 0.267/20.1 breaking 0.237/17.8 outside 0.248/18.7 inside 0.243/18.1 walk 0.360/20.4
-一死一三塁(守備)	pitch	7回 1死 13 差0	最善 inside(ev)	normal 0.990/56.4 fast 0.996/56.1 breaking 0.980/56.6 outside 0.994/56.8 inside 0.968/54.8
-無死満塁(守備)	pitch	4回 0死 123 差2	最善 inside(ev)	normal 2.153/80.3 fast 2.161/79.9 breaking 2.137/80.4 outside 2.170/80.8 inside 2.128/79.6
-二死一塁・俊足	bat	8回 2死 1 差0	最善 steal(p1)	normal 0.164/10.1 power 0.176/11.0 contact 0.153/9.4 steal 0.167/12.6
-一死一塁(守備)・強打者	pitch	6回 1死 1 差-1	最善 breaking(ev)	normal 0.509/27.7 fast 0.526/28.6 breaking 0.494/27.0 outside 0.498/27.0 inside 0.517/28.1
-先頭打者	bat	1回 0死 - 差0	最善 contact(ev)	normal 0.386/21.7 power 0.383/21.8 contact 0.388/21.5
-シード 1000	bat	8回 1死 - 差-2	最善 power(ev)	normal 0.211/13.1 power 0.223/14.3 contact 0.215/12.9
-シード 1001	pitch	9回 2死 12 差2	最善 breaking(ev)	normal 0.287/16.1 fast 0.296/16.5 breaking 0.268/15.0 outside 0.286/16.1 inside 0.272/15.0
-シード 1002	bat	4回 1死 - 差-1	最善 power(ev)	normal 0.246/15.0 power 0.257/16.1 contact 0.248/14.7
-シード 1003	pitch	5回 1死 1 差4	最善 inside(ev)	normal 0.337/19.2 fast 0.340/19.3 breaking 0.325/18.6 outside 0.344/19.5 inside 0.317/18.1
-シード 1004	bat	5回 1死 1 差1	最善 contact(ev)	normal 0.384/21.5 power 0.380/21.3 contact 0.392/22.0 bunt 0.257/18.0 steal 0.389/25.7
-シード 1005	pitch	6回 0死 - 差-2	最善 breaking(ev)	normal 0.411/22.9 fast 0.401/22.4 breaking 0.391/21.8 outside 0.411/22.6 inside 0.400/22.4 walk 0.773/38.9
-シード 1006	pitch	8回 0死 1 差-1	最善 inside(p1)	normal 0.673/35.0 fast 0.648/33.7 breaking 0.647/34.0 outside 0.674/34.9 inside 0.643/33.7
-シード 1007	bat	2回 0死 2 差1	最善 power(ev)	normal 1.086/60.0 power 1.101/60.3 contact 1.099/61.3 bunt 0.758/53.9
-シード 1008	bat	8回 1死 - 差-3	最善 power(ev)	normal 0.231/14.2 power 0.236/14.8 contact 0.227/13.6
-シード 1009	pitch	4回 0死 - 差1	最善 inside(ev)	normal 0.331/18.9 fast 0.319/18.3 breaking 0.318/18.2 outside 0.333/18.9 inside 0.317/18.2 walk 0.773/38.9
-シード 1010	bat	4回 0死 - 差-4	最善 contact(ev)	normal 0.344/19.5 power 0.328/18.8 contact 0.348/19.5
-シード 1011	bat	8回 1死 - 差-2	最善 power(ev)	normal 0.215/13.6 power 0.233/15.2 contact 0.208/12.8
-シード 1012	bat	8回 0死 1 差-3	最善 steal(ev)	normal 0.678/35.1 power 0.646/33.6 contact 0.683/35.5 bunt 0.529/33.0 steal 0.699/41.0
-シード 1013	pitch	2回 1死 1 差1	最善 inside(ev)	normal 0.329/18.7 fast 0.311/17.7 breaking 0.313/18.0 outside 0.332/18.9 inside 0.305/17.5
-シード 1014	pitch	6回 1死 1 差0	最善 normal(ev)	normal 0.510/28.2 fast 0.545/30.1 breaking 0.511/28.1 outside 0.519/28.3 inside 0.521/28.7
-シード 1015	bat	3回 2死 123 差-3	最善 power(ev)	normal 1.108/48.9 power 1.157/48.8 contact 1.114/50.5
-シード 1016	pitch	3回 2死 3 差4	最善 breaking(ev)	normal 0.257/20.2 fast 0.272/21.3 breaking 0.239/18.7 outside 0.255/20.2 inside 0.244/18.8 walk 0.405/24.8
-シード 1017	bat	9回 2死 12 差-2	最善 contact(ev)	normal 0.207/12.3 power 0.175/10.1 contact 0.215/13.2
-シード 1018	pitch	8回 1死 3 差1	最善 fast(p1)	normal 0.762/57.2 fast 0.729/54.7 breaking 0.743/56.6 outside 0.761/57.4 inside 0.737/55.6 walk 0.990/56.4
-シード 1019	bat	8回 1死 13 差1	最善 bunt(p1)	normal 0.801/49.0 power 0.737/44.4 contact 0.838/52.0 bunt 0.977/75.5 squeeze 0.851/64.1 steal 0.884/47.1
-シード 1020	bat	8回 2死 13 差3	最善 power(ev)	normal 0.505/29.3 power 0.529/29.0 contact 0.497/30.6 steal 0.353/17.5
-シード 1021	pitch	8回 2死 3 差0	最善 inside(p1)	normal 0.268/21.0 fast 0.301/23.4 breaking 0.267/20.7 outside 0.279/21.7 inside 0.259/19.8 walk 0.405/24.8
-シード 1022	pitch	7回 2死 2 差2	最善 inside(ev)	normal 0.212/15.8 fast 0.240/17.9 breaking 0.207/15.3 outside 0.215/16.0 inside 0.202/14.8 walk 0.360/20.4
-シード 1023	pitch	7回 0死 3 差0	最善 inside(ev)	normal 1.101/72.7 fast 1.124/73.3 breaking 1.117/73.4 outside 1.126/73.1 inside 1.097/71.8 walk 1.522/74.9
-シード 1024	bat	3回 2死 13 差2	最善 power(ev)	normal 0.677/41.5 power 0.714/41.6 contact 0.687/44.6 steal 0.371/18.4
-シード 1025	bat	1回 1死 3 差-3	最善 bunt(ev)	normal 0.804/58.0 power 0.790/55.8 contact 0.816/59.9 bunt 0.882/81.1 squeeze 0.748/68.5
-シード 1026	bat	1回 0死 1 差-4	最善 power(ev)	normal 0.778/39.4 power 0.791/39.9 contact 0.790/40.0 bunt 0.579/35.8 steal 0.684/40.1
-シード 1027	pitch	7回 1死 3 差-3	最善 inside(ev)	normal 0.725/53.8 fast 0.751/55.0 breaking 0.743/54.8 outside 0.746/54.4 inside 0.715/52.2 walk 0.990/56.4
-シード 1028	pitch	2回 2死 1 差-3	最善 inside(ev)	normal 0.071/4.2 fast 0.065/3.8 breaking 0.061/3.6 outside 0.072/4.2 inside 0.059/3.5
-シード 1029	pitch	9回 2死 1 差0	最善 outside(p1)	normal 0.206/12.6 fast 0.208/12.7 breaking 0.190/11.5 outside 0.190/11.4 inside 0.208/12.6
-シード 1030	bat	8回 0死 23 差2	最善 contact(ev)	normal 1.636/73.7 power 1.590/71.6 contact 1.671/75.4 bunt 1.612/89.5 squeeze 1.474/84.4
-シード 1031	bat	9回 1死 - 差4	最善 power(ev)	normal 0.230/14.2 power 0.232/14.7 contact 0.225/13.6
-シード 1032	bat	4回 0死 3 差3	最善 power(ev)	normal 1.267/78.1 power 1.278/77.5 contact 1.276/79.4 bunt 1.141/92.6 squeeze 1.039/84.9
-シード 1033	bat	3回 2死 - 差-2	最善 power(ev)	normal 0.065/4.4 power 0.067/4.7 contact 0.063/4.1
-シード 1034	pitch	9回 1死 - 差-2	最善 breaking(ev)	normal 0.197/12.2 fast 0.204/12.7 breaking 0.191/11.8 outside 0.201/12.2 inside 0.197/12.3 walk 0.425/23.6
-シード 1035	pitch	6回 0死 3 差-2	最善 normal(ev)	normal 1.229/76.8 fast 1.262/77.7 breaking 1.238/77.0 outside 1.244/76.8 inside 1.239/76.3 walk 1.522/74.9
-シード 1036	pitch	7回 2死 - 差-4	最善 breaking(ev)	normal 0.067/4.6 fast 0.073/5.1 breaking 0.064/4.4 outside 0.066/4.4 inside 0.068/4.8 walk 0.157/9.4
-シード 1037	bat	4回 1死 2 差4	最善 power(ev)	normal 0.744/47.1 power 0.781/48.6 contact 0.742/47.7 bunt 0.343/25.6
-シード 1038	bat	3回 0死 1 差1	最善 normal(ev)	normal 0.843/41.7 power 0.835/41.3 contact 0.840/41.7 bunt 0.554/34.4 steal 0.711/41.7
-シード 1039	pitch	7回 0死 - 差1	最善 normal(ev)	normal 0.442/24.6 fast 0.469/26.5 breaking 0.447/24.8 outside 0.452/24.8 inside 0.457/25.7 walk 0.773/38.9
-シード 1040	pitch	1回 0死 12 差1	最善 inside(ev)	normal 1.152/51.9 fast 1.124/50.8 breaking 1.124/51.1 outside 1.163/52.3 inside 1.112/50.6
-シード 1041	bat	7回 1死 23 差-3	最善 bunt(ev)	normal 0.918/48.4 power 0.839/43.3 contact 0.966/51.9 bunt 1.082/78.7 squeeze 0.911/67.1
-シード 1042	pitch	8回 2死 13 差4	最善 inside(ev)	normal 0.269/17.2 fast 0.252/16.2 breaking 0.239/15.4 outside 0.275/17.8 inside 0.229/14.6
-シード 1043	pitch	9回 2死 1 差-1	最善 outside(p1)	normal 0.168/10.3 fast 0.164/10.0 breaking 0.151/9.2 outside 0.151/9.2 inside 0.170/10.4
-シード 1044	bat	2回 2死 12 差-4	最善 power(ev)	normal 0.400/23.6 power 0.430/24.3 contact 0.414/25.6
-シード 1045	bat	2回 1死 2 差-2	最善 contact(ev)	normal 0.466/31.2 power 0.438/29.5 contact 0.474/31.9 bunt 0.297/23.0
-シード 1046	bat	2回 1死 23 差1	最善 power(ev)	normal 1.394/65.7 power 1.425/65.0 contact 1.413/67.9 bunt 1.225/89.6 squeeze 1.139/86.1
-シード 1047	pitch	8回 0死 - 差-3	最善 outside(ev)	normal 0.505/28.1 fast 0.531/29.9 breaking 0.503/27.8 outside 0.502/27.4 inside 0.525/29.7 walk 0.773/38.9
-シード 1048	pitch	3回 1死 13 差-1	最善 inside(ev)	normal 0.967/55.3 fast 1.002/56.3 breaking 0.985/56.6 outside 0.993/56.1 inside 0.949/53.7
-シード 1049	bat	8回 0死 - 差-2	最善 power(ev)	normal 0.482/26.6 power 0.494/27.8 contact 0.483/26.2
-シード 1050	bat	2回 0死 - 差-3	最善 normal(ev)	normal 0.410/22.8 power 0.398/22.4 contact 0.408/22.4
-シード 1051	pitch	2回 1死 123 差-4	最善 inside(ev)	normal 1.361/60.6 fast 1.400/61.1 breaking 1.381/62.3 outside 1.405/62.4 inside 1.335/59.3
-シード 1052	bat	5回 2死 - 差-1	最善 normal(ev)	normal 0.033/2.2 power 0.029/2.0 contact 0.033/2.1
-シード 1053	bat	6回 1死 13 差-1	最善 bunt(ev)	normal 0.981/55.2 power 0.912/50.6 contact 1.003/57.7 bunt 1.040/80.1 squeeze 0.860/65.0 steal 0.872/46.6
-シード 1054	bat	3回 1死 - 差-1	最善 contact(ev)	normal 0.152/9.5 power 0.142/9.1 contact 0.153/9.4
-シード 1055	bat	4回 0死 12 差4	最善 contact(ev)	normal 1.328/57.6 power 1.277/55.5 contact 1.344/58.5 bunt 1.045/52.1
-シード 1056	bat	7回 2死 2 差2	最善 power(ev)	normal 0.264/20.0 power 0.285/21.2 contact 0.279/21.7
-シード 1057	bat	3回 2死 - 差-3	最善 power(ev)	normal 0.056/3.8 power 0.058/4.2 contact 0.054/3.6
-シード 1058	bat	6回 1死 3 差3	最善 bunt(ev)	normal 0.738/55.0 power 0.714/52.2 contact 0.758/57.4 bunt 0.894/81.8 squeeze 0.744/68.1
-シード 1059	pitch	1回 0死 2 差-2	最善 inside(ev)	normal 0.888/52.1 fast 0.915/53.3 breaking 0.894/52.2 outside 0.908/52.5 inside 0.879/51.2 walk 1.350/58.1
-シード 1060	pitch	4回 0死 - 差0	最善 inside(ev)	normal 0.330/18.7 fast 0.330/18.7 breaking 0.326/18.4 outside 0.342/19.2 inside 0.321/18.3 walk 0.773/38.9
-シード 1061	bat	1回 2死 - 差-1	最善 normal(ev)	normal 0.061/4.2 power 0.060/4.3 contact 0.057/3.7
-シード 1062	pitch	9回 1死 - 差2	最善 inside(ev)	normal 0.128/8.1 fast 0.122/7.7 breaking 0.120/7.6 outside 0.131/8.2 inside 0.118/7.5 walk 0.425/23.6
-シード 1063	bat	3回 2死 1 差-3	最善 steal(ev)	normal 0.114/6.8 power 0.109/6.6 contact 0.111/6.6 steal 0.160/12.0
-シード 1064	bat	2回 2死 2 差1	最善 power(ev)	normal 0.341/25.7 power 0.373/27.5 contact 0.345/26.8
-シード 1065	bat	1回 2死 2 差-1	最善 contact(ev)	normal 0.135/10.5 power 0.115/8.8 contact 0.144/11.4
-シード 1066	bat	7回 0死 1 差-1	最善 power(ev)	normal 0.810/40.2 power 0.834/41.2 contact 0.823/40.7 bunt 0.590/36.5 steal 0.614/36.1
-シード 1067	pitch	1回 0死 1 差2	最善 inside(ev)	normal 0.707/36.1 fast 0.705/35.9 breaking 0.698/35.8 outside 0.723/36.6 inside 0.684/35.1
-シード 1068	bat	8回 2死 23 差4	最善 contact(ev)	normal 0.236/11.8 power 0.196/9.6 contact 0.256/13.1
-シード 1069	pitch	4回 0死 - 差4	最善 inside(ev)	normal 0.353/20.0 fast 0.340/19.4 breaking 0.336/19.1 outside 0.352/19.8 inside 0.335/19.1 walk 0.773/38.9
-シード 1070	bat	9回 0死 23 差0	最善 bunt(p1)	normal 1.615/73.4 power 1.551/70.8 contact 1.640/74.9 bunt 1.575/87.2 squeeze 1.403/80.3
-シード 1071	pitch	9回 2死 3 差4	最善 breaking(ev)	normal 0.312/24.9 fast 0.309/24.7 breaking 0.282/22.6 outside 0.306/24.8 inside 0.294/23.3 walk 0.405/24.8
-シード 1072	bat	6回 2死 1 差-3	最善 steal(ev)	normal 0.108/6.3 power 0.101/5.9 contact 0.105/6.1 steal 0.161/12.1
-シード 1073	pitch	8回 1死 2 差-2	最善 breaking(ev)	normal 0.677/43.5 fast 0.695/44.6 breaking 0.658/42.4 outside 0.665/42.8 inside 0.675/43.1 walk 0.823/40.1
-シード 1074	pitch	6回 1死 23 差0	最善 normal(ev)	normal 1.133/56.1 fast 1.184/57.3 breaking 1.140/57.0 outside 1.147/56.7 inside 1.134/55.3 walk 1.454/63.1
-シード 1075	pitch	6回 0死 23 差4	最善 inside(ev)	normal 1.752/76.5 fast 1.791/77.0 breaking 1.758/77.0 outside 1.764/76.7 inside 1.751/75.9 walk 2.153/80.3
-シード 1076	bat	9回 1死 23 差-4	最善 power(ev)	normal 1.467/67.8 power 1.506/67.4 contact 1.496/70.2 bunt 1.270/92.4 squeeze 1.200/91.2
-シード 1077	bat	9回 1死 3 差3	最善 bunt(ev)	normal 0.634/49.3 power 0.573/44.2 contact 0.674/52.8 bunt 0.882/81.1 squeeze 0.698/63.5
-シード 1078	pitch	5回 0死 3 差-2	最善 fast(ev)	normal 1.031/71.0 fast 1.000/69.1 breaking 1.012/70.6 outside 1.034/71.2 inside 1.003/69.7 walk 1.522/74.9
-シード 1079	pitch	7回 2死 12 差3	最善 inside(ev)	normal 0.197/11.6 fast 0.183/10.8 breaking 0.173/10.3 outside 0.203/12.1 inside 0.166/9.8
-シード 1080	pitch	5回 2死 - 差3	最善 normal(ev)	normal 0.054/3.7 fast 0.063/4.4 breaking 0.056/3.7 outside 0.059/3.8 inside 0.057/3.8 walk 0.157/9.4
-シード 1081	bat	1回 2死 123 差3	最善 power(ev)	normal 0.801/36.4 power 0.866/37.0 contact 0.820/38.7
-シード 1082	bat	5回 2死 2 差2	最善 contact(ev)	normal 0.171/13.0 power 0.151/11.3 contact 0.176/13.6
-シード 1083	pitch	1回 1死 23 差4	最善 breaking(ev)	normal 1.173/59.1 fast 1.152/57.5 breaking 1.136/58.3 outside 1.161/59.1 inside 1.150/57.9 walk 1.454/63.1
-シード 1084	bat	8回 0死 12 差2	最善 contact(ev)	normal 1.340/57.8 power 1.278/55.4 contact 1.355/58.7 bunt 1.056/52.4
-シード 1085	bat	7回 1死 1 差0	最善 steal(ev)	normal 0.366/20.8 power 0.340/19.3 contact 0.369/21.0 bunt 0.231/16.4 steal 0.397/26.2
-シード 1086	pitch	8回 0死 12 差1	最善 inside(p1)	normal 1.158/51.8 fast 1.151/51.5 breaking 1.144/51.5 outside 1.175/52.4 inside 1.128/50.8
-シード 1087	pitch	4回 1死 - 差-4	最善 normal(ev)	normal 0.227/14.0 fast 0.246/15.5 breaking 0.228/14.0 outside 0.230/13.9 inside 0.234/14.6 walk 0.425/23.6
-シード 1088	bat	2回 1死 13 差4	最善 bunt(ev)	normal 0.922/54.0 power 0.889/51.0 contact 0.960/57.2 bunt 1.083/83.7 squeeze 1.003/77.7 steal 0.827/44.8
-シード 1089	pitch	8回 2死 1 差3	最善 breaking(ev)	normal 0.157/9.3 fast 0.168/10.0 breaking 0.147/8.7 outside 0.151/8.9 inside 0.160/9.4
-シード 1090	bat	6回 1死 1 差2	最善 steal(ev)	normal 0.359/20.3 power 0.359/20.2 contact 0.363/20.5 bunt 0.246/17.3 steal 0.382/25.2
-シード 1091	bat	9回 1死 23 差4	最善 bunt(ev)	normal 1.038/53.1 power 0.959/48.1 contact 1.082/56.2 bunt 1.117/81.1 squeeze 0.932/68.8
-シード 1092	pitch	9回 2死 3 差-4	最善 breaking(ev)	normal 0.265/20.8 fast 0.285/22.2 breaking 0.246/19.2 outside 0.263/20.8 inside 0.255/19.7 walk 0.405/24.8
-シード 1093	pitch	2回 1死 12 差2	最善 breaking(ev)	normal 0.671/33.2 fast 0.648/32.3 breaking 0.634/31.7 outside 0.665/33.1 inside 0.639/31.8
-シード 1094	bat	4回 1死 12 差0	最善 power(ev)	normal 1.010/47.8 power 1.062/49.0 contact 1.011/49.0 bunt 0.533/26.3
-シード 1095	pitch	1回 1死 - 差4	最善 inside(ev)	normal 0.154/9.6 fast 0.153/9.6 breaking 0.149/9.3 outside 0.158/9.7 inside 0.146/9.2 walk 0.425/23.6
-シード 1096	bat	8回 2死 - 差-3	最善 power(ev)	normal 0.086/6.1 power 0.095/7.0 contact 0.077/5.2
-シード 1097	bat	5回 0死 - 差1	最善 contact(ev)	normal 0.322/18.4 power 0.315/18.2 contact 0.328/18.5
-シード 1098	pitch	1回 0死 1 差4	最善 breaking(ev)	normal 0.748/37.7 fast 0.760/38.2 breaking 0.736/37.3 outside 0.755/37.9 inside 0.737/37.3
-シード 1099	pitch	6回 2死 - 差-3	最善 normal(ev)	normal 0.056/3.8 fast 0.065/4.6 breaking 0.058/3.9 outside 0.060/3.9 inside 0.057/3.9 walk 0.157/9.4
-シード 1100	bat	1回 2死 - 差0	最善 normal(ev)	normal 0.042/2.8 power 0.039/2.7 contact 0.041/2.6
-シード 1101	pitch	7回 1死 1 差1	最善 normal(ev)	normal 0.417/23.2 fast 0.445/24.7 breaking 0.422/23.4 outside 0.435/23.9 inside 0.421/23.3
-シード 1102	pitch	7回 2死 1 差0	最善 inside(ev)	normal 0.105/6.4 fast 0.108/6.6 breaking 0.097/5.9 outside 0.108/6.5 inside 0.095/5.8
-シード 1103	bat	4回 0死 23 差-3	最善 bunt(ev)	normal 1.547/72.2 power 1.506/70.1 contact 1.585/74.1 bunt 1.623/89.8 squeeze 1.481/84.8
-シード 1104	pitch	3回 1死 13 差3	最善 inside(ev)	normal 1.031/58.7 fast 1.034/58.4 breaking 1.020/58.9 outside 1.035/59.1 inside 0.996/56.7
-シード 1105	pitch	4回 2死 - 差-3	最善 inside(ev)	normal 0.036/2.4 fast 0.033/2.3 breaking 0.032/2.1 outside 0.036/2.4 inside 0.031/2.1 walk 0.157/9.4
-シード 1106	pitch	3回 1死 12 差1	最善 breaking(ev)	normal 0.845/40.7 fast 0.818/39.6 breaking 0.809/39.2 outside 0.836/40.6 inside 0.813/39.2
-シード 1107	pitch	2回 2死 123 差4	最善 inside(ev)	normal 0.480/22.0 fast 0.495/22.2 breaking 0.464/21.6 outside 0.508/24.0 inside 0.439/20.3
-シード 1108	bat	3回 1死 2 差3	最善 contact(ev)	normal 0.517/34.9 power 0.490/33.0 contact 0.532/36.2 bunt 0.294/23.0
-シード 1109	bat	1回 2死 12 差2	最善 contact(ev)	normal 0.253/14.4 power 0.227/12.7 contact 0.257/15.1
-シード 1110	bat	4回 1死 3 差1	最善 bunt(ev)	normal 0.586/46.5 power 0.529/41.5 contact 0.620/49.7 bunt 0.810/74.5 squeeze 0.615/55.2
-シード 1111	pitch	8回 2死 3 差0	最善 inside(p1)	normal 0.272/22.1 fast 0.251/20.4 breaking 0.247/20.1 outside 0.276/22.6 inside 0.243/19.7 walk 0.405/24.8
-シード 1112	bat	1回 2死 123 差1	最善 power(ev)	normal 0.922/41.6 power 0.983/41.9 contact 0.931/43.5
-シード 1113	bat	4回 0死 3 差0	最善 bunt(ev)	normal 1.026/70.8 power 0.986/68.1 contact 1.045/72.4 bunt 1.058/86.0 squeeze 0.838/64.8
-シード 1114	pitch	1回 2死 13 差0	最善 breaking(ev)	normal 0.415/25.3 fast 0.439/26.4 breaking 0.392/23.8 outside 0.412/25.5 inside 0.407/24.1
-シード 1115	bat	7回 0死 3 差-2	最善 bunt(ev)	normal 1.029/71.3 power 1.005/69.4 contact 1.055/73.2 bunt 1.102/89.4 squeeze 0.949/75.9
-シード 1116	bat	8回 2死 123 差-3	最善 contact(ev)	normal 0.678/30.8 power 0.662/28.9 contact 0.689/32.3
-シード 1117	pitch	4回 1死 - 差0	最善 normal(ev)	normal 0.209/12.9 fast 0.223/13.9 breaking 0.210/12.8 outside 0.215/13.0 inside 0.214/13.3 walk 0.425/23.6
-シード 1118	bat	2回 1死 123 差-2	最善 contact(ev)	normal 1.636/67.8 power 1.660/66.5 contact 1.671/70.1 bunt 1.445/90.9 squeeze 1.359/88.3
-シード 1119	bat	8回 1死 - 差4	最善 power(ev)	normal 0.241/15.0 power 0.258/16.6 contact 0.238/14.3
-シード 1120	pitch	4回 0死 3 差3	最善 inside(ev)	normal 1.166/75.3 fast 1.163/74.9 breaking 1.157/75.4 outside 1.169/75.4 inside 1.148/74.3 walk 1.522/74.9
-シード 1121	pitch	7回 0死 13 差2	最善 outside(ev)	normal 1.748/79.6 fast 1.811/80.7 breaking 1.752/79.9 outside 1.745/79.5 inside 1.790/79.6
-シード 1122	bat	9回 0死 3 差-1	最善 bunt(p1)	normal 1.039/71.3 power 1.008/69.1 contact 1.064/73.2 bunt 1.114/90.0 squeeze 0.921/73.1
-シード 1123	pitch	4回 0死 13 差2	最善 inside(ev)	normal 1.343/70.7 fast 1.311/69.2 breaking 1.327/70.6 outside 1.354/71.0 inside 1.305/69.3
-シード 1124	pitch	2回 2死 3 差2	最善 inside(ev)	normal 0.213/16.9 fast 0.222/17.7 breaking 0.200/15.9 outside 0.222/17.7 inside 0.191/15.1 walk 0.405/24.8
-シード 1125	bat	5回 2死 13 差-2	最善 power(ev)	normal 0.427/25.8 power 0.429/24.8 contact 0.426/27.1 steal 0.350/17.3
-シード 1126	pitch	5回 2死 2 差-2	最善 breaking(ev)	normal 0.298/22.7 fast 0.294/22.5 breaking 0.274/20.9 outside 0.289/22.2 inside 0.283/21.4 walk 0.360/20.4
-シード 1127	pitch	9回 2死 2 差-2	最善 breaking(ev)	normal 0.227/17.0 fast 0.232/17.4 breaking 0.209/15.6 outside 0.224/16.8 inside 0.211/15.7 walk 0.360/20.4
-シード 1128	pitch	8回 0死 - 差4	最善 inside(ev)	normal 0.313/18.0 fast 0.315/18.2 breaking 0.308/17.7 outside 0.322/18.3 inside 0.305/17.6 walk 0.773/38.9
-シード 1129	bat	5回 2死 1 差1	最善 power(ev)	normal 0.272/16.0 power 0.314/18.5 contact 0.249/14.6 steal 0.155/11.7
-シード 1130	bat	9回 0死 13 差3	最善 bunt(ev)	normal 1.322/70.3 power 1.267/67.5 contact 1.351/72.1 bunt 1.388/86.2 squeeze 1.216/72.1 steal 1.292/66.9
-シード 1131	pitch	6回 0死 23 差2	最善 inside(ev)	normal 1.505/71.0 fast 1.462/69.1 breaking 1.476/70.5 outside 1.515/71.3 inside 1.459/69.5 walk 2.153/80.3
-シード 1132	bat	8回 2死 3 差-3	最善 contact(ev)	normal 0.388/30.6 power 0.377/29.2 contact 0.400/32.4
-シード 1133	bat	7回 2死 - 差3	最善 power(ev)	normal 0.052/3.6 power 0.054/3.9 contact 0.050/3.3
-シード 1134	pitch	8回 1死 2 差4	最善 breaking(ev)	normal 0.741/46.6 fast 0.801/49.9 breaking 0.728/45.2 outside 0.729/45.3 inside 0.774/47.5 walk 0.823/40.1
-シード 1135	pitch	2回 1死 - 差-1	最善 inside(ev)	normal 0.156/9.7 fast 0.156/9.8 breaking 0.152/9.5 outside 0.160/9.9 inside 0.150/9.4 walk 0.425/23.6
-シード 1136	bat	5回 1死 13 差2	最善 bunt(ev)	normal 0.819/49.7 power 0.754/45.1 contact 0.860/53.0 bunt 1.027/79.3 squeeze 0.885/67.2 steal 0.822/44.6
-シード 1137	pitch	4回 1死 - 差-1	最善 breaking(ev)	normal 0.242/14.9 fast 0.258/16.2 breaking 0.240/14.7 outside 0.243/14.6 inside 0.249/15.6 walk 0.425/23.6
-シード 1138	pitch	4回 2死 2 差0	最善 breaking(ev)	normal 0.317/23.5 fast 0.360/26.6 breaking 0.303/22.3 outside 0.307/22.7 inside 0.321/23.4 walk 0.360/20.4
-シード 1139	pitch	5回 1死 123 差-3	最善 inside(ev)	normal 1.473/63.8 fast 1.485/63.2 breaking 1.462/64.3 outside 1.494/65.0 inside 1.450/62.7
-シード 1140	pitch	4回 2死 - 差-4	最善 breaking(ev)	normal 0.048/3.3 fast 0.045/3.0 breaking 0.042/2.9 outside 0.047/3.1 inside 0.043/2.9 walk 0.157/9.4
-シード 1141	pitch	7回 0死 1 差2	最善 inside(ev)	normal 0.760/38.1 fast 0.786/39.2 breaking 0.771/38.5 outside 0.784/38.9 inside 0.759/38.0
-シード 1142	pitch	1回 2死 12 差-2	最善 breaking(ev)	normal 0.304/16.6 fast 0.299/16.3 breaking 0.275/15.1 outside 0.293/16.3 inside 0.286/15.4
-シード 1143	bat	6回 2死 123 差-1	最善 power(ev)	normal 1.095/50.3 power 1.172/51.0 contact 1.089/51.7
-シード 1144	bat	8回 1死 2 差-2	最善 power(ev)	normal 0.737/46.7 power 0.772/48.1 contact 0.738/47.6 bunt 0.331/25.1
-シード 1145	pitch	6回 0死 2 差3	最善 inside(ev)	normal 0.905/52.3 fast 0.939/53.8 breaking 0.920/52.5 outside 0.934/52.8 inside 0.904/51.6 walk 1.350/58.1
-シード 1146	bat	9回 2死 - 差-1	最善 normal(p1)	normal 0.044/3.0 power 0.039/2.7 contact 0.044/2.8
-シード 1147	pitch	9回 0死 - 差2	最善 breaking(ev)	normal 0.370/20.9 fast 0.358/20.3 breaking 0.353/20.0 outside 0.368/20.6 inside 0.355/20.2 walk 0.773/38.9
-シード 1148	pitch	5回 0死 1 差4	最善 breaking(ev)	normal 0.821/41.1 fast 0.803/40.2 breaking 0.788/39.9 outside 0.813/40.7 inside 0.797/40.2
-シード 1149	bat	4回 1死 2 差2	最善 power(ev)	normal 0.792/50.9 power 0.824/52.0 contact 0.804/52.8 bunt 0.338/25.5
-シード 1150	bat	4回 1死 12 差0	最善 contact(ev)	normal 0.862/41.8 power 0.855/41.0 contact 0.868/42.6 bunt 0.505/25.2
-シード 1151	bat	8回 0死 2 差0	最善 contact(p1)	normal 0.912/53.5 power 0.897/52.4 contact 0.923/54.5 bunt 0.717/51.4
-シード 1152	bat	8回 2死 23 差0	最善 contact(p1)	normal 0.458/23.1 power 0.418/20.6 contact 0.473/24.5
-シード 1153	pitch	8回 1死 23 差-1	最善 inside(p1)	normal 1.309/62.6 fast 1.380/64.5 breaking 1.305/63.1 outside 1.303/62.6 inside 1.320/62.0 walk 1.454/63.1
-シード 1154	bat	4回 2死 - 差1	最善 power(ev)	normal 0.058/4.0 power 0.061/4.3 contact 0.056/3.6
-シード 1155	bat	7回 2死 2 差2	最善 power(ev)	normal 0.260/19.5 power 0.287/20.9 contact 0.264/20.3
-シード 1156	pitch	6回 1死 2 差-4	最善 inside(ev)	normal 0.421/28.8 fast 0.407/28.0 breaking 0.403/27.9 outside 0.428/29.2 inside 0.399/27.5 walk 0.823/40.1
-シード 1157	pitch	5回 1死 1 差1	最善 outside(ev)	normal 0.589/31.4 fast 0.637/34.0 breaking 0.584/31.1 outside 0.582/30.9 inside 0.618/32.9
-シード 1158	pitch	4回 2死 2 差1	最善 breaking(ev)	normal 0.287/22.0 fast 0.277/21.2 breaking 0.263/20.2 outside 0.278/21.6 inside 0.272/20.7 walk 0.360/20.4
-シード 1159	pitch	3回 2死 - 差-4	最善 breaking(ev)	normal 0.052/3.5 fast 0.054/3.7 breaking 0.049/3.3 outside 0.053/3.5 inside 0.050/3.4 walk 0.157/9.4
-シード 1160	pitch	5回 1死 - 差3	最善 breaking(ev)	normal 0.230/14.3 fast 0.239/15.1 breaking 0.223/13.9 outside 0.226/13.7 inside 0.238/15.1 walk 0.425/23.6
-シード 1161	bat	1回 2死 3 差0	最善 power(ev)	normal 0.454/35.0 power 0.494/36.8 contact 0.454/36.4
-シード 1162	bat	7回 2死 - 差-4	最善 power(ev)	normal 0.060/4.2 power 0.065/4.7 contact 0.056/3.7
-シード 1163	bat	7回 0死 - 差2	最善 power(ev)	normal 0.402/22.6 power 0.415/23.7 contact 0.409/22.6
-シード 1164	bat	3回 1死 23 差-1	最善 power(ev)	normal 1.392/64.8 power 1.429/64.3 contact 1.405/66.6 bunt 1.198/87.2 squeeze 1.116/84.2
-シード 1165	bat	7回 2死 1 差1	最善 steal(ev)	normal 0.157/9.5 power 0.148/9.0 contact 0.149/9.0 steal 0.182/13.7
-シード 1166	bat	1回 1死 3 差4	最善 bunt(ev)	normal 0.770/57.0 power 0.752/54.6 contact 0.796/59.7 bunt 0.912/84.1 squeeze 0.815/75.2
-シード 1167	pitch	2回 0死 2 差1	最善 inside(ev)	normal 0.776/47.4 fast 0.752/46.2 breaking 0.761/47.0 outside 0.785/47.8 inside 0.748/46.1 walk 1.350/58.1
-シード 1168	bat	7回 0死 13 差-3	最善 bunt(ev)	normal 1.426/72.8 power 1.383/70.4 contact 1.461/74.7 bunt 1.472/90.9 squeeze 1.305/79.4 steal 1.282/66.7
-シード 1169	pitch	1回 2死 12 差-1	最善 breaking(ev)	normal 0.427/24.5 fast 0.444/25.4 breaking 0.405/23.3 outside 0.422/24.6 inside 0.407/23.1
-シード 1170	pitch	3回 0死 3 差-4	最善 inside(ev)	normal 1.239/78.2 fast 1.244/78.1 breaking 1.228/78.2 outside 1.239/78.2 inside 1.224/77.3 walk 1.522/74.9
-シード 1171	bat	7回 0死 - 差3	最善 contact(ev)	normal 0.356/20.0 power 0.341/19.4 contact 0.363/20.2
-シード 1172	bat	4回 0死 13 差-2	最善 contact(ev)	normal 1.494/74.0 power 1.443/71.5 contact 1.512/75.4 bunt 1.402/87.6 squeeze 1.254/75.2 steal 1.403/69.3
-シード 1173	pitch	2回 1死 2 差1	最善 breaking(ev)	normal 0.690/44.0 fast 0.720/45.7 breaking 0.671/42.6 outside 0.674/42.8 inside 0.708/44.4 walk 0.823/40.1
-シード 1174	pitch	3回 2死 1 差0	最善 breaking(ev)	normal 0.152/9.1 fast 0.164/9.8 breaking 0.143/8.5 outside 0.148/8.8 inside 0.152/9.1
-シード 1175	pitch	8回 2死 2 差-3	最善 inside(ev)	normal 0.166/12.3 fast 0.176/13.0 breaking 0.154/11.3 outside 0.170/12.5 inside 0.150/11.0 walk 0.360/20.4
-シード 1176	pitch	8回 0死 1 差0	最善 breaking(p1)	normal 0.774/39.0 fast 0.788/39.6 breaking 0.763/38.6 outside 0.784/39.2 inside 0.776/39.0
-シード 1177	pitch	1回 1死 123 差3	最善 outside(ev)	normal 1.888/74.6 fast 1.986/75.9 breaking 1.887/75.7 outside 1.880/75.8 inside 1.955/75.3
-シード 1178	bat	2回 1死 12 差-2	最善 contact(ev)	normal 0.716/35.4 power 0.677/33.5 contact 0.727/36.2 bunt 0.479/24.3
-シード 1179	bat	2回 2死 13 差2	最善 power(ev)	normal 0.632/38.4 power 0.686/39.1 contact 0.643/41.6 steal 0.326/16.1
-シード 1180	pitch	3回 1死 23 差-3	最善 fast(ev)	normal 0.993/51.5 fast 0.940/48.4 breaking 0.966/51.1 outside 0.994/51.8 inside 0.944/49.4 walk 1.454/63.1
-シード 1181	pitch	3回 0死 12 差3	最善 inside(ev)	normal 1.350/58.5 fast 1.386/59.5 breaking 1.368/59.1 outside 1.391/59.8 inside 1.345/58.0
-シード 1182	bat	1回 2死 23 差0	最善 contact(ev)	normal 0.474/24.3 power 0.488/24.1 contact 0.509/26.9
-シード 1183	bat	3回 2死 - 差0	最善 power(ev)	normal 0.101/7.0 power 0.115/8.4 contact 0.094/6.1
-シード 1184	bat	7回 2死 23 差-2	最善 power(ev)	normal 0.802/40.3 power 0.866/41.5 contact 0.805/42.3
-シード 1185	pitch	6回 0死 - 差4	最善 breaking(ev)	normal 0.339/19.3 fast 0.329/18.8 breaking 0.322/18.4 outside 0.341/19.2 inside 0.327/18.7 walk 0.773/38.9
-シード 1186	bat	1回 2死 23 差2	最善 contact(ev)	normal 0.492/23.5 power 0.480/22.3 contact 0.512/25.0
-シード 1187	bat	1回 0死 13 差-3	最善 bunt(ev)	normal 1.308/69.8 power 1.250/66.9 contact 1.340/71.7 bunt 1.386/86.5 squeeze 1.225/72.8 steal 1.279/66.7
-シード 1188	bat	4回 2死 1 差-1	最善 steal(ev)	normal 0.099/6.0 power 0.102/6.2 contact 0.096/5.8 steal 0.165/12.4
-シード 1189	pitch	7回 1死 2 差-4	最善 breaking(ev)	normal 0.574/37.9 fast 0.585/38.5 breaking 0.557/36.7 outside 0.578/37.9 inside 0.564/37.0 walk 0.823/40.1
-シード 1190	pitch	2回 0死 2 差2	最善 inside(ev)	normal 0.844/50.8 fast 0.846/50.8 breaking 0.835/50.4 outside 0.860/51.3 inside 0.823/49.5 walk 1.350/58.1
-シード 1191	bat	4回 0死 2 差2	最善 contact(ev)	normal 0.896/51.9 power 0.858/49.9 contact 0.901/52.5 bunt 0.697/50.0
-シード 1192	bat	2回 2死 123 差2	最善 power(ev)	normal 1.090/49.7 power 1.169/50.5 contact 1.084/51.2
-シード 1193	pitch	2回 0死 - 差2	最善 breaking(ev)	normal 0.388/21.7 fast 0.382/21.4 breaking 0.370/20.8 outside 0.386/21.4 inside 0.372/21.0 walk 0.773/38.9
-シード 1194	bat	5回 2死 3 差-1	最善 contact(ev)	normal 0.217/17.2 power 0.185/14.4 contact 0.229/18.5
-シード 1195	bat	9回 2死 - 差0	最善 power(p1)	normal 0.050/3.4 power 0.052/3.7 contact 0.049/3.2
-シード 1196	pitch	8回 0死 - 差-4	最善 breaking(ev)	normal 0.516/28.6 fast 0.544/30.5 breaking 0.515/28.3 outside 0.515/27.9 inside 0.540/30.4 walk 0.773/38.9
-シード 1197	bat	8回 0死 1 差0	最善 steal(p1)	normal 0.699/36.1 power 0.677/35.0 contact 0.704/36.5 bunt 0.528/33.0 steal 0.700/41.0
-シード 1198	pitch	8回 0死 2 差3	最善 inside(ev)	normal 0.749/46.7 fast 0.731/45.6 breaking 0.732/46.1 outside 0.755/46.9 inside 0.719/45.2 walk 1.350/58.1
-シード 1199	pitch	7回 1死 13 差0	最善 inside(ev)	normal 0.966/55.2 fast 1.004/56.4 breaking 0.987/56.7 outside 0.990/56.0 inside 0.935/53.0
+無死一塁	bat	3回 0死 1 差0	最善 normal(ev)	normal 0.784/39.0 power 0.767/38.2 contact 0.780/38.9 bunt 0.582/36.8 steal 0.687/40.2
+無死二塁	bat	5回 0死 2 差0	最善 contact(ev)	normal 0.941/54.8 power 0.920/53.5 contact 0.944/55.3 bunt 0.774/55.8
+一死三塁	bat	6回 1死 3 差-1	最善 contact(ev)	normal 0.777/58.1 power 0.736/54.5 contact 0.796/60.4 squeeze 0.793/72.9
+一死二三塁	bat	7回 1死 23 差0	最善 squeeze(p1)	normal 1.171/59.0 power 1.118/55.3 contact 1.194/61.2 squeeze 1.037/77.4
+二死満塁・1点差	bat	8回 2死 123 差-1	最善 contact(p1)	normal 0.685/31.0 power 0.654/29.1 contact 0.679/31.3
+9回・1点リード・二死二塁(守備)	pitch	9回 2死 2 差1	最善 inside(p1)	normal 0.268/20.3 fast 0.282/21.3 breaking 0.263/19.9 outside 0.271/20.6 inside 0.259/19.4 walk 0.375/21.5
+一死一三塁(守備)	pitch	7回 1死 13 差0	最善 inside(p1)	normal 1.032/59.0 fast 1.041/58.6 breaking 1.039/59.5 outside 1.044/59.4 inside 1.018/57.7
+無死満塁(守備)	pitch	4回 0死 123 差2	最善 inside(ev)	normal 2.231/82.5 fast 2.247/82.3 breaking 2.239/82.9 outside 2.259/83.0 inside 2.219/82.1
+二死一塁・俊足	bat	8回 2死 1 差0	最善 steal(p1)	normal 0.168/10.3 power 0.169/10.4 contact 0.155/9.6 steal 0.177/13.4
+一死一塁(守備)・強打者	pitch	6回 1死 1 差-1	最善 outside(ev)	normal 0.519/28.1 fast 0.537/29.0 breaking 0.518/28.1 outside 0.515/27.8 inside 0.518/28.1
+先頭打者	bat	1回 0死 - 差0	最善 normal(ev)	normal 0.392/21.9 power 0.383/21.6 contact 0.389/21.5
+シード 1000	bat	1回 0死 - 差2	最善 normal(ev)	normal 0.350/19.6 power 0.326/18.5 contact 0.347/19.4
+シード 1001	pitch	6回 1死 12 差-3	最善 normal(ev)	normal 1.110/52.4 fast 1.209/55.9 breaking 1.149/53.8 outside 1.121/53.1 inside 1.149/52.9
+シード 1002	bat	5回 0死 - 差3	最善 power(ev)	normal 0.528/28.8 power 0.544/30.3 contact 0.527/28.2
+シード 1003	pitch	8回 2死 1 差-3	最善 outside(ev)	normal 0.273/16.3 fast 0.323/19.2 breaking 0.292/17.5 outside 0.265/15.7 inside 0.311/18.5
+シード 1004	pitch	1回 1死 1 差3	最善 normal(ev)	normal 0.613/32.6 fast 0.687/36.4 breaking 0.643/34.0 outside 0.623/32.7 inside 0.647/34.2
+シード 1005	bat	7回 0死 - 差4	最善 power(ev)	normal 0.473/25.9 power 0.482/26.8 contact 0.479/25.8
+シード 1006	bat	9回 1死 1 差-2	最善 steal(p1)	normal 0.484/26.1 power 0.476/25.6 contact 0.473/25.5 bunt 0.273/19.5 steal 0.419/27.8
+シード 1007	pitch	1回 0死 2 差3	最善 inside(ev)	normal 1.001/57.3 fast 1.005/57.3 breaking 0.994/57.0 outside 0.996/57.0 inside 0.982/56.2 walk 1.376/59.0
+シード 1008	bat	5回 1死 - 差3	最善 normal(ev)	normal 0.161/10.1 power 0.158/10.1 contact 0.160/9.9
+シード 1009	pitch	7回 1死 - 差-4	最善 inside(ev)	normal 0.198/12.2 fast 0.192/11.8 breaking 0.184/11.4 outside 0.196/11.9 inside 0.184/11.4 walk 0.433/23.8
+シード 1010	bat	2回 2死 - 差0	最善 normal(ev)	normal 0.065/4.5 power 0.064/4.5 contact 0.061/4.0
+シード 1011	bat	3回 0死 - 差-4	最善 normal(ev)	normal 0.294/16.9 power 0.274/15.9 contact 0.293/16.8
+シード 1012	bat	4回 2死 1 差-2	最善 steal(ev)	normal 0.119/7.1 power 0.118/7.0 contact 0.114/6.8 steal 0.159/12.0
+シード 1013	pitch	9回 2死 1 差2	最善 normal(p1)	normal 0.162/9.5 fast 0.203/12.0 breaking 0.187/11.0 outside 0.180/10.6 inside 0.181/10.6
+シード 1014	pitch	9回 1死 1 差1	最善 outside(p1)	normal 0.512/28.0 fast 0.529/28.8 breaking 0.518/28.4 outside 0.501/27.3 inside 0.508/27.8
+シード 1015	bat	3回 0死 123 差-4	最善 power(ev)	normal 2.467/85.9 power 2.496/85.3 contact 2.489/86.9 squeeze 2.076/95.0
+シード 1016	pitch	9回 1死 3 差-3	最善 inside(ev)	normal 0.756/56.8 fast 0.754/56.1 breaking 0.755/57.0 outside 0.766/57.2 inside 0.746/55.6 walk 1.032/59.0
+シード 1017	bat	4回 2死 12 差-4	最善 contact(ev)	normal 0.241/14.9 power 0.194/11.9 contact 0.242/15.3
+シード 1018	pitch	5回 0死 3 差1	最善 normal(ev)	normal 1.294/80.7 fast 1.336/81.6 breaking 1.320/81.1 outside 1.306/80.6 inside 1.300/80.1 walk 1.580/77.7
+シード 1019	pitch	2回 2死 13 差2	最善 normal(ev)	normal 0.487/28.2 fast 0.603/33.4 breaking 0.513/29.0 outside 0.504/29.0 inside 0.525/28.7
+シード 1020	pitch	1回 1死 13 差2	最善 fast(ev)	normal 0.851/51.4 fast 0.782/47.2 breaking 0.821/50.7 outside 0.860/51.9 inside 0.804/48.9
+シード 1021	bat	7回 2死 3 差-1	最善 contact(p1)	normal 0.341/27.1 power 0.363/27.9 contact 0.355/29.1
+シード 1022	pitch	6回 2死 2 差-4	最善 outside(ev)	normal 0.333/24.9 fast 0.398/29.3 breaking 0.348/25.7 outside 0.332/24.5 inside 0.350/25.3 walk 0.375/21.5
+シード 1023	bat	8回 2死 3 差3	最善 power(ev)	normal 0.423/33.3 power 0.453/34.5 contact 0.443/36.0
+シード 1024	pitch	4回 0死 13 差0	最善 outside(ev)	normal 1.718/80.6 fast 1.747/80.8 breaking 1.734/81.0 outside 1.716/80.6 inside 1.719/80.1
+シード 1025	bat	3回 1死 3 差-1	最善 contact(ev)	normal 0.608/48.4 power 0.536/42.4 contact 0.636/51.4 squeeze 0.633/56.8
+シード 1026	bat	2回 0死 1 差-3	最善 contact(ev)	normal 0.712/36.3 power 0.691/35.3 contact 0.717/36.5 bunt 0.589/37.0 steal 0.672/39.4
+シード 1027	bat	9回 2死 3 差2	最善 contact(p1)	normal 0.365/29.0 power 0.390/30.0 contact 0.386/31.6
+シード 1028	bat	6回 2死 1 差0	最善 power(ev)	normal 0.211/12.4 power 0.212/12.5 contact 0.198/11.7 steal 0.180/13.7
+シード 1029	pitch	8回 0死 1 差3	最善 inside(ev)	normal 0.748/37.4 fast 0.726/36.4 breaking 0.728/36.7 outside 0.757/37.7 inside 0.726/36.5
+シード 1030	pitch	2回 1死 23 差-4	最善 inside(ev)	normal 1.460/67.7 fast 1.554/70.1 breaking 1.497/68.8 outside 1.455/67.6 inside 1.455/66.8 walk 1.509/65.2
+シード 1031	pitch	2回 1死 - 差-3	最善 normal(ev)	normal 0.197/12.2 fast 0.201/12.6 breaking 0.204/12.6 outside 0.203/12.4 inside 0.201/12.6 walk 0.433/23.8
+シード 1032	pitch	1回 0死 3 差-1	最善 fast(ev)	normal 1.146/76.7 fast 1.099/74.3 breaking 1.122/76.4 outside 1.142/76.7 inside 1.119/75.8 walk 1.580/77.7
+シード 1033	bat	1回 1死 - 差-2	最善 power(ev)	normal 0.252/15.5 power 0.265/16.7 contact 0.249/14.9
+シード 1034	bat	6回 1死 - 差2	最善 normal(ev)	normal 0.153/9.6 power 0.148/9.4 contact 0.152/9.4
+シード 1035	bat	7回 1死 3 差4	最善 squeeze(ev)	normal 0.753/57.1 power 0.715/53.5 contact 0.782/60.0 squeeze 0.833/76.9
+シード 1036	bat	6回 1死 - 差-2	最善 power(ev)	normal 0.186/11.6 power 0.193/12.4 contact 0.184/11.2
+シード 1037	pitch	2回 0死 2 差-4	最善 inside(ev)	normal 0.882/52.3 fast 0.899/53.0 breaking 0.884/52.4 outside 0.901/52.9 inside 0.873/51.7 walk 1.376/59.0
+シード 1038	pitch	3回 1死 1 差-3	最善 fast(ev)	normal 0.457/25.3 fast 0.431/23.8 breaking 0.433/24.1 outside 0.447/24.7 inside 0.436/24.2
+シード 1039	pitch	9回 1死 - 差1	最善 inside(p1)	normal 0.151/9.5 fast 0.158/9.9 breaking 0.148/9.3 outside 0.157/9.7 inside 0.147/9.2 walk 0.433/23.8
+シード 1040	pitch	7回 2死 12 差4	最善 breaking(ev)	normal 0.360/20.0 fast 0.385/21.2 breaking 0.352/19.4 outside 0.368/20.6 inside 0.362/19.7
+シード 1041	bat	4回 2死 23 差-1	最善 normal(ev)	normal 0.417/19.9 power 0.344/16.4 contact 0.403/19.4
+シード 1042	pitch	8回 2死 13 差2	最善 inside(p1)	normal 0.387/23.7 fast 0.449/26.8 breaking 0.433/25.9 outside 0.418/25.2 inside 0.396/23.3
+シード 1043	bat	5回 0死 1 差-2	最善 steal(ev)	normal 0.607/32.0 power 0.573/30.3 contact 0.608/32.2 bunt 0.555/35.0 steal 0.664/38.9
+シード 1044	bat	1回 0死 12 差1	最善 contact(ev)	normal 1.580/65.8 power 1.597/65.8 contact 1.600/67.2 bunt 1.209/58.8
+シード 1045	bat	4回 2死 2 差-2	最善 normal(ev)	normal 0.191/14.2 power 0.181/13.3 contact 0.191/14.4
+シード 1046	pitch	2回 0死 23 差-3	最善 inside(ev)	normal 1.578/74.0 fast 1.569/73.2 breaking 1.591/74.5 outside 1.598/74.3 inside 1.553/72.8 walk 2.231/82.5
+シード 1047	bat	8回 0死 - 差-4	最善 normal(ev)	normal 0.385/21.5 power 0.358/20.2 contact 0.377/20.9
+シード 1048	bat	7回 2死 13 差4	最善 power(ev)	normal 0.685/39.6 power 0.764/41.4 contact 0.666/41.1 steal 0.375/18.0
+シード 1049	bat	1回 0死 - 差0	最善 power(ev)	normal 0.510/28.1 power 0.534/30.1 contact 0.507/27.3
+シード 1050	bat	2回 2死 - 差3	最善 normal(ev)	normal 0.035/2.4 power 0.030/2.0 contact 0.034/2.2
+シード 1051	bat	8回 2死 123 差-1	最善 power(p1)	normal 1.091/48.2 power 1.182/49.6 contact 1.089/49.5
+シード 1052	bat	2回 2死 - 差-4	最善 normal(ev)	normal 0.050/3.4 power 0.047/3.2 contact 0.048/3.1
+シード 1053	bat	4回 2死 13 差-2	最善 steal(ev)	normal 0.316/19.0 power 0.274/16.3 contact 0.311/19.3 steal 0.324/15.6
+シード 1054	bat	3回 2死 - 差-1	最善 normal(ev)	normal 0.057/3.8 power 0.049/3.3 contact 0.052/3.5
+シード 1055	pitch	5回 2死 12 差2	最善 outside(ev)	normal 0.671/38.3 fast 0.761/42.2 breaking 0.710/40.0 outside 0.636/37.0 inside 0.693/37.8
+シード 1056	pitch	3回 0死 2 差4	最善 breaking(ev)	normal 0.907/53.2 fast 0.914/53.4 breaking 0.901/52.9 outside 0.925/53.7 inside 0.901/52.6 walk 1.376/59.0
+シード 1057	bat	2回 1死 - 差1	最善 contact(ev)	normal 0.144/8.9 power 0.130/8.1 contact 0.144/8.9
+シード 1058	pitch	4回 1死 3 差0	最善 fast(ev)	normal 0.638/50.6 fast 0.587/46.4 breaking 0.623/50.2 outside 0.644/51.0 inside 0.610/48.5 walk 1.032/59.0
+シード 1059	bat	9回 2死 2 差-4	最善 normal(ev)	normal 0.238/18.5 power 0.200/15.4 contact 0.235/18.5
+シード 1060	pitch	6回 2死 - 差4	最善 outside(ev)	normal 0.090/6.3 fast 0.099/7.0 breaking 0.088/6.1 outside 0.087/5.8 inside 0.093/6.6 walk 0.161/9.6
+シード 1061	bat	1回 2死 - 差-1	最善 normal(ev)	normal 0.063/4.3 power 0.056/3.8 contact 0.058/3.8
+シード 1062	pitch	9回 2死 - 差1	最善 outside(p1)	normal 0.084/5.8 fast 0.090/6.4 breaking 0.083/5.7 outside 0.082/5.5 inside 0.087/6.2 walk 0.161/9.6
+シード 1063	bat	4回 2死 1 差4	最善 power(ev)	normal 0.220/13.4 power 0.225/13.7 contact 0.203/12.3 steal 0.186/14.1
+シード 1064	pitch	3回 0死 2 差-2	最善 normal(ev)	normal 0.953/54.6 fast 1.003/56.6 breaking 0.994/55.7 outside 0.990/55.3 inside 0.969/54.6 walk 1.376/59.0
+シード 1065	bat	5回 2死 2 差-1	最善 contact(ev)	normal 0.288/22.6 power 0.295/22.6 contact 0.306/24.7
+シード 1066	bat	4回 0死 1 差0	最善 normal(ev)	normal 0.779/38.7 power 0.732/36.6 contact 0.773/38.5 bunt 0.550/35.3 steal 0.735/43.0
+シード 1067	pitch	9回 2死 1 差4	最善 outside(ev)	normal 0.262/15.9 fast 0.329/20.0 breaking 0.283/17.2 outside 0.247/14.9 inside 0.292/17.7
+シード 1068	pitch	3回 2死 23 差-1	最善 inside(ev)	normal 0.564/26.5 fast 0.530/25.1 breaking 0.501/23.6 outside 0.568/27.0 inside 0.494/23.2 walk 0.685/31.0
+シード 1069	pitch	6回 1死 - 差-1	最善 normal(ev)	normal 0.189/11.5 fast 0.212/13.1 breaking 0.212/12.8 outside 0.211/12.6 inside 0.204/12.5 walk 0.433/23.8
+シード 1070	bat	2回 2死 23 差-1	最善 power(ev)	normal 0.876/41.2 power 0.939/42.8 contact 0.900/43.6
+シード 1071	pitch	6回 0死 3 差-1	最善 fast(ev)	normal 1.061/73.9 fast 1.020/71.5 breaking 1.045/73.8 outside 1.068/74.1 inside 1.044/73.1 walk 1.580/77.7
+シード 1072	bat	4回 2死 1 差2	最善 power(ev)	normal 0.224/13.4 power 0.260/15.6 contact 0.206/12.4 steal 0.184/14.0
+シード 1073	bat	6回 0死 2 差-1	最善 contact(ev)	normal 0.987/56.7 power 0.961/55.3 contact 0.991/57.3 bunt 0.782/56.4
+シード 1074	bat	7回 1死 23 差-4	最善 contact(ev)	normal 1.159/58.8 power 1.159/57.0 contact 1.196/61.6 squeeze 1.115/83.9
+シード 1075	pitch	6回 1死 23 差3	最善 inside(ev)	normal 1.291/62.6 fast 1.375/64.9 breaking 1.316/63.6 outside 1.300/62.9 inside 1.289/61.9 walk 1.509/65.2
+シード 1076	bat	2回 0死 23 差4	最善 contact(ev)	normal 1.658/75.9 power 1.587/73.1 contact 1.674/77.1 squeeze 1.493/84.4
+シード 1077	pitch	4回 2死 3 差1	最善 normal(ev)	normal 0.376/29.2 fast 0.445/33.9 breaking 0.400/30.6 outside 0.382/29.4 inside 0.388/29.0 walk 0.409/24.8
+シード 1078	bat	8回 1死 3 差-2	最善 squeeze(p1)	normal 0.849/61.9 power 0.809/58.5 contact 0.867/64.1 squeeze 0.829/76.5
+シード 1079	pitch	8回 2死 12 差4	最善 outside(ev)	normal 0.628/35.9 fast 0.712/39.6 breaking 0.649/36.6 outside 0.616/35.6 inside 0.641/35.0
+シード 1080	pitch	6回 2死 - 差-1	最善 breaking(ev)	normal 0.071/4.9 fast 0.064/4.4 breaking 0.063/4.4 outside 0.066/4.4 inside 0.067/4.7 walk 0.161/9.6
+シード 1081	pitch	3回 0死 123 差0	最善 inside(ev)	normal 1.962/78.4 fast 1.918/77.0 breaking 1.934/78.3 outside 1.974/78.6 inside 1.916/77.3
+シード 1082	pitch	2回 2死 2 差-1	最善 walk(ev)	normal 0.405/29.8 fast 0.493/35.7 breaking 0.413/30.1 outside 0.385/28.2 inside 0.429/30.5 walk 0.375/21.5
+シード 1083	pitch	6回 0死 23 差3	最善 fast(ev)	normal 1.519/73.2 fast 1.460/70.7 breaking 1.494/73.0 outside 1.528/73.4 inside 1.485/72.1 walk 2.231/82.5
+シード 1084	pitch	3回 2死 12 差-2	最善 outside(ev)	normal 0.730/41.8 fast 0.820/45.5 breaking 0.773/43.6 outside 0.693/40.7 inside 0.744/40.4
+シード 1085	bat	2回 2死 1 差-4	最善 steal(ev)	normal 0.148/8.9 power 0.131/7.9 contact 0.136/8.2 steal 0.185/14.0
+シード 1086	pitch	9回 2死 12 差-2	最善 normal(p1)	normal 0.442/24.3 fast 0.521/28.0 breaking 0.469/25.3 outside 0.455/24.8 inside 0.479/25.2
+シード 1087	bat	8回 1死 - 差-4	最善 power(ev)	normal 0.220/13.6 power 0.221/13.9 contact 0.215/13.0
+シード 1088	pitch	3回 1死 13 差4	最善 fast(ev)	normal 0.931/55.2 fast 0.891/52.6 breaking 0.910/54.9 outside 0.939/55.6 inside 0.901/53.5
+シード 1089	pitch	9回 1死 1 差2	最善 inside(p1)	normal 0.349/19.6 fast 0.351/19.7 breaking 0.346/19.5 outside 0.361/20.2 inside 0.340/19.1
+シード 1090	pitch	3回 1死 1 差2	最善 inside(ev)	normal 0.352/19.5 fast 0.355/19.6 breaking 0.349/19.4 outside 0.367/20.2 inside 0.344/19.0
+シード 1091	pitch	1回 2死 23 差0	最善 normal(ev)	normal 0.553/27.6 fast 0.645/31.5 breaking 0.602/29.7 outside 0.579/28.9 inside 0.553/27.1 walk 0.685/31.0
+シード 1092	bat	9回 1死 3 差-4	最善 squeeze(ev)	normal 0.652/51.2 power 0.588/46.0 contact 0.682/54.2 squeeze 0.728/66.4
+シード 1093	pitch	8回 1死 12 差-4	最善 normal(ev)	normal 0.832/40.6 fast 0.888/42.7 breaking 0.875/42.2 outside 0.885/42.7 inside 0.854/41.2
+シード 1094	pitch	2回 0死 12 差3	最善 breaking(ev)	normal 1.177/52.8 fast 1.145/51.7 breaking 1.141/51.7 outside 1.193/53.4 inside 1.145/51.8
+シード 1095	pitch	7回 2死 - 差-1	最善 normal(p1)	normal 0.067/4.5 fast 0.083/5.9 breaking 0.078/5.2 outside 0.075/4.9 inside 0.076/5.3 walk 0.161/9.6
+シード 1096	bat	3回 1死 - 差-2	最善 normal(ev)	normal 0.131/8.3 power 0.117/7.5 contact 0.129/8.1
+シード 1097	pitch	4回 1死 - 差-1	最善 normal(ev)	normal 0.274/16.8 fast 0.305/19.1 breaking 0.289/17.6 outside 0.282/16.8 inside 0.292/18.2 walk 0.433/23.8
+シード 1098	pitch	7回 1死 1 差-1	最善 breaking(p1)	normal 0.422/23.3 fast 0.440/24.2 breaking 0.421/23.2 outside 0.436/23.9 inside 0.431/23.7
+シード 1099	bat	7回 2死 - 差-4	最善 power(ev)	normal 0.096/6.8 power 0.116/8.7 contact 0.086/5.8
+シード 1100	bat	4回 2死 - 差3	最善 power(ev)	normal 0.095/6.6 power 0.109/8.0 contact 0.088/5.8
+シード 1101	pitch	9回 2死 1 差4	最善 outside(ev)	normal 0.155/9.5 fast 0.161/9.9 breaking 0.152/9.3 outside 0.151/9.2 inside 0.156/9.5
+シード 1102	bat	6回 2死 1 差4	最善 power(ev)	normal 0.267/16.2 power 0.310/18.8 contact 0.242/14.7 steal 0.173/13.1
+シード 1103	bat	2回 1死 23 差-2	最善 contact(ev)	normal 1.220/60.4 power 1.168/57.0 contact 1.233/62.2 squeeze 1.020/76.0
+シード 1104	pitch	6回 1死 13 差1	最善 outside(ev)	normal 1.265/67.4 fast 1.360/69.9 breaking 1.314/68.6 outside 1.263/67.3 inside 1.283/66.5
+シード 1105	bat	8回 2死 - 差-1	最善 normal(p1)	normal 0.048/3.2 power 0.040/2.6 contact 0.046/3.0
+シード 1106	pitch	6回 0死 12 差-3	最善 inside(ev)	normal 1.506/62.7 fast 1.552/63.9 breaking 1.516/63.0 outside 1.523/63.4 inside 1.504/62.4
+シード 1107	pitch	8回 2死 123 差-4	最善 inside(ev)	normal 0.774/33.5 fast 0.822/35.2 breaking 0.757/32.9 outside 0.794/35.2 inside 0.737/32.0
+シード 1108	pitch	3回 2死 2 差4	最善 inside(ev)	normal 0.260/19.7 fast 0.268/20.2 breaking 0.265/19.9 outside 0.262/19.8 inside 0.256/19.1 walk 0.375/21.5
+シード 1109	pitch	1回 2死 12 差1	最善 outside(ev)	normal 0.619/34.5 fast 0.751/40.3 breaking 0.649/35.6 outside 0.601/33.7 inside 0.665/35.1
+シード 1110	pitch	2回 2死 3 差-2	最善 normal(ev)	normal 0.217/16.8 fast 0.250/19.2 breaking 0.233/17.8 outside 0.237/18.1 inside 0.222/16.8 walk 0.409/24.8
+シード 1111	pitch	7回 1死 3 差4	最善 normal(ev)	normal 0.944/66.8 fast 0.996/68.9 breaking 0.971/67.6 outside 0.946/66.4 inside 0.946/65.6 walk 1.032/59.0
+シード 1112	pitch	2回 0死 123 差-3	最善 inside(ev)	normal 2.055/79.6 fast 2.072/79.5 breaking 2.079/80.3 outside 2.096/80.3 inside 2.036/78.8
+シード 1113	pitch	3回 2死 3 差1	最善 walk(ev)	normal 0.438/34.7 fast 0.454/35.8 breaking 0.417/32.9 outside 0.434/34.6 inside 0.420/32.5 walk 0.409/24.8
+シード 1114	pitch	7回 1死 13 差1	最善 fast(p1)	normal 0.954/56.6 fast 0.894/53.1 breaking 0.928/56.2 outside 0.955/56.9 inside 0.913/54.8
+シード 1115	bat	2回 1死 3 差3	最善 contact(ev)	normal 0.894/64.0 power 0.887/62.4 contact 0.911/66.4 squeeze 0.903/83.8
+シード 1116	bat	1回 1死 123 差-4	最善 contact(ev)	normal 1.530/65.9 power 1.428/61.4 contact 1.533/67.3 squeeze 1.205/74.2
+シード 1117	pitch	6回 1死 - 差0	最善 normal(ev)	normal 0.263/16.4 fast 0.294/18.8 breaking 0.279/17.3 outside 0.264/16.0 inside 0.281/17.9 walk 0.433/23.8
+シード 1118	bat	4回 0死 123 差-1	最善 normal(ev)	normal 2.377/84.6 power 2.331/83.0 contact 2.376/85.2 squeeze 1.969/89.4
+シード 1119	pitch	2回 0死 - 差-1	最善 normal(ev)	normal 0.369/20.6 fast 0.400/22.4 breaking 0.394/21.9 outside 0.391/21.6 inside 0.375/21.0 walk 0.784/39.0
+シード 1120	pitch	6回 1死 3 差3	最善 normal(ev)	normal 0.750/55.7 fast 0.805/58.3 breaking 0.795/57.5 outside 0.779/56.4 inside 0.760/54.9 walk 1.032/59.0
+シード 1121	pitch	6回 0死 13 差2	最善 inside(ev)	normal 1.466/74.9 fast 1.483/75.0 breaking 1.457/75.0 outside 1.483/75.2 inside 1.436/73.6
+シード 1122	bat	3回 1死 3 差-2	最善 squeeze(ev)	normal 0.819/61.4 power 0.806/59.5 contact 0.860/65.0 squeeze 0.974/91.0
+シード 1123	pitch	6回 2死 13 差1	最善 breaking(ev)	normal 0.293/18.2 fast 0.275/17.2 breaking 0.258/16.1 outside 0.299/18.9 inside 0.266/16.4
+シード 1124	pitch	7回 2死 3 差3	最善 inside(ev)	normal 0.411/32.5 fast 0.430/33.8 breaking 0.396/31.3 outside 0.406/32.4 inside 0.389/30.3 walk 0.409/24.8
+シード 1125	bat	3回 1死 13 差-2	最善 power(ev)	normal 1.333/70.0 power 1.383/69.7 contact 1.338/72.5 squeeze 1.178/92.1 steal 0.965/57.3
+シード 1126	bat	7回 0死 2 差0	最善 contact(p1)	normal 1.033/58.5 power 1.037/58.3 contact 1.044/59.6 bunt 0.797/57.1
+シード 1127	bat	6回 1死 2 差-3	最善 power(ev)	normal 0.733/46.7 power 0.764/47.9 contact 0.728/47.2 bunt 0.348/26.0
+シード 1128	pitch	6回 2死 - 差-4	最善 breaking(ev)	normal 0.043/2.9 fast 0.044/3.0 breaking 0.041/2.8 outside 0.046/3.0 inside 0.043/2.9 walk 0.161/9.6
+シード 1129	pitch	3回 0死 1 差4	最善 inside(ev)	normal 0.697/35.5 fast 0.674/34.4 breaking 0.675/34.8 outside 0.695/35.4 inside 0.668/34.4
+シード 1130	pitch	2回 2死 13 差1	最善 breaking(ev)	normal 0.444/27.5 fast 0.421/26.5 breaking 0.390/24.3 outside 0.440/28.1 inside 0.394/24.3
+シード 1131	pitch	8回 2死 23 差3	最善 normal(ev)	normal 0.476/22.1 fast 0.541/24.8 breaking 0.518/24.0 outside 0.508/23.6 inside 0.476/21.9 walk 0.685/31.0
+シード 1132	bat	2回 1死 3 差-4	最善 squeeze(ev)	normal 0.915/65.5 power 0.931/64.8 contact 0.935/68.2 squeeze 0.948/88.4
+シード 1133	pitch	4回 1死 - 差-3	最善 fast(ev)	normal 0.128/8.0 fast 0.120/7.6 breaking 0.122/7.7 outside 0.132/8.2 inside 0.121/7.7 walk 0.433/23.8
+シード 1134	pitch	7回 0死 2 差4	最善 fast(ev)	normal 0.912/53.8 fast 0.875/52.0 breaking 0.884/52.7 outside 0.917/54.0 inside 0.886/52.6 walk 1.376/59.0
+シード 1135	bat	6回 2死 - 差1	最善 normal(ev)	normal 0.050/3.3 power 0.041/2.8 contact 0.047/3.1
+シード 1136	pitch	1回 2死 13 差2	最善 inside(ev)	normal 0.272/16.8 fast 0.292/17.8 breaking 0.273/16.6 outside 0.294/18.0 inside 0.267/16.1
+シード 1137	bat	9回 1死 - 差4	最善 normal(ev)	normal 0.182/11.3 power 0.165/10.3 contact 0.174/10.7
+シード 1138	bat	7回 1死 2 差-1	最善 normal(p1)	normal 0.626/40.2 power 0.624/39.8 contact 0.618/40.1 bunt 0.319/24.4
+シード 1139	bat	7回 1死 123 差2	最善 squeeze(p1)	normal 1.507/65.1 power 1.509/63.2 contact 1.540/67.4 squeeze 1.340/85.4
+シード 1140	bat	9回 1死 - 差1	最善 power(p1)	normal 0.253/15.6 power 0.263/16.7 contact 0.245/14.7
+シード 1141	pitch	6回 2死 1 差2	最善 outside(ev)	normal 0.232/13.9 fast 0.292/17.5 breaking 0.251/15.0 outside 0.231/13.7 inside 0.261/15.6
+シード 1142	bat	6回 1死 12 差2	最善 normal(ev)	normal 0.611/31.1 power 0.562/29.1 contact 0.609/31.0 bunt 0.481/24.0
+シード 1143	bat	5回 0死 123 差2	最善 contact(ev)	normal 2.202/82.0 power 2.155/80.2 contact 2.210/82.9 squeeze 1.955/88.6
+シード 1144	bat	3回 0死 2 差-1	最善 contact(ev)	normal 0.884/53.0 power 0.858/51.5 contact 0.892/53.8 bunt 0.783/56.2
+シード 1145	pitch	7回 2死 2 差-4	最善 fast(ev)	normal 0.330/25.0 fast 0.304/23.1 breaking 0.310/23.5 outside 0.318/24.4 inside 0.304/22.8 walk 0.375/21.5
+シード 1146	bat	3回 2死 - 差-3	最善 power(ev)	normal 0.086/6.1 power 0.098/7.3 contact 0.078/5.2
+シード 1147	pitch	5回 0死 - 差-2	最善 normal(ev)	normal 0.510/27.9 fast 0.557/31.0 breaking 0.534/28.9 outside 0.531/28.4 inside 0.537/29.6 walk 0.784/39.0
+シード 1148	pitch	6回 0死 1 差3	最善 normal(ev)	normal 0.773/38.5 fast 0.812/40.2 breaking 0.817/40.3 outside 0.810/39.8 inside 0.779/38.7
+シード 1149	pitch	4回 0死 2 差4	最善 inside(ev)	normal 0.863/52.1 fast 0.838/50.8 breaking 0.836/51.1 outside 0.865/52.3 inside 0.834/50.8 walk 1.376/59.0
+シード 1150	pitch	4回 1死 12 差-2	最善 inside(ev)	normal 0.907/44.2 fast 0.941/45.6 breaking 0.915/44.5 outside 0.919/45.0 inside 0.890/43.3
+シード 1151	bat	2回 1死 2 差-4	最善 normal(ev)	normal 0.594/39.4 power 0.569/37.7 contact 0.592/39.7 bunt 0.319/24.5
+シード 1152	pitch	5回 2死 23 差1	最善 normal(ev)	normal 0.462/23.2 fast 0.522/25.8 breaking 0.507/25.2 outside 0.487/24.5 inside 0.463/22.8 walk 0.685/31.0
+シード 1153	bat	8回 1死 23 差2	最善 squeeze(p1)	normal 1.022/53.4 power 0.925/47.6 contact 1.039/55.6 squeeze 0.897/65.7
+シード 1154	pitch	3回 1死 - 差3	最善 normal(ev)	normal 0.264/16.2 fast 0.288/18.0 breaking 0.277/16.9 outside 0.268/16.0 inside 0.274/17.1 walk 0.433/23.8
+シード 1155	pitch	4回 0死 2 差-4	最善 normal(ev)	normal 0.892/51.9 fast 0.949/54.2 breaking 0.932/52.9 outside 0.933/52.8 inside 0.909/52.0 walk 1.376/59.0
+シード 1156	bat	7回 2死 2 差-1	最善 contact(p1)	normal 0.198/15.1 power 0.185/14.0 contact 0.202/15.7
+シード 1157	pitch	7回 0死 1 差-1	最善 inside(p1)	normal 0.927/44.4 fast 0.944/45.1 breaking 0.934/44.7 outside 0.923/44.1 inside 0.913/43.9
+シード 1158	pitch	6回 0死 2 差2	最善 inside(ev)	normal 0.907/53.6 fast 0.916/53.9 breaking 0.907/53.5 outside 0.923/54.1 inside 0.898/52.9 walk 1.376/59.0
+シード 1159	bat	6回 2死 - 差2	最善 normal(ev)	normal 0.033/2.2 power 0.028/1.9 contact 0.032/2.1
+シード 1160	pitch	7回 0死 - 差0	最善 breaking(p1)	normal 0.316/17.9 fast 0.302/17.2 breaking 0.298/17.1 outside 0.320/18.1 inside 0.301/17.2 walk 0.784/39.0
+シード 1161	bat	3回 0死 3 差-3	最善 contact(ev)	normal 1.019/71.9 power 0.962/68.4 contact 1.036/73.6 squeeze 0.870/67.5
+シード 1162	bat	1回 1死 - 差0	最善 normal(ev)	normal 0.170/10.5 power 0.156/9.6 contact 0.169/10.3
+シード 1163	pitch	4回 0死 - 差0	最善 inside(ev)	normal 0.336/18.9 fast 0.342/19.3 breaking 0.335/18.9 outside 0.348/19.5 inside 0.329/18.6 walk 0.784/39.0
+シード 1164	bat	2回 0死 23 差-3	最善 contact(ev)	normal 1.535/72.8 power 1.446/69.2 contact 1.556/74.4 squeeze 1.443/81.6
+シード 1165	pitch	1回 2死 1 差-2	最善 normal(ev)	normal 0.214/12.9 fast 0.272/16.5 breaking 0.240/14.5 outside 0.216/12.9 inside 0.243/14.6
+シード 1166	pitch	2回 1死 3 差4	最善 fast(ev)	normal 0.625/49.1 fast 0.567/44.4 breaking 0.616/48.9 outside 0.634/49.5 inside 0.592/46.5 walk 1.032/59.0
+シード 1167	pitch	8回 2死 2 差-1	最善 inside(p1)	normal 0.307/23.6 fast 0.294/22.7 breaking 0.283/21.8 outside 0.306/23.8 inside 0.273/20.9 walk 0.375/21.5
+シード 1168	bat	4回 1死 13 差-4	最善 contact(ev)	normal 1.267/68.1 power 1.274/66.5 contact 1.287/70.8 squeeze 1.167/91.1 steal 0.955/57.3
+シード 1169	bat	8回 1死 12 差4	最善 power(ev)	normal 1.143/53.9 power 1.182/54.5 contact 1.141/55.1 bunt 0.555/26.7
+シード 1170	bat	7回 0死 3 差2	最善 squeeze(p1)	normal 1.347/82.2 power 1.360/81.6 contact 1.356/83.5 squeeze 1.093/89.8
+シード 1171	pitch	4回 2死 - 差4	最善 normal(ev)	normal 0.089/6.1 fast 0.108/7.8 breaking 0.098/6.7 outside 0.091/6.1 inside 0.098/7.0 walk 0.161/9.6
+シード 1172	bat	1回 2死 13 差2	最善 steal(ev)	normal 0.340/20.0 power 0.291/16.9 contact 0.321/19.4 steal 0.354/17.0
+シード 1173	pitch	6回 0死 2 差1	最善 fast(ev)	normal 0.808/49.4 fast 0.785/48.2 breaking 0.790/48.7 outside 0.821/49.9 inside 0.789/48.5 walk 1.376/59.0
+シード 1174	pitch	8回 1死 1 差3	最善 breaking(ev)	normal 0.475/26.0 fast 0.492/26.8 breaking 0.465/25.5 outside 0.471/25.6 inside 0.469/25.7
+シード 1175	bat	5回 2死 2 差-1	最善 normal(ev)	normal 0.271/20.2 power 0.260/19.1 contact 0.268/20.3
+シード 1176	pitch	6回 1死 1 差3	最善 fast(ev)	normal 0.307/17.6 fast 0.283/16.3 breaking 0.287/16.6 outside 0.312/17.8 inside 0.291/16.7
+シード 1177	pitch	7回 0死 123 差1	最善 inside(p1)	normal 2.064/79.4 fast 2.061/78.9 breaking 2.078/79.8 outside 2.088/79.8 inside 2.023/78.2
+シード 1178	bat	2回 2死 12 差2	最善 power(ev)	normal 0.422/24.2 power 0.460/25.1 contact 0.434/26.4
+シード 1179	pitch	2回 0死 13 差-1	最善 normal(ev)	normal 1.616/78.0 fast 1.687/79.2 breaking 1.679/79.1 outside 1.660/78.5 inside 1.625/77.4
+シード 1180	bat	9回 1死 23 差-2	最善 squeeze(p1)	normal 1.165/58.4 power 1.066/53.1 contact 1.182/60.3 squeeze 0.965/71.4
+シード 1181	pitch	9回 2死 12 差3	最善 inside(ev)	normal 0.425/25.7 fast 0.447/26.8 breaking 0.413/24.9 outside 0.425/26.1 inside 0.404/24.0
+シード 1182	pitch	3回 0死 23 差-2	最善 normal(ev)	normal 1.912/81.3 fast 2.003/82.8 breaking 1.946/81.8 outside 1.936/81.5 inside 1.942/81.2 walk 2.231/82.5
+シード 1183	bat	1回 0死 - 差3	最善 power(ev)	normal 0.502/27.9 power 0.529/30.1 contact 0.490/26.7
+シード 1184	bat	5回 0死 23 差-4	最善 contact(ev)	normal 1.531/72.7 power 1.445/69.3 contact 1.552/74.3 squeeze 1.436/81.2
+シード 1185	pitch	9回 1死 - 差4	最善 breaking(ev)	normal 0.199/12.2 fast 0.201/12.3 breaking 0.197/12.0 outside 0.206/12.4 inside 0.198/12.2 walk 0.433/23.8
+シード 1186	pitch	1回 1死 23 差-4	最善 inside(ev)	normal 1.114/56.4 fast 1.106/55.3 breaking 1.125/57.2 outside 1.143/57.3 inside 1.094/55.0 walk 1.509/65.2
+シード 1187	bat	1回 2死 13 差0	最善 normal(ev)	normal 0.359/21.9 power 0.328/19.6 contact 0.355/22.5 steal 0.298/14.3
+シード 1188	bat	1回 1死 1 差-1	最善 power(ev)	normal 0.567/30.3 power 0.595/31.7 contact 0.555/29.7 bunt 0.294/20.6 steal 0.392/26.0
+シード 1189	bat	6回 1死 2 差0	最善 contact(ev)	normal 0.540/36.3 power 0.518/34.8 contact 0.547/37.0 bunt 0.335/25.4
+シード 1190	pitch	6回 2死 2 差1	最善 inside(ev)	normal 0.266/20.7 fast 0.274/21.2 breaking 0.262/20.3 outside 0.269/21.0 inside 0.250/19.2 walk 0.375/21.5
+シード 1191	pitch	1回 2死 2 差-4	最善 fast(ev)	normal 0.138/10.3 fast 0.117/8.8 breaking 0.124/9.3 outside 0.143/10.7 inside 0.123/9.2 walk 0.375/21.5
+シード 1192	pitch	2回 0死 123 差1	最善 inside(ev)	normal 2.077/79.7 fast 2.094/79.7 breaking 2.084/80.1 outside 2.103/80.2 inside 2.038/78.7
+シード 1193	pitch	8回 0死 - 差3	最善 normal(ev)	normal 0.487/26.8 fast 0.528/29.5 breaking 0.507/27.8 outside 0.501/27.0 inside 0.505/28.1 walk 0.784/39.0
+シード 1194	bat	1回 2死 3 差-4	最善 contact(ev)	normal 0.215/17.1 power 0.199/15.6 contact 0.220/17.8
+シード 1195	pitch	2回 1死 - 差4	最善 breaking(ev)	normal 0.191/11.8 fast 0.185/11.4 breaking 0.178/11.0 outside 0.190/11.6 inside 0.180/11.2 walk 0.433/23.8
+シード 1196	bat	6回 0死 - 差0	最善 normal(ev)	normal 0.355/20.0 power 0.327/18.7 contact 0.350/19.6
+シード 1197	pitch	2回 2死 1 差4	最善 breaking(ev)	normal 0.092/5.6 fast 0.078/4.7 breaking 0.076/4.7 outside 0.094/5.7 inside 0.080/4.9
+シード 1198	pitch	6回 2死 2 差-4	最善 normal(ev)	normal 0.221/16.5 fast 0.263/19.5 breaking 0.235/17.4 outside 0.237/17.5 inside 0.222/16.4 walk 0.375/21.5
+シード 1199	bat	9回 2死 13 差-4	最善 power(ev)	normal 0.671/40.1 power 0.746/41.9 contact 0.663/42.4 steal 0.338/16.3
 
 ## 3. 盗塁の損益分岐
 
-0アウト・一塁:79.4%(しない 0.773 / 成功 0.924 / 失敗 0.190) ✓
+0アウト・一塁:78.9%(しない 0.784 / 成功 0.941 / 失敗 0.195) ✓
 
-1アウト・一塁:73.3%(しない 0.425 / 成功 0.557 / 失敗 0.063) ✓
+1アウト・一塁:72.0%(しない 0.433 / 成功 0.577 / 失敗 0.064) ✓
 
-2アウト・一塁:61.9%(しない 0.157 / 成功 0.253 / 失敗 0.000) ✓
+2アウト・一塁:60.1%(しない 0.161 / 成功 0.268 / 失敗 0.000) ✓
 
-0アウト・一塁三塁:83.7%(しない 1.522 / 成功 1.673 / 失敗 0.746) ✕
+0アウト・一塁三塁:80.0%(しない 1.580 / 成功 1.739 / 失敗 0.944) ✓
 
-1アウト・一塁三塁:83.8%(しない 0.990 / 成功 1.122 / 失敗 0.305) ✕
+1アウト・一塁三塁:75.3%(しない 1.032 / 成功 1.171 / 失敗 0.610) ✓
 
-2アウト・一塁三塁:80.8%(しない 0.405 / 成功 0.501 / 失敗 0.000) ✕
+2アウト・一塁三塁:79.3%(しない 0.409 / 成功 0.515 / 失敗 0.000) ✓
 
 ## 4. 送りバント(無死一塁。基準の投手)
 
-strong:得点期待値 しない 0.878 / バント 0.583(差 -0.295)、1点以上の確率 しない 43.1% / バント 36.1%(成功率 86.4%)
+strong:得点期待値 しない 0.891 / バント 0.609(差 -0.283)、1点以上の確率 しない 43.3% / バント 38.0%(成功率 90.0%)
 
-normal:得点期待値 しない 0.773 / バント 0.553(差 -0.220)、1点以上の確率 しない 38.9% / バント 34.5%(成功率 78.0%)
+normal:得点期待値 しない 0.784 / バント 0.582(差 -0.201)、1点以上の確率 しない 39.0% / バント 36.8%(成功率 85.0%)
 
-weak:得点期待値 しない 0.687 / バント 0.528(差 -0.159)、1点以上の確率 しない 35.4% / バント 33.1%(成功率 70.6%)
+weak:得点期待値 しない 0.695 / バント 0.555(差 -0.141)、1点以上の確率 しない 35.4% / バント 35.2%(成功率 77.6%)
 
 ## 5. 中位の投手と中位の打者、1000打席
 打率 0.247 出塁率 0.300 長打率 0.348 三振率 17.6% 四球率 7.0%(本塁打 11、三塁打 5、二塁打 51)
 内訳:{"K":176,"BB":70,"GO":295,"FO":229,"S":163,"D":51,"T":5,"HR":11}
 
-得点期待値(無死走者なし)0.386 → 9回あたり約 3.47点
+得点期待値(無死走者なし)0.392 → 9回あたり約 3.53点
+
+## 7. 良い結果の確率が 20〜80% に入る割合(場面×指示):86.3% ✓
+
+## 8. 良い結果の確率の最大 90.0%(上限 90.0%)、悪い結果の確率の最小 5.0%(下限 5.0%)。14025通り(極端な能力を含む)
+
+## 9. 良い結果の確率が最も高い指示が、最善でもある場面の割合:50.7% ✓
 
 ## 6. 同じシードで同じ結果:一致
 
 ## 参考:得点期待値 / 1点以上の確率(基準の打者)
-0アウト:走者なし 0.39/21.7%、一塁 0.77/38.9%、二塁 0.92/53.9%、一二塁 1.35/58.1%、三塁 1.13/74.0%、一三塁 1.52/74.9%、二三塁 1.67/74.9%、満塁 2.15/80.3%
-1アウト:走者なし 0.19/11.8%、一塁 0.43/23.6%、二塁 0.56/36.7%、一二塁 0.82/40.1%、三塁 0.75/55.5%、一三塁 0.99/56.4%、二三塁 1.12/56.4%、満塁 1.45/63.1%
-2アウト:走者なし 0.06/4.3%、一塁 0.16/9.4%、二塁 0.25/19.0%、一二塁 0.36/20.4%、三塁 0.30/24.2%、一三塁 0.40/24.8%、二三塁 0.50/24.8%、満塁 0.67/31.0%
+0アウト:走者なし 0.39/21.9%、一塁 0.78/39.0%、二塁 0.94/54.8%、一二塁 1.38/59.0%、三塁 1.16/76.9%、一三塁 1.58/77.7%、二三塁 1.74/77.7%、満塁 2.23/82.5%
+1アウト:走者なし 0.19/12.0%、一塁 0.43/23.8%、二塁 0.58/38.2%、一二塁 0.85/41.4%、三塁 0.78/58.1%、一三塁 1.03/59.0%、二三塁 1.17/59.0%、満塁 1.51/65.2%
+2アウト:走者なし 0.06/4.4%、一塁 0.16/9.6%、二塁 0.27/20.3%、一二塁 0.38/21.5%、三塁 0.31/24.2%、一三塁 0.41/24.8%、二三塁 0.52/24.8%、満塁 0.69/31.0%

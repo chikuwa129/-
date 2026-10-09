@@ -54,7 +54,7 @@ test('能力の補正の方向(ミートが高いと三振が減る、パワー�
 
 test('指示が使える条件(バント・スクイズ・盗塁・敬遠)', () => {
   const L = (o) => A.legalOrders(A.makeScene(o));
-  assert.ok(L({ outs: 0, bases: [50, null, null] }).indexOf('bunt') >= 0 && L({ outs: 2, bases: [50, null, null] }).indexOf('bunt') < 0);
+  assert.ok(L({ outs: 0, bases: [50, null, null] }).indexOf('bunt') >= 0 && L({ outs: 2, bases: [50, null, null] }).indexOf('bunt') < 0 && L({ outs: 0, bases: [50, null, 50] }).indexOf('bunt') < 0);
   assert.ok(L({ outs: 1, bases: [null, null, 50] }).indexOf('squeeze') >= 0 && L({ outs: 1, bases: [50, null, null] }).indexOf('squeeze') < 0);
   assert.ok(L({ bases: [50, null, null] }).indexOf('steal') >= 0 && L({ bases: [50, 50, null] }).indexOf('steal') < 0);
   assert.ok(L({ side: 'pitch', bases: [null, 50, null] }).indexOf('walk') >= 0 && L({ side: 'pitch', bases: [50, null, null] }).indexOf('walk') < 0);
@@ -82,6 +82,40 @@ test('isKeyScene:プリセットごとの判定', () => {
 test('得点期待値:走者が多いほど、アウトが少ないほど高い', () => {
   const re = A.reTable();
   for (let o = 0; o < 3; o++) { assert.ok(re[o * 8 + 7] > re[o * 8 + 1] && re[o * 8 + 1] > re[o * 8]); if (o < 2) assert.ok(re[o * 8] > re[(o + 1) * 8]); }
+});
+
+test('上限と下限:良い結果の確率は 90% を超えず、悪い結果の確率は 5% を下回らない(極端な能力でも)', () => {
+  const C = A.CONFIG.cap;
+  const ext = [0, 150];
+  for (const side of ['bat', 'pitch']) for (const c of ext) for (const pw of ext) for (const v of ext) for (const ct of ext) for (const d of ext) {
+    const sc = A.makeScene({ side: side, outs: 1, bases: [50, null, 50], batter: { contact: c, power: pw, speed: c }, pitcher: { velocity: v, control: ct, breaking: v, quick: ct }, defense: d, arm: d });
+    for (const o of A.legalOrders(sc)) {
+      const gb = A.goodBadOf(sc, o);
+      if (!gb) continue;
+      assert.ok(gb.good <= C.goodMax + 1e-9, side + ' ' + o + ' 良 ' + gb.good);
+      assert.ok(gb.bad >= C.badMin - 1e-9, side + ' ' + o + ' 悪 ' + gb.bad);
+    }
+  }
+});
+
+test('事前勝率が範囲の外なら isKeyScene は false(勝負にならない試合)。戦力差のラベル', () => {
+  const R = A.CONFIG.keyScene.success.winRange;
+  const base = { inning: 8, hero: true, focus: true, bases: [null, 50, null], diff: 0 };
+  for (const rule of ['success', 'manager']) {
+    assert.strictEqual(A.isKeyScene(A.makeScene(Object.assign({}, base, { winP: 0.5 })), rule), true, rule + ' 範囲内');
+    assert.strictEqual(A.isKeyScene(A.makeScene(Object.assign({}, base, { winP: R[0] - 0.01 })), rule), false, rule + ' 下');
+    assert.strictEqual(A.isKeyScene(A.makeScene(Object.assign({}, base, { winP: R[1] + 0.01 })), rule), false, rule + ' 上');
+    assert.strictEqual(A.isKeyScene(A.makeScene(Object.assign({}, base, { side: 'pitch', winP: 0.95 })), rule), false, rule + ' 投手');
+  }
+  assert.strictEqual(A.strengthLabel(0.35), '格上'); assert.strictEqual(A.strengthLabel(0.5), '同格'); assert.strictEqual(A.strengthLabel(0.7), '格下');
+});
+
+test('試合の勝率:事前勝率で始まり、点を取ると上がり、失点を防ぐと上がる', () => {
+  for (const w of [0.3, 0.5, 0.7]) assert.ok(Math.abs(A.gameWinProb(A.makeScene({ winP: w, inning: 1, half: 'top' })) - w) < 0.05, '開始 ' + w);
+  const sc = A.makeScene({ inning: 6, outs: 1, bases: [null, 50, null] });
+  assert.ok(A.gameWinProb(sc, { outs: 1, bases: [null, null, null], diff: 1 }) > A.gameWinProb(sc));
+  const d = A.makeScene({ side: 'pitch', inning: 6, outs: 1, bases: [null, 50, null] });
+  assert.ok(A.gameWinProb(d, { outs: 2, bases: [null, 50, null], diff: 0 }) > A.gameWinProb(d), '守備でアウトを取る');
 });
 
 // 本編のファイルが、試作の前後で変わっていない(タグ v-before-T1 と比べる)

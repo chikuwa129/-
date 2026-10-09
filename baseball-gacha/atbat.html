@@ -2,179 +2,233 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>打席の試作</title>
 <style>
-  :root { --bg: #f4f1ea; --card: #fffdf8; --ink: #222; --sub: #777; --line: #ddd5c6; --accent: #1f5f8b; --win: #1d7a3a; --lose: #b03a2e; }
+  /* 色はすべて明示する(テーマや埋め込みの環境に依存しない) */
+  :root { color-scheme: light; --bg: #10351f; --field: #1d5a33; --card: #fffdf8; --ink: #222; --sub: #666; --line: #d8cfbf; --accent: #1f5f8b; --win: #1d7a3a; --lose: #b03a2e; --gold: #e0a800; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; font-size: 15px; line-height: 1.5; }
-  .wrap { max-width: 560px; margin: 0 auto; padding: 0 12px calc(170px + env(safe-area-inset-bottom)); }
-  header { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 8px 0 6px; border-bottom: 1px solid var(--line); }
-  header h1 { font-size: 16px; margin: 0 0 4px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
-  .small { font-size: 12px; color: var(--sub); }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body { background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; font-size: 14px; line-height: 1.35; }
+  button { font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+  select, input { font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 6px; min-height: 40px; }
+  .app { height: 100vh; height: 100dvh; display: grid; gap: 6px; padding: 6px; padding-left: max(6px, env(safe-area-inset-left)); padding-right: max(6px, env(safe-area-inset-right)); }
+  @media (orientation: landscape) { .app { grid-template-columns: 22fr 50fr 28fr; grid-template-rows: 100%; } }
+  @media (orientation: portrait) { .app { grid-template-columns: 100%; grid-template-rows: auto 1fr auto; } }
+  .panel { background: var(--card); border-radius: 10px; padding: 8px; min-height: 0; min-width: 0; }
+  /* 左:状況 */
+  .stat { display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
+  @media (orientation: portrait) { .stat { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 12px; } }
+  .inn { font-size: 24px; font-weight: 900; line-height: 1.1; color: #111; }
+  .diff { font-size: 15px; font-weight: bold; color: #111; }
+  .lamps { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--sub); }
+  .lamps span { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--lose); background: #fff; }
+  .lamps span.on { background: var(--lose); }
+  .dia { position: relative; width: 78px; height: 66px; flex: none; }
+  .dia i { position: absolute; width: 24px; height: 24px; border: 2px solid #888; background: #fff; transform: rotate(45deg); }
+  .dia i.on { background: var(--gold); border-color: #8a6400; }
+  .dia .b2 { left: 27px; top: 3px; } .dia .b1 { left: 50px; top: 25px; } .dia .b3 { left: 4px; top: 25px; }
+  .wp { font-size: 12px; color: var(--sub); } .wp b { display: block; font-size: 26px; line-height: 1.1; color: #111; }
+  @media (orientation: portrait) { .wp b { display: inline; font-size: 22px; } }
+  .str { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; color: #fff; background: #555; }
+  .str.up { background: var(--lose); } .str.dn { background: var(--win); }
+  .note { font-size: 11px; color: var(--sub); }
+  .warn { font-size: 12px; font-weight: bold; color: var(--lose); }
+  /* 中央:場面の図(奥=相手、手前=自分) */
+  .field { position: relative; background: radial-gradient(ellipse at 50% 120%, #c49a6c 0 28%, var(--field) 29%); border-radius: 10px; padding: 6px; display: flex; flex-direction: column; justify-content: space-between; min-height: 0; overflow: hidden; }
+  .side { background: rgba(255,253,248,.95); border-radius: 8px; padding: 4px 6px; }
+  .side h3 { margin: 0; font-size: 12px; color: var(--sub); font-weight: normal; }
+  .side h3 b { color: #111; font-size: 14px; }
+  .opp { align-self: center; width: 78%; }
+  .me { width: 100%; }
+  .abil { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 4px; margin-top: 2px; }
+  .abil div { min-width: 0; background: #f2ede2; border-radius: 4px; text-align: center; font-size: 10px; color: var(--sub); padding: 1px 0; }
+  .abil b { display: block; font-size: 18px; line-height: 1.1; color: #111; }
+  .abil i { display: block; font-style: normal; font-size: 11px; color: #111; }
+  .me .abil b { font-size: 26px; } .me .abil i { font-size: 14px; } .me .abil div { font-size: 11px; }
+  .abil b small { font-size: 10px; font-weight: normal; }
+  .rkS b, .rkA b { color: #c0392b; } .rkB b, .rkC b { color: #d35400; } .rkF b, .rkG b { color: #888; }
+  .mid { text-align: center; color: #fff; font-size: 12px; text-shadow: 0 1px 2px #000; }
+  .gear { position: absolute; right: 6px; top: 6px; width: 44px; height: 44px; font-size: 20px; background: rgba(255,255,255,.92); z-index: 2; }
+  /* 結果(中央に大きく) */
+  .result { position: absolute; left: 8px; right: 8px; top: 50%; transform: translateY(-50%); background: rgba(255,253,248,.97); border-radius: 10px; padding: 8px 10px; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,.4); z-index: 3; }
+  .result .r1 { font-size: 26px; font-weight: 900; line-height: 1.2; }
+  .result .r2 { font-size: 14px; color: #111; }
+  .result .r3 { font-size: 16px; font-weight: bold; color: #111; margin-top: 2px; }
+  .result.pop { animation: pop .45s ease-out both; }
+  @keyframes pop { from { opacity: 0; transform: translateY(-50%) scale(.85); } to { opacity: 1; transform: translateY(-50%) scale(1); } }
+  @media (prefers-reduced-motion: reduce) { .result.pop { animation: none; } }
+  .good { color: var(--win); } .bad { color: var(--lose); }
+  /* 右:指示のボタン */
+  .orders { display: flex; flex-direction: column; gap: 4px; overflow: hidden; padding: 6px; }
+  @media (orientation: portrait) { .orders { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } .orders .wide { grid-column: 1 / -1; } }
+  .ob { flex: 1 1 0; min-height: 44px; max-height: 72px; padding: 2px 6px; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 0 6px; text-align: left; border: 2px solid var(--accent); background: #fff; color: #111; }
+  .ob .nm { font-size: 15px; font-weight: bold; color: var(--accent); white-space: nowrap; }
+  .ob .gb { text-align: right; font-size: 11px; color: var(--sub); white-space: nowrap; }
+  .ob .gb b { font-size: 17px; } .ob .gb b.g { color: var(--win); } .ob .gb b.x { color: var(--lose); }
+  .ob .sm { grid-column: 1 / -1; font-size: 10px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  @media (max-height: 380px), (max-width: 760px) {
+    .app { padding: 4px; gap: 4px; }
+    .orders { gap: 2px; padding: 3px; }
+    .ob { padding: 1px 4px; gap: 0 3px; }
+    .ob .nm { font-size: 13px; } .ob .gb { font-size: 9px; } .ob .gb b { font-size: 14px; } .ob .sm { font-size: 9px; }
+    .inn { font-size: 20px; } .wp b { font-size: 22px; } .dia { transform: scale(.85); transform-origin: left top; height: 56px; }
+    .me .abil b { font-size: 22px; } .abil b { font-size: 16px; }
+  }
+  .ob.best { box-shadow: 0 0 0 3px #f4c542; }
+  .ob.plain { border-color: #999; } .ob.plain .nm { color: #444; }
+  .next { flex: 1 1 auto; min-height: 56px; font-size: 18px; font-weight: bold; color: #fff; background: var(--accent); border-color: var(--accent); }
+  .hint { font-size: 11px; color: var(--sub); text-align: center; }
+  /* 設定(歯車) */
+  .sheet { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.5); display: flex; justify-content: center; align-items: stretch; padding: 8px; }
+  .sheet .box { background: var(--card); border-radius: 10px; width: 100%; max-width: 760px; overflow-y: auto; padding: 10px 12px; }
+  .sheet h2 { font-size: 15px; margin: 8px 0 4px; color: #111; }
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0; }
-  .chip { padding: 5px 10px; border: 1px solid var(--line); background: #fff; border-radius: 14px; font-size: 13px; }
-  .chip.on { background: var(--ink); color: #fff; border-color: var(--ink); }
-  select, input { font-size: 14px; padding: 5px; border: 1px solid var(--line); border-radius: 6px; background: #fff; min-width: 0; }
-  input[type=number] { width: 7em; }
-  .scene { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
-  .sc-big { font-size: 22px; font-weight: bold; }
-  .outs span { display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--lose); margin-right: 3px; vertical-align: middle; }
-  .outs span.on { background: var(--lose); }
-  .dia { position: relative; width: 84px; height: 84px; }
-  .dia i { position: absolute; width: 26px; height: 26px; border: 2px solid #999; background: #fff; transform: rotate(45deg); }
-  .dia i.on { background: #e0a800; border-color: #b07d00; }
-  .dia .b2 { left: 29px; top: 4px; } .dia .b1 { left: 54px; top: 29px; } .dia .b3 { left: 4px; top: 29px; } .dia .hp { left: 29px; top: 54px; background: #eee; border-color: #ccc; }
-  .abil { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 4px; margin-top: 4px; }
-  .abil div { min-width: 0; background: #f6f2e9; border-radius: 4px; padding: 2px; text-align: center; font-size: 11px; color: var(--sub); }
-  .abil b { display: block; font-size: 22px; line-height: 1.1; color: var(--ink); }
-  .abil i { display: block; font-style: normal; font-size: 13px; color: var(--ink); }
-  .abil b small { font-size: 11px; font-weight: normal; }
-  .rkS b, .rkA b { color: #c0392b; } .rkB b, .rkC b { color: #d35400; } .rkF b, .rkG b { color: #999; }
-  h2 { font-size: 15px; margin: 0 0 2px; }
-  .bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--card); border-top: 1px solid var(--line); box-shadow: 0 -2px 6px rgba(0,0,0,.08); padding-bottom: env(safe-area-inset-bottom); }
-  .bar-in { max-width: 560px; margin: 0 auto; padding: 6px 10px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-  .ob { border: 1px solid var(--accent); background: #fff; color: var(--accent); border-radius: 8px; padding: 6px 4px; min-height: 52px; font-size: 14px; font-weight: bold; text-align: center; line-height: 1.25; }
-  .ob small { display: block; font-size: 10px; font-weight: normal; color: var(--sub); }
-  .ob .ev { display: block; font-size: 11px; font-weight: normal; color: var(--ink); }
-  .ob.best { border-width: 2px; box-shadow: 0 0 0 2px #cfe3f2; }
-  .ob.next { grid-column: 1 / -1; background: var(--accent); color: #fff; min-height: 48px; font-size: 16px; }
-  .res { font-size: 20px; font-weight: bold; }
-  .up { color: var(--win); } .dn { color: var(--lose); }
-  table { border-collapse: collapse; width: 100%; font-size: 12px; } td, th { border-bottom: 1px dotted #ddd; padding: 2px 3px; text-align: left; }
-  .dev { font-family: ui-monospace, monospace; font-size: 10px; word-break: break-all; background: #eef; }
-  details summary { cursor: pointer; font-size: 14px; }
+  .chip { min-height: 44px; padding: 6px 12px; border-radius: 22px; background: #fff; color: #222; border: 1px solid #999; }
+  .chip.on { background: #222; color: #fff; border-color: #222; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; color: #111; } td, th { border-bottom: 1px dotted #ccc; padding: 2px 3px; text-align: left; }
+  .dev { font-family: ui-monospace, monospace; font-size: 10px; word-break: break-all; background: #eef; color: #111; padding: 6px; border-radius: 6px; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header><h1>⚾ 打席の試作(T1)</h1><div class="row" id="modes"></div></header>
-  <main id="main"></main>
-</div>
-<div class="bar"><div class="bar-in" id="bar"></div></div>
+<div class="app" id="app"></div>
+<div id="sheet"></div>
 <script src="atbat-engine.js"></script>
 <script>
 (function () {
   'use strict';
   const A = window.AtBat;
+  const C = A.CONFIG;
   const DEV = /[?&]dev=1(&|$)/.test(location.search);
   const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const pct = (v) => (v * 100).toFixed(1) + '%';
-  const sgn = (v, d) => (v >= 0 ? '+' : '') + v.toFixed(d == null ? 2 : d);
-  let mode = 'bat';        // 'bat' 野手(自分の打席) / 'pitch' 投手(ピンチ)
-  let seed = 1;
-  let rng = new A.Rng(seed);
-  let sc = null;           // 今の場面
-  let result = null;       // 直前の結果
-  let presetIdx = -1;
-  let bat = 'normal', pit = 'normal';
-  let lastEval = null;
+  const pc = (v) => Math.round(v * 100) + '%';
+  const sg = (v) => (v >= 0 ? '+' : '−') + Math.abs(Math.round(v * 100));
+  const S = { mode: 'bat', seed: 1, presetIdx: -1, bat: 'normal', pit: 'normal', key: 'success', sheet: false };
+  let rng = new A.Rng(1), sc = null, result = null, lastEval = null;
 
-  function scenesOfMode() { return A.SCENES.map((s, i) => ({ s: s, i: i })).filter((x) => (x.s.side === 'pitch') === (mode === 'pitch')); }
-  function applyPresets(s) {
-    s.batter = Object.assign({}, A.PRESETS.batter[bat]);
-    s.pitcher = Object.assign({}, A.PRESETS.pitcher[pit]);
-    return s;
-  }
+  function applyPresets(s) { s.batter = Object.assign({}, A.PRESETS.batter[S.bat]); s.pitcher = Object.assign({}, A.PRESETS.pitcher[S.pit]); return s; }
+  const inRange = (s) => A.inWinRange(s, C.keyScene[S.key]);
   function newScene(fromSeed) {
     result = null;
-    if (fromSeed || presetIdx < 0) {
-      const s = A.randomScene(seed);
-      s.side = mode;
-      sc = applyPresets(s);
-    } else sc = applyPresets(A.makeScene(Object.assign({}, A.SCENES[presetIdx], { side: mode })));
-    rng = new A.Rng((seed * 2654435761) >>> 0);
+    sc = fromSeed || S.presetIdx < 0 ? A.randomScene(S.seed) : A.makeScene(Object.assign({}, A.SCENES[S.presetIdx]));
+    sc.side = S.mode;
+    applyPresets(sc);
+    rng = new A.Rng((S.seed * 2654435761) >>> 0);
+    autoIfOut();
   }
-  // 結果のあと:3アウトまでは同じイニングを続ける(次の打者は同じ能力)。3アウトなら、次のシードの場面
+  // 勝負にならない試合:操作なしで、指示は「通常」の結果だけを出す
+  function autoIfOut() { if (!inRange(sc)) choose('normal', true); }
+  function choose(order, auto) {
+    const w0 = A.gameWinProb(sc);
+    const r = A.resolve(sc, order, rng);
+    const diff = sc.diff + (S.mode === 'bat' ? r.runs : -r.runs);
+    const w1 = A.gameWinProb(sc, { outs: r.outs, bases: r.bases, diff: diff });
+    result = Object.assign(r, { order: order, orderLabel: A.ORDER_LABEL[S.mode][order], w0: w0, w1: w1, diff: diff, auto: !!auto, fresh: true });
+  }
   function nextScene() {
-    if (result && result.outs < 3) {
-      const diff = sc.diff + (mode === 'bat' ? result.runs : -result.runs);
-      sc = Object.assign({}, sc, { outs: result.outs, bases: result.bases, diff: diff });
-      result = null;
-    } else { seed = (seed + 1) >>> 0; presetIdx = -1; newScene(true); }
+    if (result && result.outs < 3) { sc = Object.assign({}, sc, { outs: result.outs, bases: result.bases, diff: result.diff }); result = null; autoIfOut(); }
+    else { S.seed = (S.seed + 1) >>> 0; S.presetIdx = -1; newScene(true); }
   }
 
-  const box = (label, v, sub) => '<div class="rk' + A.rankOf(v) + '">' + label + '<b>' + A.rankOf(v) + '</b><i>' + Math.round(v) + '</i>' + (sub || '') + '</div>';
-  function abilHtml() {
-    const b = sc.batter, p = sc.pitcher;
-    const prs = (who, cur) => ['strong', 'normal', 'weak'].map((k) => '<button class="chip' + (cur === k ? ' on' : '') + '" data-' + who + '="' + k + '">' + { strong: '強い', normal: '普通', weak: '弱い' }[k] + '</button>').join('');
-    return '<div class="card"><h2>' + (mode === 'bat' ? '自分(打者)' : '相手の打者') + '</h2><div class="row">' + prs('bat', bat) + '</div>'
-      + '<div class="abil" style="--cols:3">' + box('ミート', b.contact) + box('パワー', b.power) + box('走力', b.speed) + '</div>'
-      + '<h2 style="margin-top:8px">' + (mode === 'bat' ? '相手の投手' : '自分(投手)') + '</h2><div class="row">' + prs('pit', pit) + '</div>'
-      + '<div class="abil" style="--cols:4"><div class="rk' + A.rankOf(p.velocity) + '">球速<b>' + A.kmh(p.velocity) + '<small>km/h</small></b><i>' + Math.round(p.velocity) + '</i></div>'
-      + box('制球', p.control) + '<div class="rk' + A.rankOf(p.breaking) + '">変化量<b>' + A.breakTotal(p.breaking) + '</b><i>' + Math.round(p.breaking) + '</i></div>' + box('クイック', p.quick) + '</div>'
-      + '<div class="small" style="margin-top:4px">守備側:守備 ' + sc.defense + ' / 肩 ' + sc.arm + (sc.bases.some((x) => x != null) ? ' / 走者の走力 ' + sc.bases.map((x, i) => (x == null ? '' : (i + 1) + '塁 ' + x)).filter(Boolean).join('、') : '') + '</div></div>';
+  // ---------- 左:状況 ----------
+  function statHtml() {
+    const s = result ? Object.assign({}, sc, { outs: Math.min(2, result.outs), bases: result.outs >= 3 ? [null, null, null] : result.bases, diff: result.diff }) : sc;
+    const b = s.bases, d = s.diff;
+    const lab = A.strengthLabel(sc.winP);
+    const wp = result ? result.w1 : A.gameWinProb(sc);
+    return '<div class="panel stat"><div class="inn">' + sc.inning + '回' + (sc.half === 'bottom' ? '裏' : '表') + '</div>'
+      + '<div class="diff">' + (d === 0 ? '同点' : d > 0 ? d + '点リード' : -d + '点ビハインド') + '</div>'
+      + '<div class="lamps">アウト<span class="' + (s.outs >= 1 ? 'on' : '') + '"></span><span class="' + (s.outs >= 2 ? 'on' : '') + '"></span>' + (result && result.outs >= 3 ? '<b style="color:#b03a2e">チェンジ</b>' : '') + '</div>'
+      + '<div class="dia"><i class="b2' + (b[1] != null ? ' on' : '') + '"></i><i class="b3' + (b[2] != null ? ' on' : '') + '"></i><i class="b1' + (b[0] != null ? ' on' : '') + '"></i></div>'
+      + '<div class="wp">試合の勝率<b>' + pc(wp) + '</b></div>'
+      + '<div><span class="str ' + (lab === '格上' ? 'up' : lab === '格下' ? 'dn' : '') + '">相手は' + lab + '</span> <span class="note">事前勝率 ' + pc(sc.winP) + '</span></div>'
+      + (!inRange(sc) ? '<div class="warn">勝負にならない試合(結果だけ表示)</div>' : '')
+      + (window.matchMedia && window.matchMedia('(orientation: portrait)').matches ? '<div class="note">横向きのほうが、遊びやすい</div>' : '') + '</div>';
   }
-  function sceneHtml() {
-    const b = sc.bases;
-    const diffT = sc.diff === 0 ? '同点' : sc.diff > 0 ? sc.diff + '点リード' : -sc.diff + '点ビハインド';
-    return '<div class="card"><div class="scene"><div><div class="sc-big">' + sc.inning + '回 ' + (mode === 'bat' ? '攻撃' : '守備') + '</div>'
-      + '<div class="outs">' + [0, 1].map((i) => '<span class="' + (i < sc.outs ? 'on' : '') + '"></span>').join('') + ' ' + sc.outs + 'アウト</div>'
-      + '<div>' + esc(diffT) + '(自校から見て)</div><div class="small">' + esc(sc.name || '') + '</div></div>'
-      + '<div class="dia"><i class="b2' + (b[1] != null ? ' on' : '') + '"></i><i class="b3' + (b[2] != null ? ' on' : '') + '"></i><i class="b1' + (b[0] != null ? ' on' : '') + '"></i><i class="hp"></i></div></div>'
-      + '<div class="small">得点期待値(このイニングの残り。攻撃側):<b>' + A.reOf(sc.outs, sc.bases).toFixed(2) + '</b> ・ 1点以上の確率 ' + pct(A.p1Of(sc.outs, sc.bases)) + '</div></div>';
-  }
-  function controlsHtml() {
-    const opts = '<option value="-1"' + (presetIdx < 0 ? ' selected' : '') + '>(シードで作る)</option>' + scenesOfMode().map((x) => '<option value="' + x.i + '"' + (presetIdx === x.i ? ' selected' : '') + '>' + esc(x.s.name) + '</option>').join('');
-    return '<div class="card"><div class="row"><span class="small">場面</span><select id="preset">' + opts + '</select></div>'
-      + '<div class="row"><span class="small">シード</span><input type="number" id="seed" value="' + seed + '"><button class="chip" id="useSeed">この場面</button></div></div>';
-  }
-  // ボタンの小さな文字:確率の変化の大きい順に2つ。特別な指示は成功率
-  function deltaText(r) {
-    if (r.success != null) return '成功率 ' + Math.round(r.success * 100) + '%';
-    if (r.order === 'walk') return '四球にする';
-    if (!r.delta) return '';
-    const top = A.OUTCOMES.map((k) => [k, r.delta[k]]).filter((x) => Math.abs(x[1]) >= 0.005).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 2);
-    return top.length ? top.map((x) => A.OUTCOME_LABEL[x[0]].replace('のアウト', '') + (x[1] > 0 ? '+' : '') + Math.round(x[1] * 100) + '%').join(' ') : '基準';
-  }
-  function barHtml() {
-    if (result) return '<button class="ob next" id="next">' + (result.outs >= 3 ? 'チェンジ。次の場面へ' : '次の場面へ(次の打者)') + '</button>';
-    lastEval = A.evaluate(sc);
-    const m = lastEval.metric;
-    return lastEval.rows.map((r) => '<button class="ob' + (DEV && r.order === lastEval.best ? ' best' : '') + '" data-order="' + r.order + '">' + esc(r.label)
-      + '<small>' + esc(deltaText(r)) + '</small><span class="ev">' + (m === 'p1' ? '1点以上 ' + pct(r.p1) : '期待 ' + r.ev.toFixed(2)) + '</span></button>').join('');
+  // ---------- 中央:場面の図 ----------
+  const box = (label, v, sub) => '<div class="rk' + A.rankOf(v) + '">' + label + '<b>' + A.rankOf(v) + '</b><i>' + Math.round(v) + '</i></div>';
+  const batBoxes = (b) => '<div class="abil" style="--cols:3">' + box('ミート', b.contact) + box('パワー', b.power) + box('走力', b.speed) + '</div>';
+  const pitBoxes = (p) => '<div class="abil" style="--cols:4"><div class="rk' + A.rankOf(p.velocity) + '">球速<b>' + A.kmh(p.velocity) + '<small>km/h</small></b><i>' + Math.round(p.velocity) + '</i></div>'
+    + box('制球', p.control) + '<div class="rk' + A.rankOf(p.breaking) + '">変化量<b>' + A.breakTotal(p.breaking) + '</b><i>' + Math.round(p.breaking) + '</i></div>' + box('クイック', p.quick) + '</div>';
+  function fieldHtml() {
+    const bat = S.mode === 'bat';
+    const opp = bat ? '<div class="side opp"><h3>奥:<b>相手の投手</b></h3>' + pitBoxes(sc.pitcher) + '</div>' : '<div class="side opp"><h3>奥:<b>相手の打者</b></h3>' + batBoxes(sc.batter) + '</div>';
+    const me = bat ? '<div class="side me"><h3>手前:<b>自分(打者)</b></h3>' + batBoxes(sc.batter) + '</div>' : '<div class="side me"><h3>手前:<b>自分(投手)</b></h3>' + pitBoxes(sc.pitcher) + '</div>';
+    const runners = sc.bases.map((x, i) => (x == null ? '' : (i + 1) + '塁 走力' + x)).filter(Boolean).join('・');
+    const mid = '<div class="mid">' + (bat ? '相手の守備 ' + sc.defense + '・肩 ' + sc.arm : '自分の守備 ' + sc.defense + '・肩 ' + sc.arm) + (runners ? '<br>走者 ' + runners : '') + '</div>';
+    return '<div class="field"><button class="gear" id="gear" aria-label="設定">⚙</button>' + opp + mid + me + resultHtml() + '</div>';
   }
   function resultHtml() {
     if (!result) return '';
-    const runs = result.runs;
-    const good = mode === 'bat' ? result.delta >= 0 : result.delta <= 0;
-    return '<div class="card"><div class="small">結果(' + esc(result.orderLabel) + ')</div><div class="res ' + (good ? 'up' : 'dn') + '">' + esc(result.label) + '</div>'
-      + '<div>' + (runs ? runs + '点' + (mode === 'bat' ? '入った' : '取られた') + '。' : '') + result.outs + 'アウト' + (result.outs < 3 ? '、走者 ' + (result.bases.map((x, i) => (x == null ? '' : (i + 1) + '塁')).filter(Boolean).join('・') || 'なし') : '(チェンジ)') + '</div>'
-      + '<div class="small">得点期待値の変化(攻撃側。この打席の得点を含む):<b class="' + (good ? 'up' : 'dn') + '">' + sgn(result.delta) + '</b>(' + result.reBefore.toFixed(2) + ' → ' + result.reAfter.toFixed(2) + (runs ? ' + ' + runs + '点' : '') + ')</div></div>';
+    const r = result;
+    const good = S.mode === 'bat' ? r.delta >= 0 : r.delta <= 0;
+    const up = r.w1 >= r.w0;
+    const html = '<div class="result' + (r.fresh ? ' pop' : '') + '" id="res"><div class="note">' + (r.auto ? '勝負にならない試合:指示は「通常」' : esc(r.orderLabel)) + '</div>'
+      + '<div class="r1 ' + (good ? 'good' : 'bad') + '">' + esc(r.label) + '</div>'
+      + '<div class="r2">' + (r.runs ? r.runs + '点' + (S.mode === 'bat' ? '入った' : '取られた') + '。' : '') + (r.outs >= 3 ? 'チェンジ' : r.outs + 'アウト') + '</div>'
+      + '<div class="r3">試合の勝率:' + pc(r.w0) + ' → <span class="' + (up ? 'good' : 'bad') + '">' + pc(r.w1) + '</span></div>'
+      + '<div class="note">得点期待値の変化(攻撃側):' + (r.delta >= 0 ? '+' : '') + r.delta.toFixed(2) + '</div></div>';
+    r.fresh = false;
+    return html;
   }
-  function keyTableHtml() {
+  // ---------- 右:指示のボタン ----------
+  function ordersHtml() {
+    if (result) return '<div class="panel orders"><button class="next wide" id="next">' + (result.outs >= 3 ? 'チェンジ<br>次の場面へ' : '次の場面へ') + '</button><div class="hint wide">結果の演出は、画面を押すと飛ばせます</div></div>';
+    lastEval = A.evaluate(sc);
+    const m = lastEval.metric;
+    const btn = (r) => {
+      const gb = r.good == null ? '<span class="gb">確実に歩かせる</span>'
+        : '<span class="gb">' + (r.success != null ? '成 ' : '良 ') + '<b class="g">' + pc(r.good) + '</b> ' + (r.success != null ? '失 ' : '悪 ') + '<b class="x">' + pc(r.bad) + '</b></span>';
+      const d = r.dGood != null && r.order !== 'normal' ? '通常との差 良' + sg(r.dGood) + ' 悪' + sg(r.dBad) + '・' : '';
+      return '<button class="ob' + (DEV && r.order === lastEval.best ? ' best' : '') + '" data-order="' + r.order + '"><span class="nm">' + esc(r.label) + '</span>' + gb
+        + '<span class="sm">' + d + (m === 'p1' ? '1点以上 ' + pc(r.p1) : '期待 ' + r.ev.toFixed(2)) + '</span></button>';
+    };
+    return '<div class="panel orders">' + lastEval.rows.map(btn).join('') + '<button class="ob plain wide" data-order="normal" data-plain="1"><span class="nm">結果だけ見る</span><span class="gb">指示は「通常」</span></button></div>';
+  }
+  // ---------- 設定(歯車) ----------
+  function sheetHtml() {
+    if (!S.sheet) return '';
+    const chip = (key, val, label, cur) => '<button class="chip' + (cur === val ? ' on' : '') + '" data-set="' + key + '" data-val="' + val + '">' + label + '</button>';
+    const scenes = A.SCENES.map((s, i) => ({ s: s, i: i })).filter((x) => (x.s.side === 'pitch') === (S.mode === 'pitch'));
+    const opts = '<option value="-1"' + (S.presetIdx < 0 ? ' selected' : '') + '>(シードで作る)</option>' + scenes.map((x) => '<option value="' + x.i + '"' + (S.presetIdx === x.i ? ' selected' : '') + '>' + esc(x.s.name) + '</option>').join('');
     const list = A.SCENES.concat(Array.from({ length: 20 }, (_, i) => A.randomScene(500 + i)));
     const yn = (v) => (v ? '◯' : '−');
-    return '<details class="card"><summary>介入場面の判定(確認用。' + list.length + '場面)</summary><table><tr><th>場面</th><th>攻守</th><th>回</th><th>状況</th><th>新入部員</th><th>監督</th></tr>'
-      + list.map((s) => '<tr><td>' + esc(s.name) + (s.side === 'bat' ? (s.hero ? ' 主' : '') + (s.focus ? ' 注' : '') : '') + '</td><td>' + (s.side === 'pitch' ? '守' : '攻') + '</td><td>' + s.inning + '</td><td>' + s.outs + '死 ' + (s.bases.map((x, i) => (x == null ? '' : i + 1)).join('') || '無走者') + ' ' + (s.diff > 0 ? '+' : '') + s.diff + '</td><td>' + yn(A.isKeyScene(s, 'success')) + '</td><td>' + yn(A.isKeyScene(s, 'manager')) + '</td></tr>').join('')
-      + '</table><div class="small">主=主人公の打席、注=注目選手の打席。新入部員:主人公の打席すべて・ピンチ。監督:注目選手で7回以降のチャンス・7回以降のピンチ。</div></details>';
-  }
-  function devHtml() {
-    if (!DEV) return '';
-    const P = lastEval ? lastEval.rows.map((r) => r.order + ': ' + (r.probs ? A.OUTCOMES.map((k) => k + ' ' + pct(r.probs[k])).join(' ') : '成功率 ' + (r.success != null ? pct(r.success) : '-')) + ' / 期待 ' + r.ev.toFixed(3) + ' / 1点以上 ' + pct(r.p1)).join('<br>') : '';
-    return '<div class="card dev">dev:最善 ' + (lastEval ? lastEval.best + '(' + lastEval.metric + ')' : '-') + '<br>' + P + '<br><br>設定(仮の値):' + esc(JSON.stringify(A.CONFIG)) + '</div>';
+    const key = '<table><tr><th>場面</th><th>攻守</th><th>回</th><th>状況</th><th>事前</th><th>新入部員</th><th>監督</th></tr>' + list.map((s) => '<tr><td>' + esc(s.name) + (s.side === 'bat' ? (s.hero ? ' 主' : '') + (s.focus ? ' 注' : '') : '') + '</td><td>' + (s.side === 'pitch' ? '守' : '攻') + '</td><td>' + s.inning + '</td><td>' + s.outs + '死 ' + (s.bases.map((x, i) => (x == null ? '' : i + 1)).join('') || '無走者') + ' ' + (s.diff > 0 ? '+' : '') + s.diff + '</td><td>' + pc(s.winP) + '</td><td>' + yn(A.isKeyScene(s, 'success')) + '</td><td>' + yn(A.isKeyScene(s, 'manager')) + '</td></tr>').join('') + '</table>';
+    const dev = DEV ? '<h2>dev</h2><div class="dev">最善 ' + (lastEval ? lastEval.best + '(' + lastEval.metric + ')' : '-') + '<br>' + (lastEval ? lastEval.rows.map((r) => r.order + ': ' + (r.probs ? A.OUTCOMES.map((k) => k + ' ' + (r.probs[k] * 100).toFixed(1) + '%').join(' ') : '成功率 ' + (r.success != null ? pc(r.success) : '-')) + ' / 期待 ' + r.ev.toFixed(3) + ' / 1点以上 ' + pc(r.p1)).join('<br>') : '') + '<br><br>設定(仮の値):' + esc(JSON.stringify(C)) + '</div>' : '';
+    return '<div class="sheet" id="sheetbg"><div class="box"><div class="row" style="justify-content:space-between"><b style="font-size:16px;color:#111">設定(調整用)</b><button class="chip" id="close">閉じる</button></div>'
+      + '<h2>モード</h2><div class="row">' + chip('mode', 'bat', '野手(自分の打席)', S.mode) + chip('mode', 'pitch', '投手(ピンチ)', S.mode) + '</div>'
+      + '<h2>場面</h2><div class="row"><select id="preset">' + opts + '</select></div>'
+      + '<div class="row"><span style="color:#111">シード</span><input type="number" id="seed" value="' + S.seed + '" style="width:8em"><button class="chip" id="useSeed">この場面</button></div>'
+      + '<h2>打者の能力</h2><div class="row">' + chip('bat', 'strong', '強い', S.bat) + chip('bat', 'normal', '普通', S.bat) + chip('bat', 'weak', '弱い', S.bat) + '</div>'
+      + '<h2>投手の能力</h2><div class="row">' + chip('pit', 'strong', '強い', S.pit) + chip('pit', 'normal', '普通', S.pit) + chip('pit', 'weak', '弱い', S.pit) + '</div>'
+      + '<h2>介入の範囲(事前勝率)</h2><div class="row">' + chip('key', 'success', '新入部員', S.key) + chip('key', 'manager', '監督', S.key) + '<span style="color:#111;font-size:12px">' + pc(C.keyScene[S.key].winRange[0]) + '〜' + pc(C.keyScene[S.key].winRange[1]) + ' の外は「勝負にならない試合」</span></div>'
+      + '<h2>介入場面の判定(確認用)</h2>' + key + '<div style="font-size:11px;color:#555">主=主人公の打席、注=注目選手の打席。事前勝率が範囲の外の場面は、介入しない。</div>' + dev + '</div></div>';
   }
   function render() {
-    document.getElementById('modes').innerHTML = [['bat', '野手(自分の打席)'], ['pitch', '投手(ピンチ)']].map((x) => '<button class="chip' + (mode === x[0] ? ' on' : '') + '" data-mode="' + x[0] + '">' + x[1] + '</button>').join('');
-    const bar = barHtml();
-    document.getElementById('main').innerHTML = sceneHtml() + resultHtml() + abilHtml() + controlsHtml() + keyTableHtml() + devHtml();
-    document.getElementById('bar').innerHTML = bar;
+    document.getElementById('app').innerHTML = statHtml() + fieldHtml() + ordersHtml();
+    document.getElementById('sheet').innerHTML = sheetHtml();
   }
   document.addEventListener('click', (e) => {
-    const b = e.target.closest('button');
+    const t = e.target;
+    // 結果の演出だけ、押すと飛ばせる(指示を選ぶ画面は、飛ばせない)
+    const res = document.getElementById('res');
+    if (res && res.classList.contains('pop') && t.closest('.field') && !t.closest('#gear')) { res.classList.remove('pop'); return; }
+    const b = t.closest('button');
+    if (S.sheet && t.id === 'sheetbg') { S.sheet = false; render(); return; }
     if (!b) return;
     const d = b.dataset;
-    if (d.mode) { mode = d.mode; presetIdx = -1; newScene(true); render(); return; }
-    if (d.bat) { bat = d.bat; sc.batter = Object.assign({}, A.PRESETS.batter[bat]); render(); return; }
-    if (d.pit) { pit = d.pit; sc.pitcher = Object.assign({}, A.PRESETS.pitcher[pit]); render(); return; }
-    if (d.order) { const r = A.resolve(sc, d.order, rng); r.orderLabel = A.ORDER_LABEL[mode][d.order]; result = r; render(); window.scrollTo(0, 0); return; }
-    if (b.id === 'next') { nextScene(); render(); window.scrollTo(0, 0); return; }
-    if (b.id === 'useSeed') { const v = Number(document.getElementById('seed').value); seed = (Number.isFinite(v) ? Math.floor(v) : 1) >>> 0; presetIdx = -1; newScene(true); render(); return; }
+    if (b.id === 'gear') { S.sheet = true; render(); return; }
+    if (b.id === 'close') { S.sheet = false; render(); return; }
+    if (d.set === 'mode') { S.mode = d.val; S.presetIdx = -1; newScene(true); render(); return; }
+    if (d.set === 'bat') { S.bat = d.val; sc.batter = Object.assign({}, A.PRESETS.batter[S.bat]); render(); return; }
+    if (d.set === 'pit') { S.pit = d.val; sc.pitcher = Object.assign({}, A.PRESETS.pitcher[S.pit]); render(); return; }
+    if (d.set === 'key') { S.key = d.val; render(); return; }
+    if (b.id === 'useSeed') { const v = Number(document.getElementById('seed').value); S.seed = (Number.isFinite(v) ? Math.floor(v) : 1) >>> 0; S.presetIdx = -1; newScene(true); render(); return; }
+    if (d.order) { choose(d.order); render(); return; }
+    if (b.id === 'next') { nextScene(); render(); return; }
   });
-  document.addEventListener('change', (e) => {
-    if (e.target.id === 'preset') { presetIdx = Number(e.target.value); newScene(presetIdx < 0); render(); }
-  });
+  document.addEventListener('change', (e) => { if (e.target.id === 'preset') { S.presetIdx = Number(e.target.value); newScene(S.presetIdx < 0); render(); } });
+  window.addEventListener('resize', () => { if (!S.sheet) render(); });
   newScene(true);
   render();
 })();

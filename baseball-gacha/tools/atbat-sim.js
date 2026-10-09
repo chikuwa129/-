@@ -15,7 +15,7 @@ const pct = (v) => (v * 100).toFixed(1) + '%';
 // 1. 確率の健全性(極端な能力を含む)
 {
   const r = new A.Rng(7);
-  let bad = 0, n = 0;
+  let bad = 0, n = 0, gMax = 0, bMin = 1;
   const vals = [0, 1, 50, 100, 150];
   for (let i = 0; i < 3000; i++) {
     const pick = () => (r.chance(0.3) ? vals[r.int(0, vals.length - 1)] : r.int(0, 150));
@@ -29,8 +29,11 @@ const pct = (v) => (v * 100).toFixed(1) + '%';
       let okP = true;
       if (['bunt', 'squeeze', 'steal'].indexOf(o) < 0) { const P = A.probs(sc, o); const s = A.OUTCOMES.reduce((a, k) => a + P[k], 0); okP = Math.abs(s - 1) < 1e-9 && A.OUTCOMES.every((k) => P[k] >= 0 && P[k] <= 1 && Number.isFinite(P[k])); }
       if (!okQ || !okP) bad++;
+      const gb = A.goodBadOf(sc, o);
+      if (gb) { gMax = Math.max(gMax, gb.good); bMin = Math.min(bMin, gb.bad); }
     }
   }
+  global.__cap = { gMax: gMax, bMin: bMin, n: n };
   log('## 1. 確率の健全性\n' + n + ' 通り(能力 0〜150 の極端な値を含む)。0〜1 の外、または合計が 1 でないもの:' + bad + ' 件');
   sum.push('1. 確率の健全性:' + (bad ? '✕ ' + bad + '件' : '✓') + '(' + n + '通り)');
 }
@@ -38,13 +41,20 @@ const pct = (v) => (v * 100).toFixed(1) + '%';
 // 2. 指示の効き:場面ごとの最善の指示
 {
   const scenes = A.SCENES.concat(Array.from({ length: 200 }, (_, i) => A.randomScene(1000 + i)));
-  const res = { bat: {}, pitch: {} }, resEv = { bat: {}, pitch: {} }, tot = { bat: 0, pitch: 0 };
+  const res = { bat: {}, pitch: {} }, resEv = { bat: {}, pitch: {} }, tot = { bat: 0, pitch: 0 }, legal = { bat: {}, pitch: {} };
+  let inRange = 0, inN = 0, gbBest = 0;
   const lines = [];
   for (const sc of scenes) {
     const e = A.evaluate(sc);
     const s = sc.side === 'pitch' ? 'pitch' : 'bat';
     tot[s]++;
     res[s][e.best] = (res[s][e.best] || 0) + 1;
+    for (const r of e.rows) legal[s][r.order] = (legal[s][r.order] || 0) + 1;
+    // 7:良い結果の確率が 20〜80% に入るか(指示ごと)/ 9:良い結果の確率が最も高い指示が、最善でもあるか
+    const def = e.rows.filter((r) => r.good != null);
+    for (const r of def) { inN++; if (r.good >= 0.2 && r.good <= 0.8) inRange++; }
+    const topGood = def.reduce((a, b) => (b.good > a.good ? b : a), def[0]);
+    if (topGood && topGood.order === e.best) gbBest++;
     const pick = s === 'pitch' ? (a, b) => (b.ev < a.ev ? b : a) : (a, b) => (b.ev > a.ev ? b : a);
     const be = e.rows.reduce(pick).order;
     resEv[s][be] = (resEv[s][be] || 0) + 1;
@@ -58,6 +68,14 @@ const pct = (v) => (v * 100).toFixed(1) + '%';
     log('  参考:すべて得点期待値で比べた場合:' + fmt(resEv[s], tot[s]) + ' → ' + judge(resEv[s], tot[s]));
     sum.push('2. 最善の指示(' + (s === 'bat' ? '野手' : '投手') + '):' + judge(res[s], tot[s]) + ' ' + fmt(res[s], tot[s]));
   }
+  // 3 の目標:どの指示も、最善になる場面が 10〜40%(その指示が使える場面のうち)
+  for (const s of ['bat', 'pitch']) {
+    const t = Object.keys(legal[s]).map((k) => { const v = (res[s][k] || 0) / legal[s][k]; return k + ' ' + pct(v) + '(' + (res[s][k] || 0) + '/' + legal[s][k] + ')' + (v >= 0.1 && v <= 0.4 ? '✓' : '✕'); });
+    log('目標(' + s + '・使える場面のうち、最善になる割合 10〜40%):' + t.join('、'));
+    sum.push('3の目標(' + (s === 'bat' ? '野手' : '投手') + '):' + t.join('、'));
+  }
+  const all = tot.bat + tot.pitch;
+  global.__g = { inRange: inRange / inN, gbBest: gbBest / all };
   log('### 場面の一覧(最善の指示と、指示ごとの得点期待値 / 1点以上の確率%)\n' + lines.join('\n'));
 }
 
@@ -66,7 +84,11 @@ const pct = (v) => (v * 100).toFixed(1) + '%';
   log('## 3. 盗塁の損益分岐');
   const L = [];
   for (const b3 of [null, 50]) for (let o = 0; o < 3; o++) {
-    const r0 = A.reOf(o, [50, null, b3]), rs = A.reOf(o, [null, 50, b3]), rf = A.reOf(o + 1, [null, null, b3]);
+    const sc = A.makeScene({ outs: o, bases: [50, null, b3] });
+    const br = A.orderBranches(sc, 'steal'), ps = A.stealP(sc);
+    const val = (xs) => xs.reduce((a, x) => a + x.q * (x.runs + A.reOf(x.outs, x.b)), 0);
+    const rs = val(br.filter((x) => x.kind === 'st_ok')) / ps, rf = val(br.filter((x) => x.kind !== 'st_ok')) / (1 - ps);
+    const r0 = A.reOf(o, [50, null, b3]);
     const p = (r0 - rf) / (rs - rf);
     L.push(p);
     log(o + 'アウト・一塁' + (b3 ? '三塁' : '') + ':' + pct(p) + '(しない ' + r0.toFixed(3) + ' / 成功 ' + rs.toFixed(3) + ' / 失敗 ' + rf.toFixed(3) + ')' + (p >= 0.6 && p <= 0.8 ? ' ✓' : ' ✕'));
@@ -105,6 +127,17 @@ const pct = (v) => (v * 100).toFixed(1) + '%';
   const re = A.reTable();
   log('得点期待値(無死走者なし)' + re[0].toFixed(3) + ' → 9回あたり約 ' + (re[0] * 9).toFixed(2) + '点');
   sum.push('5. 中位どうし1000打席:' + t + '。9回あたり約 ' + (re[0] * 9).toFixed(2) + '点');
+}
+
+// 7〜9. 良い結果・悪い結果の確率
+{
+  const g = global.__g, c = global.__cap;
+  log('## 7. 良い結果の確率が 20〜80% に入る割合(場面×指示):' + pct(g.inRange) + (g.inRange >= 0.6 ? ' ✓' : ' ✕'));
+  log('## 8. 良い結果の確率の最大 ' + pct(c.gMax) + '(上限 ' + pct(A.CONFIG.cap.goodMax) + ')、悪い結果の確率の最小 ' + pct(c.bMin) + '(下限 ' + pct(A.CONFIG.cap.badMin) + ')。' + c.n + '通り(極端な能力を含む)');
+  log('## 9. 良い結果の確率が最も高い指示が、最善でもある場面の割合:' + pct(g.gbBest) + (g.gbBest <= 0.6 ? ' ✓' : ' ✕'));
+  sum.push('7. 良い結果の確率が20〜80%:' + pct(g.inRange) + (g.inRange >= 0.6 ? ' ✓' : ' ✕'));
+  sum.push('8. 上限と下限:良い結果の最大 ' + pct(c.gMax) + '、悪い結果の最小 ' + pct(c.bMin) + (c.gMax <= A.CONFIG.cap.goodMax + 1e-9 && c.bMin >= A.CONFIG.cap.badMin - 1e-9 ? ' ✓' : ' ✕'));
+  sum.push('9. 良い結果の確率が最も高い指示=最善:' + pct(g.gbBest) + (g.gbBest <= 0.6 ? ' ✓' : ' ✕'));
 }
 
 // 6. 同じシードで同じ結果
