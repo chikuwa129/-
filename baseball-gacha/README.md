@@ -97,6 +97,7 @@ node sim.js 200 42 random
 - [x] フェーズH1.4c:3年の7月の画面で、大会のときのスタメンと引退した3年生を表示、進行ボタンを画面の下に固定(heroMode.ui.progressBar)
 - [x] フェーズH1.5b:救援の複数化(heroMode.pitching.reliefMax)、先発の投球回の基準 4.0、凡人の調査(hero-sim)
 - [x] フェーズH1.6a:途中出場(代打・代走・守備固め)と盗塁の起用ルール(heroMode.substitute)
+- [x] フェーズH1.6b:覚醒とヒント(heroMode.awakening)、ライバルの表示を外す(heroMode.rival.display)
 - [ ] フェーズ2:大会と国際大会
 - [ ] フェーズ3:スカウトと「逃した魚」
 - [ ] フェーズ4:対戦成績と因縁
