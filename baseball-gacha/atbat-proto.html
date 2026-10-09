@@ -81,6 +81,29 @@
   .msgbox { flex: 1 1 auto; min-width: 0; min-height: 84px; font-size: 12px; color: #111; display: flex; flex-direction: column; justify-content: center; padding: 0 6px; }
   .msgbox .sm { font-size: 10px; color: var(--sub); }
   .gear { font-size: 18px; }
+  /* 試合のモード(T1e):スコアボード、ログ、開始と終了 */
+  .app.game { grid-template-rows: auto 1fr auto; }
+  .sb { background: var(--card); border-radius: 10px; padding: 2px 4px; overflow: hidden; }
+  .sb table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px; color: #111; }
+  .sb th { text-align: center; color: var(--sub); font-weight: normal; padding: 0; border: none; }
+  .sb tr th:first-child { width: 3em; text-align: left; color: #111; }
+  .sb td.c, .sb td.t { text-align: center; font-size: 18px; font-weight: bold; line-height: 1.15; border: 1px solid var(--line); padding: 0; color: #111; }
+  .sb td.t { background: #f2efe6; } .sb td.h { font-size: 15px; color: #444; }
+  .sb td.cur { outline: 3px solid var(--accent); outline-offset: -3px; }
+  .sb td.sc { background: #fff1c9; text-decoration: underline; }
+  .sb td.blink { animation: blink .8s steps(2, start) infinite; }
+  .sb td.nw { animation: cellin .35s ease-out both; }
+  @keyframes cellin { from { opacity: 0; transform: scale(1.6); } to { opacity: 1; transform: scale(1); } }
+  @keyframes blink { to { background: #ffd34d; } }
+  @media (prefers-reduced-motion: reduce) { .sb td.blink { animation: none; background: #ffd34d; } .sb td.nw { animation: none; } }
+  .log { flex: 1 1 auto; min-width: 0; height: 84px; overflow-y: auto; font-size: 12px; line-height: 1.35; color: #111; padding: 2px 6px; }
+  .log .hl { font-weight: bold; } .log .key { color: #0d3d5f; } .log .end { color: var(--lose); }
+  .log .sm { color: var(--sub); }
+  .gov { left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 4; width: min(96%, 560px); max-height: 96%; overflow-y: auto; box-shadow: 0 4px 16px rgba(0,0,0,.35); padding: 6px 10px; }
+  .gov .gt { font-size: 18px; } .gov .row { gap: 4px; } .gov .row { margin: 3px 0; font-size: 13px; } .gov .chip { min-height: 40px; padding: 4px 10px; }
+  .gov .sm { font-size: 12px; color: var(--sub); }
+  .ok2 { min-height: 44px; padding: 0 16px; font-size: 16px; font-weight: bold; color: #fff !important; background: var(--accent) !important; border-color: var(--accent) !important; }
+  .kt { font-size: 11px; margin: 4px 0; }
   .result .ev { font-size: 11px; color: #333; margin-top: 2px; }
   .result .ev b { font-size: 14px; }
   @media (orientation: portrait) {
@@ -215,6 +238,35 @@
     walkEnabled: false,
     // ランダムな場面のうち、終盤の接戦(7回以降・2点差以内)にする割合
     lateCloseShare: 0.3,
+    // 試合の通し(T1e)。自校は先攻。9回まで(延長なし。同点なら引き分け。9回裏の途中で相手が勝ち越したら、サヨナラで終了)
+    game: {
+      myOrder: 3,          // 野手のモード:自分の打順
+      maxKeys: 2,          // 1試合の介入の上限(先の2つで止まる。以降は「通常」で自動)
+      priorN: 300,         // 事前勝率の見積もり:同じ編成で、自動の試合を priorN 回(別系統の乱数)。引き分けは 0.5 勝
+      jitter: 10,          // 編成の能力のばらつき(±)
+      // チームの強さのプリセット(打者9人の基準、先発投手、守備・肩)
+      teams: {
+        strong: { bat: { contact: 64, power: 60, speed: 58 }, pit: { velocity: 66, control: 64, breaking: 62, quick: 55 }, def: 60 },
+        normal: { bat: { contact: 50, power: 50, speed: 50 }, pit: { velocity: 50, control: 50, breaking: 50, quick: 50 }, def: 50 },
+        weak:   { bat: { contact: 37, power: 35, speed: 42 }, pit: { velocity: 36, control: 38, breaking: 36, quick: 45 }, def: 40 },
+      },
+      // 介入場面の条件(isKeyScene の形)。野手のモードは自分の打席すべて、投手のモードは7回以降のピンチ(得点圏・点差3以内)
+      key: { bat: { who: 'all', minInning: 1, chance: false }, pitch: { pinch: true, maxDiff: 3, minInning: 7 }, winRange: [0.3, 0.8] },
+      halfMs: 500,         // 自動の進み:半イニングごとの間(ミリ秒)
+      holdSpeed: 2,        // 画面を押している間の速さ(倍)
+      logMode: 'highlight',   // 'highlight'(得点の回・介入場面・試合の終わり)/ 'all'(すべての半イニング)
+      // ログの文(実際の記録から作る。{h}=「5回表」、{runs}=得点、{hits}=安打、{on}=出塁、{lob}=残塁、{score}=自校-相手)。同じ文が続かないように選ぶ
+      text: {
+        my_three: ['{h} 味方の攻撃は、3人で終わった', '{h} 味方は、三者凡退', '{h} 味方は、あっさり3人で攻撃を終えた', '{h} 味方の打線は、3人で抑えられた', '{h} 味方は、塁に出られなかった'],
+        my_walk: ['{h} 味方は、四球で{on}人が出たが、無得点', '{h} 味方は、走者を出したが、点にならなかった', '{h} 味方は、四球をもらったが、続かなかった', '{h} 味方は、{lob}人を残して、無得点', '{h} 味方は、安打なしで、無得点'],
+        my_hit: ['{h} 味方は、安打{hits}本で、無得点', '{h} 味方は、安打{hits}本を打ったが、点にならなかった', '{h} 味方は、{lob}人を残して、無得点(安打{hits}本)', '{h} 味方は、チャンスを生かせなかった(安打{hits}本)', '{h} 味方は、安打{hits}本、あと一本が出なかった'],
+        my_score: ['{h} 味方が、{runs}点を取った({score})', '{h} 味方の攻撃で、{runs}点が入った({score})', '{h} 味方は、安打{hits}本で{runs}点({score})', '{h} 味方の打線がつながり、{runs}点({score})', '{h} 味方に、{runs}点が入った({score})'],
+        op_three: ['{h} 相手の攻撃は、3人で終わった', '{h} 何事もなく終わった', '{h} 相手は、三者凡退', '{h} 相手を、3人で抑えた', '{h} 相手は、塁に出られなかった'],
+        op_walk: ['{h} 打者を{on}人出したが、抑えた', '{h} 四球を出したが、無失点', '{h} 走者を出したが、点はやらなかった', '{h} {lob}人を残して、無失点', '{h} 安打は許さず、無失点'],
+        op_hit: ['{h} 安打を打たれたが、無失点', '{h} 安打{hits}本を許したが、抑えた', '{h} {lob}人を残して、無失点(被安打{hits})', '{h} ピンチをしのいだ(被安打{hits})', '{h} 打たれながらも、0点に抑えた'],
+        op_score: ['{h} {runs}点を取られた({score})', '{h} 相手に、{runs}点が入った({score})', '{h} 安打{hits}本で、{runs}点を失った({score})', '{h} 相手が、{runs}点を取った({score})', '{h} {runs}点を許した({score})'],
+      },
+    },
     // 傾向タグ(実際の能力から。最大 max 個、偏りの大きい順。該当がなければ「平均的」)。どの能力も、結果の確率に効いている
     tags: {
       max: 3,
@@ -674,8 +726,165 @@
     return who && sc.inning >= (B.minInning || 1) && (!B.chance || risp);
   }
 
+  // ---------- 試合の通し(T1e) ----------
+  //   状態 G を持ち、advance(G) で、次の介入場面か、半イニングの終わりか、試合の終わりまで進める。choose(G, 指示) で介入場面を確定する
+  //   乱数:編成はシードから、打席は「シード × 打席の番号」から(打席ごとに独立。介入より前の打席は、選択に関係なく同じ)
+  const mix = (a, b) => { let h = Math.imul((a >>> 0) ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul((b >>> 0) + 0x632be5ab, 0xc2b2ae35); h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12; return h >>> 0; };
+  const BASE_NAME = ['一塁', '二塁', '三塁'], OUT_NAME = ['無死', '一死', '二死'];
+  function basesText(b) {
+    const on = [0, 1, 2].filter((i) => b[i] != null);
+    if (!on.length) return '走者なし';
+    if (on.length === 3) return '満塁';
+    return on.length === 1 ? BASE_NAME[on[0]] : on.map((i) => '一二三'[i]).join('') + '塁';
+  }
+  function makeTeam(lv, r, C) {
+    const G = C.game, T = G.teams[lv] || G.teams.normal, j = (o) => { const x = {}; for (const k of Object.keys(o)) x[k] = clamp(o[k] + r.int(-G.jitter, G.jitter), 1, 100); return x; };
+    const hand = () => (r.next() < C.hands.right ? 'R' : 'L');
+    const lineup = Array.from({ length: 9 }, () => Object.assign(j(T.bat), { bats: hand() }));
+    return { level: lv, lineup: lineup, pitcher: Object.assign(j(T.pit), { throws: hand() }), defense: clamp(T.def + r.int(-5, 5), 1, 100), arm: clamp(T.def + r.int(-5, 5), 1, 100) };
+  }
+  // o:{ seed, mode:'bat'|'pitch', my, op(強さ), winP(省略で見積もる) }
+  function newGame(o, cfg) {
+    const C = cfg || CONFIG, seed = (o.seed >>> 0);
+    const r = new Rng(mix(seed, 0x7e41));
+    const G = { seed: seed, mode: o.mode === 'pitch' ? 'pitch' : 'bat', myLevel: o.my || 'normal', opLevel: o.op || 'normal', my: o.teams ? o.teams.my : makeTeam(o.my || 'normal', r, C), op: o.teams ? o.teams.op : makeTeam(o.op || 'normal', r, C),
+      paSeed: o.paSeed != null ? o.paSeed : mix(seed, 1), quiet: !!o.quiet, plain: !!o.plain, C: C };
+    resetGame(G);
+    G.winP = o.winP != null ? o.winP : priorWinP(G);
+    return G;
+  }
+  function resetGame(G) {
+    Object.assign(G, { inning: 1, top: true, outs: 0, bases: [null, null, null], score: { my: 0, op: 0 }, line: { my: [], op: [] }, hits: { my: 0, op: 0 }, idx: { my: 0, op: 0 },
+      pa: 0, keysUsed: 0, keyLog: [], log: [], halfNo: 0, rec: newRec(), done: false, result: null, walkoff: false, pending: null, skipKey: false, lastTpl: {}, paLog: [] });
+  }
+  const newRec = () => ({ batters: 0, hits: 0, walks: 0, runs: 0 });
+  // 事前勝率:同じ編成で、自動の試合(別系統の乱数)を priorN 回。引き分けは 0.5
+  function priorWinP(G) {
+    const N = G.C.game.priorN;
+    let w = 0;
+    for (let i = 0; i < N; i++) {
+      const g = { seed: G.seed, mode: G.mode, my: G.my, op: G.op, paSeed: mix(G.seed ^ 0x51ed, i + 1), quiet: true, plain: true, C: G.C, winP: 0.5 };
+      resetGame(g);
+      while (!g.done) advance(g);
+      w += g.result === 'win' ? 1 : g.result === 'draw' ? 0.5 : 0;
+    }
+    return Math.round(w / N * 1000) / 1000;
+  }
+  // いまの打席の場面(自校から見た点差・攻守)
+  function curScene(G) {
+    const batMy = G.top, key = batMy ? 'my' : 'op', bt = G[key], ft = batMy ? G.op : G.my, i = G.idx[key];
+    return makeScene({ inning: G.inning, half: G.top ? 'top' : 'bottom', side: batMy ? 'bat' : 'pitch', outs: G.outs, bases: G.bases.slice(), diff: G.score.my - G.score.op,
+      batter: bt.lineup[i], pitcher: ft.pitcher, defense: ft.defense, arm: ft.arm, winP: G.winP, hero: G.mode === 'bat' && batMy && i === G.C.game.myOrder - 1, focus: false,
+      bats: bt.lineup[i].bats, throws: ft.pitcher.throws, order: i + 1, name: '' });
+  }
+  function isGameKey(G, sc) {
+    if (G.plain || G.keysUsed >= G.C.game.maxKeys) return false;
+    if ((G.mode === 'bat') !== (sc.side === 'bat')) return false;
+    return isKeyScene(sc, G.C.game.key, G.C);
+  }
+  // 試合の勝率(自校から見て)。終わっていれば 1 / 0.5 / 0
+  function gameWin(G) { return G.done ? (G.result === 'win' ? 1 : G.result === 'draw' ? 0.5 : 0) : gameWinProb(curScene(G), null, G.C); }
+  // 1打席(盗塁は、打席を消費しない)
+  function playPA(G, order) {
+    const sc = curScene(G), key = G.top ? 'my' : 'op';
+    const r = resolve(sc, order, new Rng(mix(G.paSeed, G.pa)), G.C);
+    if (!G.quiet) G.paLog.push(G.pa + ':' + r.kind + ':' + r.runs);
+    G.pa++;
+    const steal = /^st_/.test(r.kind);
+    if (!steal) { G.rec.batters++; G.idx[key] = (G.idx[key] + 1) % 9; }
+    if (r.kind === 'S' || r.kind === 'XB' || r.kind === 'HR' || r.kind === 'bunt_hit') { G.rec.hits++; G.hits[key]++; }
+    if (r.kind === 'BB') G.rec.walks++;
+    G.score[key] += r.runs; G.rec.runs += r.runs;
+    G.outs = r.outs; G.bases = r.bases.slice();
+    if (!G.top && G.inning === 9 && G.score.op > G.score.my) { G.walkoff = true; endHalf(G); }
+    else if (G.outs >= 3) endHalf(G);
+    return { sc: sc, r: r, steal: steal };
+  }
+  function endHalf(G) {
+    const key = G.top ? 'my' : 'op', rec = G.rec;
+    G.line[key][G.inning - 1] = rec.runs;
+    const lob = G.outs >= 3 || G.walkoff ? G.bases.filter((x) => x != null).length : 0;
+    if (!G.quiet) halfLog(G, key, rec, G.walkoff ? 0 : lob);
+    G.halfNo++;
+    if (G.top) {
+      if (G.inning === 9 && G.score.op > G.score.my) { G.line.op[8] = 'x'; return endGame(G); }
+      G.top = false;
+    } else {
+      if (G.walkoff || G.inning === 9) return endGame(G);
+      G.inning++; G.top = true;
+    }
+    G.outs = 0; G.bases = [null, null, null]; G.rec = newRec();
+  }
+  function endGame(G) {
+    G.done = true;
+    G.result = G.score.my > G.score.op ? 'win' : G.score.my < G.score.op ? 'lose' : 'draw';
+    if (!G.quiet) {
+      const res = G.result === 'win' ? '勝ち' : G.result === 'draw' ? '引き分け' : (G.walkoff ? 'サヨナラ負け' : '負け');
+      G.log.push({ kind: 'end', hl: true, score: [G.score.my, G.score.op], result: G.result, text: '試合終了。' + res + '(' + G.score.my + '-' + G.score.op + ')' });
+    }
+  }
+  const halfName = (inn, top) => inn + '回' + (top ? '表' : '裏');
+  // 半イニングの記録から、ログの文を作る(嘘をつかない。数字は記録から)
+  function pickText(G, cat) {
+    const L = G.C.game.text[cat];
+    let i = mix(G.seed, G.halfNo * 31 + cat.length) % L.length;
+    if (G.lastTpl[cat] === i) i = (i + 1) % L.length;
+    G.lastTpl[cat] = i;
+    return L[i];
+  }
+  function fill(t, d) { return t.replace(/\{(\w+)\}/g, (m, k) => (d[k] != null ? d[k] : m)); }
+  function halfLog(G, key, rec, lob) {
+    const on = rec.hits + rec.walks;
+    const cat = key + '_' + (rec.runs > 0 ? 'score' : rec.batters <= 3 && on === 0 ? 'three' : rec.hits > 0 ? 'hit' : on > 0 ? 'walk' : 'three');
+    const d = { h: halfName(G.inning, G.top), runs: rec.runs, hits: rec.hits, on: on, lob: lob, score: G.score.my + '-' + G.score.op };
+    G.log.push({ kind: 'half', team: key, inn: G.inning, top: G.top, cat: cat, hl: rec.runs > 0, runs: rec.runs, hits: rec.hits, walks: rec.walks, batters: rec.batters, lob: lob, score: [G.score.my, G.score.op], text: fill(pickText(G, cat), d) });
+  }
+  // 次の介入場面・半イニングの終わり・試合の終わりまで進める
+  function advance(G) {
+    if (G.done) return { type: 'end' };
+    if (G.pending) return { type: 'key', sc: G.pending.sc, ev: G.pending.ev };
+    const h = G.halfNo;
+    while (!G.done && G.halfNo === h) {
+      const sc = curScene(G);
+      if (!G.skipKey && isGameKey(G, sc)) { G.pending = { sc: sc, ev: evaluate(sc, G.C), w0: gameWin(G) }; return { type: 'key', sc: sc, ev: G.pending.ev }; }
+      G.skipKey = false;
+      playPA(G, 'normal');
+    }
+    return { type: G.done ? 'end' : 'half' };
+  }
+  // 介入場面の確定:指示 order で、その打席を進める。ログ(介入場面の結果)と、ふりかえりの記録を残す
+  function choose(G, order) {
+    const P = G.pending;
+    if (!P) return null;
+    G.pending = null; G.keysUsed++;
+    const sc = P.sc, row = P.ev.rows.find((x) => x.order === order) || P.ev.rows[0], at = G.log.length;
+    const inn = G.inning, top = G.top;
+    const out = playPA(G, row.order);
+    if (out.steal) G.skipKey = true;   // 盗塁のあとの同じ打者の打席は、自動
+    const w1 = gameWin(G), r = out.r, bat = sc.side === 'bat';
+    const sit = (bat ? '自分の打席' : 'ピンチ') + '(' + OUT_NAME[sc.outs] + basesText(sc.bases) + ')';
+    const res = r.label + (r.runs ? '、' + r.runs + '点' + (bat ? '' : 'を取られた') : (bat ? '' : '、無失点'));
+    const pc = (v) => Math.round(v * 100) + '%';
+    const item = { kind: 'key', hl: true, inn: inn, top: top, order: row.order, label: row.label, rating: row.rating, result: r.label, runs: r.runs, w0: P.w0, w1: w1, sit: sit, score: [G.score.my, G.score.op],
+      text: halfName(inn, top) + ' ' + sit + '。『' + row.label + '』を選んだ。' + res + '(勝率 ' + pc(P.w0) + '→' + pc(w1) + ')' };
+    G.log.splice(at, 0, item);
+    G.keyLog.push(item);
+    return { r: r, row: row, item: item };
+  }
+  // 結果だけ見る:以降の介入場面を、すべて「通常」で、最後まで
+  function finishPlain(G) {
+    if (G.pending) choose(G, 'normal');
+    G.plain = true;
+    while (!G.done) advance(G);
+  }
+  // 方針 policy(sc, ev) → 指示 で、最後まで(検証用)
+  function playGame(G, policy) {
+    while (!G.done) { const e = advance(G); if (e.type === 'key') choose(G, policy ? policy(e.sc, e.ev) : 'normal'); }
+    return G;
+  }
+
   return {
-    CONFIG: CONFIG, OUTCOMES: OUTCOMES, OUTCOME_LABEL: OUTCOME_LABEL, ORDER_LABEL: ORDER_LABEL, PRESETS: PRESETS, SCENES: SCENES,
+    CONFIG: CONFIG, newGame: newGame, advance: advance, choose: choose, finishPlain: finishPlain, playGame: playGame, gameWin: gameWin, curScene: curScene, priorWinP: priorWinP, basesText: basesText, mixSeed: mix, OUTCOMES: OUTCOMES, OUTCOME_LABEL: OUTCOME_LABEL, ORDER_LABEL: ORDER_LABEL, PRESETS: PRESETS, SCENES: SCENES,
     Rng: Rng, probs: probs, orderBranches: orderBranches, legalOrders: legalOrders, reTable: reTable, reOf: reOf, p1Table: p1Table, p1Of: p1Of, expectOrderP1: expectOrderP1, expectOrder: expectOrder,
     evaluate: evaluate, ratingOf: ratingOf, featureOf: featureOf, twoChoice: twoChoice, cardsOf: cardsOf, resolve: resolve, goodBadOf: goodBadOf, gameWinProb: gameWinProb, strengthLabel: strengthLabel, inWinRange: inWinRange, makeScene: makeScene, randomScene: randomScene, handsOf: handsOf, tagsOf: tagsOf, uiStep: uiStep, isKeyScene: isKeyScene,
     buntP: buntP, squeezeP: squeezeP, stealP: stealP, rankOf: rankOf, kmh: kmh, breakTotal: breakTotal,
@@ -930,6 +1139,8 @@
   let rng = new A.Rng(1), sc = null, ui = { sel: null, result: null }, result = null, lastEval = null, timer = null, shownAt = 0;
   const NAMES = ['青木', '石川', '上田', '大野', '加藤', '北村', '小林', '佐々木', '高田', '中島', '西村', '原田', '松本', '森', '山口', '渡辺'];
   const nameOf = (k) => NAMES[((S.seed * 7 + k * 13) >>> 0) % NAMES.length];
+  // 画面の向き(打者か投手か):試合のモードでは、試合の設定(野手 / 投手)
+  const VM = () => (S.mode === 'game' ? GM.cfg.mode : S.mode);
 
   function applyPresets(s) { s.batter = Object.assign({}, A.PRESETS.batter[S.bat]); s.pitcher = Object.assign({}, A.PRESETS.pitcher[S.pit]); return s; }
   const inRange = (s) => A.inWinRange(s, C.keyScene[S.key]);
@@ -974,7 +1185,7 @@
   const batRanks = (b) => '<div class="ranks">' + rk('ミート', b.contact) + rk('パワー', b.power) + rk('走力', b.speed) + '</div>';
   const pitRanks = (p) => '<div class="ranks">' + rk('球速', p.velocity) + rk('制球', p.control) + rk('変化球', p.breaking) + '</div>';
   function stageHtml() {
-    const bat = S.mode === 'bat';
+    const bat = VM() === 'bat';
     const s = result ? { outs: Math.min(2, result.outs), bases: result.outs >= 3 ? [null, null, null] : result.bases, my: result.my, op: result.op } : { outs: sc.outs, bases: sc.bases, my: sc.my, op: sc.op };
     const b = s.bases;
     const lab = A.strengthLabel(sc.winP);
@@ -989,18 +1200,19 @@
     const opp = '<div class="pane opp"><div class="who">' + (bat ? '相手の投手' : '相手の打者') + ' <b>' + esc(nameOf(1)) + '</b>(' + hand(bat ? sc.throws : sc.bats, !bat) + ')</div>'
       + (bat ? pitRanks(oppAb) : batRanks(oppAb)) + '<div class="tags">' + A.tagsOf(bat ? 'pitcher' : 'batter', oppAb).map((t) => '<span class="tag">' + esc(t) + '</span>').join('') + '</div></div>';
     const me = '<div class="pane me"><div class="who">' + (bat ? '自分(打者)' : '自分(投手)') + ' <b>' + esc(nameOf(2)) + '</b>(' + hand(bat ? sc.bats : sc.throws, bat) + ')</div>' + (bat ? batRanks(sc.batter) : pitRanks(sc.pitcher)) + '</div>';
-    const art = '<div class="art">' + ART.draw({ mode: S.mode, bats: sc.bats, throws: sc.throws, color: INK, bg: STAGE }) + '</div>';
-    const warn = !inRange(sc) ? '<div class="pane warn">勝負にならない試合(結果だけ表示)</div>' : '';
+    const art = '<div class="art">' + ART.draw({ mode: VM(), bats: sc.bats, throws: sc.throws, color: INK, bg: STAGE }) + '</div>';
+    const warn = S.mode === 'game' ? (GM.G && !A.inWinRange(sc, C.game.key) ? '<div class="pane warn">勝負にならない試合(自動で最後まで)</div>' : '')
+      : !inRange(sc) ? '<div class="pane warn">勝負にならない試合(結果だけ表示)</div>' : '';
     const rot = window.matchMedia && window.matchMedia('(orientation: portrait)').matches ? '<div class="rot">横向きのほうが、遊びやすい</div>' : '';   // 縦持ちのときだけ(上の中央)
-    return '<div class="stage" id="stage">' + art + st + band + opp + me + warn + rot + resultHtml() + '</div>';
+    return '<div class="stage" id="stage">' + art + st + band + opp + me + warn + rot + resultHtml() + (S.mode === 'game' ? gameOverlay() : '') + '</div>';
   }
   function resultHtml() {
     if (!result) return '';
     const r = result;
-    const good = S.mode === 'bat' ? r.delta >= 0 : r.delta <= 0;
+    const good = VM() === 'bat' ? r.delta >= 0 : r.delta <= 0;
     const html = '<div class="pane result' + (r.fresh ? ' pop' : '') + '" id="res"><div class="note">' + (r.auto ? '勝負にならない試合:指示は「通常」' : (r.pickAs ? esc(C.ui.two[r.pickAs]) + ':' : '') + esc(r.orderLabel)) + '</div>'
       + '<div class="r1 ' + (good ? 'good' : 'bad') + '">' + esc(r.label) + '</div>'
-      + '<div>' + (r.runs ? r.runs + '点' + (S.mode === 'bat' ? '入った' : '取られた') + '。' : '') + (r.outs >= 3 ? 'チェンジ' : r.outs + 'アウト') + '</div>'
+      + '<div>' + (r.runs ? r.runs + '点' + (VM() === 'bat' ? '入った' : '取られた') + '。' : '') + (r.outs >= 3 ? 'チェンジ' : r.outs + 'アウト') + '</div>'
       + '<div class="r3">試合の勝率:' + pc(r.w0) + ' → <span class="' + (r.w1 >= r.w0 ? 'good' : 'bad') + '">' + pc(r.w1) + '</span></div>' + evalLine(r) + '</div>';
     r.fresh = false;
     return html;
@@ -1008,7 +1220,7 @@
   // 評価の中身(結果と一緒に、小さく):評価の数字、見込み、通常との差
   function evalLine(r) {
     if (!r.row) return '';
-    const x = r.row, n = r.nrow, bat = S.mode === 'bat';
+    const x = r.row, n = r.nrow, bat = VM() === 'bat';
     const what = r.metric === 'p1' ? (bat ? '1点以上取る確率' : '1点以上取られる確率') : (bat ? '得点期待値' : '失点の期待値');
     const v = (row) => (r.metric === 'p1' ? pc(row.p1) : row.ev.toFixed(2));
     const d = r.metric === 'p1' ? (x.p1 - n.p1) * 100 : x.ev - n.ev;
@@ -1030,7 +1242,7 @@
       // 結果のあと:選んだ指示の中身(四球や長打の重さなど。T1c の説明文)と、通常との差。カードは出さない(押すと次へ)
       const x = result.row;
       const dd = x && x.dGood != null && x.order !== 'normal' ? '通常との差:成功 ' + sg(x.dGood) + 'pt' : '';
-      return '<div class="bar"><div class="msgbox">' + (result.auto ? '勝負にならない試合。結果だけを表示します。' : esc(C.orderText[S.mode][result.order] || '')) + '<span class="sm">' + esc(dd) + (dd ? '・' : '') + (result.outs >= 3 ? 'チェンジ。' : '') + '画面を押すと、すぐ次へ</span></div><div class="side">' + gear + '</div></div>';
+      return '<div class="bar"><div class="msgbox">' + (result.auto ? '勝負にならない試合。結果だけを表示します。' : esc(C.orderText[VM()][result.order] || '')) + '<span class="sm">' + esc(dd) + (dd ? '・' : '') + (result.outs >= 3 ? 'チェンジ。' : '') + '画面を押すと、すぐ次へ</span></div><div class="side">' + gear + '</div></div>';
     }
     lastEval = A.evaluate(sc);
     return '<div class="bar"><div class="cards">' + cardsHtml() + '</div><div class="side"><button class="plain" id="plain">結果だけ見る</button>' + gear + '</div></div>';
@@ -1054,7 +1266,8 @@
         + '<h2>dev</h2><div class="dev">最善 ' + (lastEval ? lastEval.best + '(' + lastEval.metric + ')' : '-') + '<br>' + (lastEval ? lastEval.rows.map((r) => r.order + ': ' + (r.probs ? A.OUTCOMES.map((k) => k + ' ' + (r.probs[k] * 100).toFixed(1) + '%').join(' ') : '成功率 ' + (r.success != null ? pc(r.success) : '-')) + ' / 期待 ' + r.ev.toFixed(3) + ' / 1点以上 ' + pc(r.p1) + ' / 評価 ' + r.rating + '(差 ' + r.dm.toFixed(3) + ')/ ' + esc(r.feature.text)).join('<br>') : '') + '<br><br>設定(仮の値):' + esc(JSON.stringify(C)) + '</div>';
     }
     return '<div class="sheet" id="sheetbg"><div class="box"><div class="row" style="justify-content:space-between"><b style="font-size:16px">設定(調整用)</b><button class="chip" id="close">閉じる</button></div>'
-      + '<h2>モード</h2><div class="row">' + chip('mode', 'bat', '野手(自分の打席)', S.mode) + chip('mode', 'pitch', '投手(ピンチ)', S.mode) + '</div>'
+      + '<h2>モード</h2><div class="row">' + chip('mode', 'bat', '野手(自分の打席)', S.mode) + chip('mode', 'pitch', '投手(ピンチ)', S.mode) + chip('mode', 'game', '試合(通し)', S.mode) + '</div>'
+      + (S.mode === 'game' ? '<h2>試合の経過(ログ)</h2><div class="row">' + chip('glog', 'highlight', 'ハイライトだけ', GM.logMode) + chip('glog', 'all', 'すべての回', GM.logMode) + '</div>' : '')
       + '<h2>カードの表示</h2><div class="row">' + chip('card', 'rating', '成功確率と評価', S.card) + chip('card', 'prob-only', '成功確率だけ', S.card) + chip('card', 'two-choice', '2択(' + esc(C.ui.two.attack) + 'と' + esc(C.ui.two.safe) + ')', S.card) + '</div>'
       + '<h2>場面</h2><div class="row"><select id="preset">' + opts + '</select></div>'
       + '<div class="row"><span>シード</span><input type="number" id="seed" value="' + S.seed + '" style="width:8em"><button class="chip" id="useSeed">この場面</button></div>'
@@ -1065,7 +1278,129 @@
       + '<h2>能力の数値</h2>' + nums
       + '<h2>介入場面の判定(確認用)</h2>' + key + '<div style="font-size:11px;color:#555">主=主人公の打席、注=注目選手の打席。事前勝率が範囲の外の場面は、介入しない。</div>' + dev + '</div></div>';
   }
+  // ---------- 試合のモード(T1e):自動で進み、介入場面だけ止まる ----------
+  //   phase:start(開始の画面)/ run(自動で進む)/ key(介入場面。カード)/ res(介入の結果を表示)/ end(終了とふりかえり)
+  const GM = { cfg: { mode: 'pitch', my: 'normal', op: 'normal', seed: 1 }, G: null, phase: 'start', tick: null, hold: false, newCell: null, logMode: C.game.logMode, preview: null };
+  const reduce = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const LV = { strong: '強い', normal: '普通', weak: '弱い' };
+  function gamePreview() {
+    const k = JSON.stringify(GM.cfg);
+    if (!GM.preview || GM.preview.k !== k) GM.preview = { k: k, G: A.newGame(GM.cfg) };
+    return GM.preview.G;
+  }
+  function gameStart(plain) {
+    clearTimeout(GM.tick); GM.tick = null;
+    GM.G = A.newGame(Object.assign({}, GM.cfg, { winP: gamePreview().winP }));
+    S.seed = GM.cfg.seed; result = null; GM.newCell = null;
+    if (plain) { A.finishPlain(GM.G); GM.phase = 'end'; } else { GM.phase = 'run'; gameSync(); }
+  }
+  // 画面の場面を、試合の状態から作る(打者・投手・点差・スコア)
+  function gameSync() {
+    const G = GM.G;
+    sc = G.pending ? G.pending.sc : A.curScene(G);
+    sc.my = G.score.my; sc.op = G.score.op;
+  }
+  // 自動で、半イニングずつ進める。介入場面で止まる。「動きを減らす」設定のときは、間を置かずに次の介入場面まで
+  function gameStep() {
+    GM.tick = null;
+    if (S.mode !== 'game' || GM.phase !== 'run' || S.sheet) return;
+    const G = GM.G;
+    let e;
+    do {
+      const before = G.line.my.length + G.line.op.length, half = { inn: G.inning, top: G.top };
+      e = A.advance(G);
+      if (G.line.my.length + G.line.op.length > before || G.done) GM.newCell = half;
+    } while (reduce() && e.type === 'half');
+    if (e.type === 'key') GM.phase = 'key';
+    else if (e.type === 'end') GM.phase = 'end';
+    if (!G.done) gameSync();
+    render();
+  }
+  function gameSchedule() {
+    if (GM.tick || GM.phase !== 'run' || S.sheet) return;
+    GM.tick = setTimeout(gameStep, reduce() ? 0 : C.game.halfMs / (GM.hold ? C.game.holdSpeed : 1));
+  }
+  // 介入場面:カードを押すと、すぐ結果。表示のあと、自動で再開
+  function gamePick(order, pickAs) {
+    const G = GM.G, P = G.pending;
+    if (!P) return;
+    const ksc = P.sc, ev = P.ev, half = { inn: G.inning, top: G.top }, h0 = G.halfNo;
+    const out = A.choose(G, order);
+    const r = out.r;
+    result = Object.assign({}, r, { order: out.row.order, orderLabel: out.row.label, w0: P.w0, w1: out.item.w1, auto: false, fresh: true, pickAs: pickAs || null, row: out.row, nrow: ev.rows.find((x) => x.order === 'normal'), metric: ev.metric,
+      my: G.score.my, op: G.score.op, delta: r.delta });
+    sc = Object.assign({}, ksc, { my: ksc.my, op: ksc.op });
+    if (G.halfNo > h0) GM.newCell = half;   // この打席で半イニングが終わったら、そのセルに数字が入る
+    GM.phase = 'res'; shownAt = Date.now();
+  }
+  function gameResume() {
+    result = null;
+    GM.phase = GM.G.done ? 'end' : 'run';
+    if (!GM.G.done) gameSync();
+  }
+  // スコアボード(主役):1〜9回、R、H。いまの回を枠で強調。介入場面は点滅。点が入った回は太字と印
+  function scoreboardHtml() {
+    const G = GM.G;
+    const cell = (team, i) => {
+      const v = G ? G.line[team][i] : undefined, top = team === 'my';
+      const cur = G && !G.done && G.inning === i + 1 && G.top === top;
+      const isNew = GM.newCell && GM.newCell.inn === i + 1 && GM.newCell.top === top;
+      let txt = v == null ? '' : String(v);
+      if (team === 'op' && i === 8 && G && G.walkoff) txt = v + 'x';
+      const cls = (cur ? ' cur' : '') + (cur && GM.phase === 'key' ? ' blink' : '') + (isNew ? ' nw' : '') + (typeof v === 'number' && v > 0 ? ' sc' : '');
+      return '<td class="c' + cls + '">' + esc(txt) + '</td>';
+    };
+    const row = (team, label) => '<tr><th>' + label + '</th>' + Array.from({ length: 9 }, (_, i) => cell(team, i)).join('') + '<td class="t">' + (G ? G.score[team] : '') + '</td><td class="t h">' + (G ? G.hits[team] : '') + '</td></tr>';
+    return '<div class="sb"><table><tr><th></th>' + Array.from({ length: 9 }, (_, i) => '<th>' + (i + 1) + '</th>').join('') + '<th>R</th><th>H</th></tr>' + row('my', '自校') + row('op', '相手') + '</table></div>';
+  }
+  function logHtml() {
+    const G = GM.G, L = G ? G.log.filter((x) => GM.logMode === 'all' || x.hl) : [];
+    return '<div class="log" id="log">' + (L.length ? L.map((x) => '<div class="' + x.kind + (x.hl ? ' hl' : '') + '">' + (x.kind === 'key' ? '▶ ' : x.hl ? '● ' : '') + esc(x.text) + '</div>').join('') : '<div class="sm">' + (GM.phase === 'start' ? '試合開始を押すと、自動で進みます。' : '経過(得点の回、介入場面の結果)が、ここに出ます。') + '</div>') + '</div>';
+  }
+  // 開始の画面と、終了のふりかえり(舞台の上に重ねる)
+  function gameOverlay() {
+    const chip = (key, val, label, cur) => '<button class="chip' + (cur === val ? ' on' : '') + '" data-gset="' + key + '" data-val="' + val + '">' + label + '</button>';
+    if (GM.phase === 'start') {
+      const P = gamePreview(), lab = A.strengthLabel(P.winP), out = !A.inWinRange({ winP: P.winP }, C.game.key);
+      return '<div class="pane gov"><div class="row"><b class="gt">試合(通し)</b><button class="ok2" id="gstart">試合開始</button><button class="chip" id="gplain0">結果だけ見る</button></div>'
+        + '<div class="row">事前勝率 <b>' + pc(P.winP) + '</b> ・ 戦力:相手は' + lab + (out ? ' <span class="bad">(勝負にならない試合:介入なし)</span>' : '') + '</div>'
+        + '<div class="row">自分 ' + chip('mode', 'bat', '野手(' + C.game.myOrder + '番)', GM.cfg.mode) + chip('mode', 'pitch', '投手(先発)', GM.cfg.mode) + ' シード <input type="number" id="gseed" value="' + GM.cfg.seed + '" style="width:5em;min-height:40px"><button class="chip" id="gseedSet">変える</button></div>'
+        + '<div class="row">自校 ' + ['strong', 'normal', 'weak'].map((k) => chip('my', k, LV[k], GM.cfg.my)).join('') + ' 相手 ' + ['strong', 'normal', 'weak'].map((k) => chip('op', k, LV[k], GM.cfg.op)).join('') + '</div></div>';
+    }
+    if (GM.phase === 'end') {
+      const G = GM.G, res = G.result === 'win' ? '勝ち' : G.result === 'draw' ? '引き分け' : (G.walkoff ? 'サヨナラ負け' : '負け');
+      const rows = G.keyLog.map((k) => '<tr><td>' + k.inn + '回' + (k.top ? '表' : '裏') + '</td><td>' + esc(k.sit) + '</td><td>' + esc(k.label) + '</td><td>' + k.rating + '</td><td>' + esc(k.result) + (k.runs ? '(' + k.runs + '点)' : '') + '</td><td>' + pc(k.w0) + '→' + pc(k.w1) + '</td></tr>').join('');
+      return '<div class="pane gov"><b class="gt ' + (G.result === 'win' ? 'good' : G.result === 'lose' ? 'bad' : '') + '">' + res + ' ' + G.score.my + '-' + G.score.op + '</b>'
+        + '<div class="sm">事前勝率 ' + pc(G.winP) + '(戦力:相手は' + A.strengthLabel(G.winP) + ')</div>'
+        + (rows ? '<table class="kt"><tr><th>回</th><th>状況</th><th>指示</th><th>評価</th><th>結果</th><th>勝率</th></tr>' + rows + '</table>' : '<div class="sm">操作した場面は、ありませんでした。</div>')
+        + '<div class="row"><button class="ok2" id="gagain">同じシードで、もう一度</button><button class="chip" id="gnew">新しいシード</button><button class="chip" id="gback">設定を変える</button></div></div>';
+    }
+    return '';
+  }
+  function gameBarHtml() {
+    const gear = '<button class="gear" id="gear" aria-label="設定">⚙</button>';
+    if (GM.phase === 'key') {
+      lastEval = GM.G.pending.ev;
+      return '<div class="bar"><div class="cards">' + cardsHtml() + '</div><div class="side"><button class="plain" id="gplain">結果だけ見る</button>' + gear + '</div></div>';
+    }
+    if (GM.phase === 'res') return barHtml();
+    return '<div class="bar">' + logHtml() + '<div class="side">' + (GM.phase === 'run' ? '<button class="plain" id="gplain">結果だけ見る</button>' : '') + gear + '</div></div>';
+  }
+  function gameRender() {
+    const app = document.getElementById('app');
+    app.className = 'app game';
+    if (!GM.G && GM.phase !== 'start') GM.phase = 'start';
+    if (GM.phase === 'start') { const P = gamePreview(); sc = A.curScene(P); sc.my = 0; sc.op = 0; }
+    app.innerHTML = scoreboardHtml() + stageHtml() + gameBarHtml();
+    const lg = document.getElementById('log'); if (lg) lg.scrollTop = lg.scrollHeight;
+    document.getElementById('sheet').innerHTML = sheetHtml();
+    if (GM.phase === 'run') gameSchedule();
+    if (GM.phase === 'res' && !S.sheet && !timer) timer = setTimeout(() => { timer = null; gameResume(); render(); }, C.ui.resultMs);
+  }
+
   function render() {
+    if (S.mode === 'game') return gameRender();
+    document.getElementById('app').className = 'app';
     document.getElementById('app').innerHTML = stageHtml() + barHtml();
     document.getElementById('sheet').innerHTML = sheetHtml();
     // 結果は、resultMs のあとに自動で次の場面へ(設定を開いている間は止める)
@@ -1077,12 +1412,14 @@
     if (S.sheet && t.id === 'sheetbg') { S.sheet = false; render(); return; }
     const b = t.closest('button');
     if (b && b.id === 'gear') { S.sheet = true; render(); return; }
+    if (S.mode === 'game' && !S.sheet && gameClick(b, t)) return;
     // 結果の表示中:画面のどこを押しても、すぐ次へ(押した直後の誤タップは無視)
     if (result && !S.sheet) { if (Date.now() - shownAt >= C.ui.tapGuardMs) { nextScene(); render(); } return; }
     if (!b) return;
     const d = b.dataset;
     if (b.id === 'close') { S.sheet = false; render(); return; }
-    if (d.set === 'mode') { S.mode = d.val; S.presetIdx = -1; newScene(true); render(); return; }
+    if (d.set === 'mode') { clearTimeout(timer); timer = null; result = null; S.mode = d.val; if (d.val !== 'game') { S.presetIdx = -1; newScene(true); } else if (!GM.G) GM.phase = 'start'; render(); return; }
+    if (d.set === 'glog') { GM.logMode = d.val; render(); return; }
     if (d.set === 'bat') { S.bat = d.val; sc.batter = Object.assign({}, A.PRESETS.batter[S.bat]); render(); return; }
     if (d.set === 'pit') { S.pit = d.val; sc.pitcher = Object.assign({}, A.PRESETS.pitcher[S.pit]); render(); return; }
     if (d.set === 'bats') { S.bats = d.val; sc.bats = d.val; render(); return; }
@@ -1094,6 +1431,26 @@
     if (d.order) { pick(d.order, d.as); render(); return; }
     if (b.id === 'plain') { pick('normal'); render(); return; }
   });
+  // 試合のモードの操作。処理したら true
+  function gameClick(b, t) {
+    if (GM.phase === 'res') { if (Date.now() - shownAt >= C.ui.tapGuardMs) { clearTimeout(timer); timer = null; gameResume(); render(); } return true; }
+    if (!b) return GM.phase === 'run';
+    const d = b.dataset;
+    if (d.gset) { GM.cfg[d.gset] = d.val; render(); return true; }
+    if (b.id === 'gseedSet') { const v = Number(document.getElementById('gseed').value); GM.cfg.seed = (Number.isFinite(v) ? Math.floor(v) : 1) >>> 0; render(); return true; }
+    if (b.id === 'gstart') { gameStart(false); render(); return true; }
+    if (b.id === 'gplain0') { gameStart(true); render(); return true; }
+    if (b.id === 'gplain') { clearTimeout(GM.tick); GM.tick = null; A.finishPlain(GM.G); GM.phase = 'end'; result = null; render(); return true; }
+    if (b.id === 'gagain') { gameStart(false); render(); return true; }
+    if (b.id === 'gnew') { GM.cfg.seed = (GM.cfg.seed + 1) >>> 0; gameStart(false); render(); return true; }
+    if (b.id === 'gback') { GM.G = null; GM.phase = 'start'; render(); return true; }
+    if (d.order && GM.phase === 'key') { gamePick(d.order, d.as); render(); return true; }
+    return false;
+  }
+  // 画面を押している間は、自動の進みが速くなる
+  const holdOn = (v) => { GM.hold = v; };
+  document.addEventListener('pointerdown', () => holdOn(true));
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach((k) => document.addEventListener(k, () => holdOn(false)));
   document.addEventListener('change', (e) => { if (e.target.id === 'preset') { S.presetIdx = Number(e.target.value); newScene(S.presetIdx < 0); render(); } });
   window.addEventListener('resize', () => { if (!S.sheet) render(); });
   // 最初の場面:介入できる(勝負になる)場面から始める
