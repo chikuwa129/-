@@ -133,10 +133,10 @@
     return w;
   }
   const p01 = (C, x) => clamp(x, C.run.pMin, C.run.pMax);
-  function buntP(sc, C) { const Z = zs(sc), B = C.bunt; return clamp(B.base + B.con * Z.con + B.spd * Z.spd - B.def * Z.def, B.min, B.max); }
-  function buntHitP(sc, C) { const B = C.bunt; return clamp(B.hitBase + B.hitSpd * z(sc.batter.speed), 0, B.hitMax); }
-  function squeezeP(sc, C) { const Z = zs(sc), Q = C.squeeze; return clamp(Q.base + Q.con * Z.con - Q.def * Z.def, Q.min, Q.max); }
-  function stealP(sc, C) { const S = C.steal; return clamp(S.base + S.spd * z(runnerSpd(sc, 1)) - S.arm * z(sc.arm) - S.quick * z(sc.pitcher.quick), S.min, S.max); }
+  function buntP(sc, C) { C = C || CONFIG; const Z = zs(sc), B = C.bunt; return clamp(B.base + B.con * Z.con + B.spd * Z.spd - B.def * Z.def, B.min, B.max); }
+  function buntHitP(sc, C) { C = C || CONFIG; const B = C.bunt; return clamp(B.hitBase + B.hitSpd * z(sc.batter.speed), 0, B.hitMax); }
+  function squeezeP(sc, C) { C = C || CONFIG; const Z = zs(sc), Q = C.squeeze; return clamp(Q.base + Q.con * Z.con - Q.def * Z.def, Q.min, Q.max); }
+  function stealP(sc, C) { C = C || CONFIG; const S = C.steal; return clamp(S.base + S.spd * z(runnerSpd(sc, 1)) - S.arm * z(sc.arm) - S.quick * z(sc.pitcher.quick), S.min, S.max); }
   const runnerSpd = (sc, base) => (sc.runnerSpeed && sc.runnerSpeed[base - 1] != null ? sc.runnerSpeed[base - 1] : 50);
 
   // ---------- 走者の更新(分岐つき) ----------
