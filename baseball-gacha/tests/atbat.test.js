@@ -296,6 +296,87 @@ test('1タップで確定:カードを押すと、すぐ結果(決定ボタン�
   assert.ok(/resultMs/.test(html) && /setTimeout/.test(html), '結果のあと、自動で次へ');
 });
 
+// ---------- T1e:試合の通し ----------
+const best = (sc, ev) => ev.best;
+const lineSum = (L) => L.reduce((a, v) => a + (typeof v === 'number' ? v : 0), 0);
+test('試合が完走し、スコアボードの合計がスコアと一致する。9回(またはサヨナラ)で終わり、x の規則を守る', () => {
+  for (let i = 0; i < 40; i++) {
+    for (const mode of ['bat', 'pitch']) {
+      const G = A.playGame(A.newGame({ seed: 100 + i, mode: mode, my: ['strong', 'normal', 'weak'][i % 3], op: ['weak', 'normal', 'strong'][(i >> 1) % 3], winP: 0.5 }), best);
+      assert.ok(G.done && ['win', 'lose', 'draw'].indexOf(G.result) >= 0);
+      assert.strictEqual(lineSum(G.line.my), G.score.my, '自校の合計'); assert.strictEqual(lineSum(G.line.op), G.score.op, '相手の合計');
+      assert.strictEqual(G.line.my.length, 9, '自校は9回');
+      assert.strictEqual(G.line.op.length, 9);
+      if (G.line.op[8] === 'x') assert.ok(G.score.op > G.score.my && lineSum(G.line.op.slice(0, 8)) === G.score.op, '9回裏なし=相手がリード');
+      if (G.walkoff) assert.ok(G.result === 'lose' && typeof G.line.op[8] === 'number');
+      if (G.result === 'draw') assert.strictEqual(G.score.my, G.score.op);
+    }
+  }
+});
+
+test('ログの文は実際の記録と一致する(得点・スコア・安打の数)', () => {
+  for (let i = 0; i < 40; i++) {
+    const G = A.playGame(A.newGame({ seed: 300 + i, mode: i % 2 ? 'bat' : 'pitch', winP: 0.5 }), best);
+    let my = 0, op = 0;
+    for (const x of G.log) {
+      if (x.kind === 'half') {
+        if (x.team === 'my') my += x.runs; else op += x.runs;
+        assert.deepStrictEqual(x.score, [my, op], 'スコアの経過');
+        assert.strictEqual(G.line[x.team][x.inn - 1], x.runs, 'スコアボードと一致');
+        const m = x.text.match(/安打(\d+)本|被安打(\d+)/); if (m) assert.strictEqual(Number(m[1] || m[2]), x.hits, x.text);
+        const sm = x.text.match(/\((\d+)-(\d+)\)/); if (sm) assert.deepStrictEqual([Number(sm[1]), Number(sm[2])], x.score, x.text);
+        const rm = x.text.match(/(\d+)点/); if (rm) assert.strictEqual(Number(rm[1]), x.runs, x.text);
+        assert.strictEqual(x.hl, x.runs > 0, 'ハイライト=得点の回');
+        if (x.runs === 0) assert.ok(!/点を取|点が入|点を許|点を失/.test(x.text), x.text);
+      }
+      if (x.kind === 'end') assert.ok(x.text.indexOf(G.score.my + '-' + G.score.op) >= 0);
+    }
+    // 同じ文が、同じ種類で続けて出ない
+    const byCat = {}; for (const x of G.log.filter((y) => y.kind === 'half')) { assert.notStrictEqual(byCat[x.cat], x.text.replace(/^\S+ /, '') + '|' + x.runs + x.hits + x.lob + x.score, '同じ文が続く'); byCat[x.cat] = x.text.replace(/^\S+ /, '') + '|' + x.runs + x.hits + x.lob + x.score; }
+  }
+});
+
+test('介入の上限が守られ、介入場面はモードの条件どおり。事前勝率が範囲の外なら、介入場面を作らない', () => {
+  const K = A.CONFIG.game.key;
+  let anyBat = 0, anyPitch = 0;
+  for (let i = 0; i < 40; i++) {
+    for (const mode of ['bat', 'pitch']) {
+      const seen = [];
+      const G = A.playGame(A.newGame({ seed: 500 + i, mode: mode, winP: 0.5 }), (sc, ev) => { seen.push(sc); return ev.best; });
+      assert.ok(G.keyLog.length <= A.CONFIG.game.maxKeys && seen.length === G.keyLog.length, '上限');
+      for (const sc of seen) {
+        if (mode === 'bat') { assert.ok(sc.side === 'bat' && sc.hero && sc.order === A.CONFIG.game.myOrder, '自分の打席'); anyBat++; }
+        else { assert.ok(sc.side === 'pitch' && sc.inning >= K.pitch.minInning && (sc.bases[1] != null || sc.bases[2] != null) && Math.abs(sc.diff) <= K.pitch.maxDiff, 'ピンチ'); anyPitch++; }
+      }
+      for (const wp of [K.winRange[0] - 0.05, K.winRange[1] + 0.05]) assert.strictEqual(A.playGame(A.newGame({ seed: 500 + i, mode: mode, winP: wp }), best).keyLog.length, 0, '範囲の外');
+    }
+  }
+  assert.ok(anyBat > 0 && anyPitch > 0);
+  const keep = A.CONFIG.game.maxKeys;
+  try { A.CONFIG.game.maxKeys = 1; assert.ok(A.playGame(A.newGame({ seed: 1, mode: 'bat', winP: 0.5 }), best).keyLog.length <= 1); } finally { A.CONFIG.game.maxKeys = keep; }
+});
+
+test('同じシード・同じ選択で同じ試合。選択を変えても、介入場面より前の打席は変わらない', () => {
+  for (let i = 0; i < 20; i++) {
+    const mk = () => A.newGame({ seed: 700 + i, mode: 'bat', winP: 0.5 });
+    const a = A.playGame(mk(), best), b = A.playGame(mk(), best);
+    assert.deepStrictEqual(a.paLog, b.paLog); assert.deepStrictEqual(a.log.map((x) => x.text), b.log.map((x) => x.text));
+    let firstKey = -1;
+    const c = mk(); while (!c.done) { const e = A.advance(c); if (e.type === 'key') { if (firstKey < 0) firstKey = c.pa; A.choose(c, 'power'); } }
+    const n = A.playGame(mk(), null);
+    if (firstKey >= 0) assert.deepStrictEqual(c.paLog.slice(0, firstKey), n.paLog.slice(0, firstKey), '介入より前は同じ');
+  }
+  // 事前勝率の見積もりも、シードで決まる
+  const keep = A.CONFIG.game.priorN;
+  try { A.CONFIG.game.priorN = 30; assert.strictEqual(A.newGame({ seed: 9 }).winP, A.newGame({ seed: 9 }).winP); } finally { A.CONFIG.game.priorN = keep; }
+});
+
+test('試合のモードの画面:スキップのボタンがなく、スコアボードとログがある', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'atbat.html'), 'utf8');
+  assert.ok(!/スキップ/.test(html), 'スキップのボタンを作らない');
+  assert.ok(/scoreboardHtml/.test(html) && /logHtml/.test(html) && /holdSpeed/.test(html) && /同じシードで、もう一度/.test(html));
+});
+
 // 本編のファイルが、試作の前後で変わっていない(タグ v-before-T1 と比べる)
 test('本編の出力(play.html・play-hero.html)が、試作の前と一致する', () => {
   const cp = require('child_process');

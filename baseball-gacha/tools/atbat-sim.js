@@ -7,6 +7,59 @@ const fs = require('fs');
 const path = require('path');
 const A = require(path.join(__dirname, '..', 'atbat-engine.js'));
 
+// 試合の通し(T1e):node tools/atbat-sim.js --games N → tools/atbat-game-N.txt に保存(この部分だけを回す)
+const gi = process.argv.indexOf('--games');
+if (gi >= 0) { runGames(Number(process.argv[gi + 1]) || 200); process.exit(0); }
+function runGames(N) {
+  const t0 = Date.now(), L = [], S = [], pct = (v) => (v * 100).toFixed(1) + '%';
+  const lv = ['strong', 'normal', 'weak'], r = new A.Rng(2024);
+  const bins = {}, keyDist = { bat: [0, 0, 0], pitch: [0, 0, 0] }, keyIn = { bat: [0, 0], pitch: [0, 0] }, dWin = { bat: {}, pitch: {} };
+  let done = 0, bad1 = 0, runsMy = 0, runsOp = 0, bad6 = 0, bad5 = 0, outRange = 0, walkoff = 0, draws = 0;
+  const wv = (G) => (G.result === 'win' ? 1 : G.result === 'draw' ? 0.5 : 0);
+  const best = (sc, ev) => ev.best;
+  const lineSum = (x) => x.reduce((a, v) => a + (typeof v === 'number' ? v : 0), 0);
+  for (let i = 0; i < N; i++) {
+    const my = lv[r.int(0, 2)], op = lv[r.int(0, 2)], seed = 10000 + i;
+    const base = A.newGame({ seed: seed, mode: 'bat', my: my, op: op });
+    const winP = base.winP, bin = Math.min(9, Math.floor(winP * 10));
+    if (!A.inWinRange({ winP: winP }, A.CONFIG.game.key)) outRange++;
+    for (const mode of ['bat', 'pitch']) {
+      const mk = () => A.newGame({ seed: seed, mode: mode, my: my, op: op, winP: winP });
+      const gN = A.playGame(mk(), null), gB = A.playGame(mk(), best);
+      // 1:完走(9回、またはサヨナラ)
+      const ok1 = gN.done && gN.line.my.length === 9 && gN.line.op.length === 9 && (gN.walkoff ? typeof gN.line.op[8] === 'number' : true);
+      if (!ok1) bad1++;
+      done++;
+      // 6:スコアボードの合計と、ログの数字
+      for (const g of [gN, gB]) {
+        if (lineSum(g.line.my) !== g.score.my || lineSum(g.line.op) !== g.score.op) bad6++;
+        for (const x of g.log) if (x.kind === 'half') { const m = x.text.match(/安打(\d+)本|被安打(\d+)/); if ((m && Number(m[1] || m[2]) !== x.hits) || g.line[x.team][x.inn - 1] !== x.runs) bad6++; }
+      }
+      keyDist[mode][gN.keyLog.length]++;
+      if (A.inWinRange({ winP: winP }, A.CONFIG.game.key)) { keyIn[mode][0]++; if (gN.keyLog.length) keyIn[mode][1]++; }
+      dWin[mode][bin] = dWin[mode][bin] || { n: 0, d: 0 };
+      dWin[mode][bin].n++; dWin[mode][bin].d += wv(gB) - wv(gN);
+      if (mode === 'bat') {
+        bins[bin] = bins[bin] || { n: 0, w: 0, p: 0 };
+        bins[bin].n++; bins[bin].w += wv(gN); bins[bin].p += winP;
+        runsMy += gN.score.my; runsOp += gN.score.op; if (gN.walkoff) walkoff++; if (gN.result === 'draw') draws++;
+      }
+      // 5:同じシード・同じ選択で同じ試合(一部だけ)
+      if (i < 30 && JSON.stringify(A.playGame(mk(), best).paLog) !== JSON.stringify(gB.paLog)) bad5++;
+    }
+  }
+  S.push('1. 完走:' + (done - bad1) + '/' + done + ' 試合(野手・投手のモード。9回、またはサヨナラ)' + (bad1 ? ' ✕' : ' ✓') + '。サヨナラ ' + walkoff + '、引き分け ' + draws + '(' + N + '試合中)');
+  const bl = Object.keys(bins).sort((a, b) => a - b).map((k) => { const B = bins[k], d = (B.w - B.p) / B.n * 100; return (k * 10) + '〜' + (k * 10 + 10) + '%:実測 ' + pct(B.w / B.n) + '(事前の平均 ' + pct(B.p / B.n) + '、差 ' + d.toFixed(1) + 'pt、' + B.n + '試合)' + (Math.abs(d) <= 5 ? '✓' : '△'); });
+  S.push('2. 勝率と事前勝率(「通常」で自動。引き分けは0.5):' + bl.join(' / ') + '。1試合の平均得点:自校 ' + (runsMy / N).toFixed(2) + '、相手 ' + (runsOp / N).toFixed(2));
+  for (const m of ['bat', 'pitch']) { const d = keyDist[m], n = d[0] + d[1] + d[2]; S.push('3. 介入場面の回数(' + (m === 'bat' ? '野手' : '投手') + '):0回 ' + pct(d[0] / n) + '、1回 ' + pct(d[1] / n) + '、2回 ' + pct(d[2] / n) + '。1回以上 ' + pct((d[1] + d[2]) / n) + ((d[1] + d[2]) / n >= 0.5 ? ' ✓' : ' ✕') + '(事前勝率が範囲の外の試合 ' + pct(outRange / N) + 'を含む。範囲内の試合のうち1回以上 ' + pct(keyIn[m][1] / Math.max(1, keyIn[m][0])) + ')'); }
+  for (const m of ['bat', 'pitch']) S.push('4. 評価が最も高い指示を選び続けた場合の勝率の差(' + (m === 'bat' ? '野手' : '投手') + '。対「通常」):' + Object.keys(dWin[m]).sort((a, b) => a - b).map((k) => (k * 10) + '%台 ' + (dWin[m][k].d / dWin[m][k].n * 100 >= 0 ? '+' : '') + (dWin[m][k].d / dWin[m][k].n * 100).toFixed(1) + 'pt(' + dWin[m][k].n + ')').join('、'));
+  S.push('5. 同じシード・同じ選択で同じ試合:' + (bad5 ? '✕ ' + bad5 : '✓') + '(介入より前の打席が変わらないことは、テストで確認)');
+  S.push('6. スコアボードの合計とスコア、ログの数字(得点・安打)の食い違い:' + bad6 + ' 件' + (bad6 ? ' ✕' : ' ✓'));
+  const file = path.join(__dirname, 'atbat-game-' + N + '.txt');
+  fs.writeFileSync(file, '# 試合の通し(T1e)の検証:' + N + ' 試合(各試合を、野手と投手のモードで、「通常」と「評価が最も高い指示」の2通り)\n# 事前勝率の見積もり:' + A.CONFIG.game.priorN + ' 回。所要 ' + Math.round((Date.now() - t0) / 1000) + ' 秒\n\n' + S.join('\n') + '\n');
+  console.log(S.join('\n')); console.log('全出力:' + path.relative(process.cwd(), file));
+}
+
 const out = [];
 const sum = [];
 const log = (t) => out.push(t);
