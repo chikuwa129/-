@@ -691,8 +691,13 @@
 //   描き方:輪郭の線だけ(塗りは背景色で、重なりを表す)。線の太さは一定、角は丸める。静止画(アニメーションなし)
 //   人の形(T1d):頭(あご)と首、肩幅と厚みのある胴、太さのある腕と脚(閉じた輪郭)、ミトン状の手、靴の形。
 //     打者はヘルメット(つば)とバット、投手は帽子とグラブ、捕手はマスクとミット。各部品に data-el を付ける(テストで確かめる)
+//   打者(T1f):横向き(胸をホームベースへ、体の側面を見せる)。ホームベースの横に立ち、前の足と後ろの足を軽く開き、
+//     バットは後ろの肩の上に、両手で斜めに寝かせて構える(先は後ろ上方)。打者のモードは後ろ寄り、投手のモードは顔をこちらへ
+//   投手のモード(T1f):自分の投手を、引きの後ろ姿で手前に。奥に打者、捕手、ホームベース
 //   頭身:heads(仮 3。頭の大きさだけを変える)。人物は、足もとを原点、頭1つ分を 10 とする座標で描き、場面の大きさに写す
-//   左右:基準の向き(右打席・右投げ)で描き、左のときは、その人物だけを左右反転する(transform の scale(-1,1))
+//   左右:基準の向きで描き、左のときは、その人物だけを左右反転する(transform の scale(-1,1))。
+//     打者の基準は「ホームベースの左に立ち、右を向く」。打者のモードの右打者は、画面の左(基準のまま)。
+//     投手のモードは、投手から見ると右打者は画面の右に立つので、右打者を反転する(pitchRightyOn で 'left' にもできる)
 // =============================================================
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -700,11 +705,12 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
   const W = 200, H = 120;
-  const DEF = { heads: 3, strokeWidth: 1.7 };
-  const MIRROR = 'translate(' + W + ',0) scale(-1,1)';
+  const DEF = { heads: 3, strokeWidth: 1.7, pitchRightyOn: 'right' };
+  const mirror = (cx) => 'translate(' + 2 * cx + ',0) scale(-1,1)';
   const f = (v) => String(Math.round(v * 10) / 10);
   // 人物ごとのグループ。flip のとき左右反転する(data-flip で向きを残す。テストはこれで確かめる)
-  const group = (name, flip, body) => '<g data-part="' + name + '" data-flip="' + (flip ? 1 : 0) + '"' + (flip ? ' transform="' + MIRROR + '"' : '') + '>' + body + '</g>';
+  //   cx:反転の中心(既定は画面の中央。投手のモードの自分の投手は、その場で反転する)。view:向き(side=横向き、back=後ろ姿、front=正面)
+  const group = (name, flip, body, cx, view) => '<g data-part="' + name + '" data-flip="' + (flip ? 1 : 0) + '"' + (view ? ' data-view="' + view + '"' : '') + (flip ? ' transform="' + mirror(cx == null ? W / 2 : cx) + '"' : '') + '>' + body + '</g>';
   const P = (el, d, tf) => '<path data-el="' + el + '"' + (tf ? ' transform="' + tf + '"' : '') + ' d="' + d + '"/>';
 
   // ---------- 形の部品(閉じた輪郭) ----------
@@ -757,13 +763,45 @@
   // 帽子(正面):山と、つば
   const cap = (m) => P('cap', 'M' + m.h(-4.6, -28.4) + ' Q' + m.h(-4.7, -33.2) + ' ' + m.h(0, -33.2) + ' Q' + m.h(4.7, -33.2) + ' ' + m.h(4.6, -28.4) + ' Z')
     + P('cap', 'M' + m.h(-5.6, -28.4) + ' Q' + m.h(0, -29.4) + ' ' + m.h(5.6, -28.4) + ' Q' + m.h(0, -26.3) + ' ' + m.h(-5.6, -28.4) + ' Z');
-  // ヘルメット:つば(front:正面に見える / 後ろ姿は、山の両側にのぞく)、山、耳あて(画面の左の耳)
-  function helmet(m, front) {
+  // 帽子(後ろ姿):つばが両側にのぞき、後ろに調節の帯
+  const capBack = (m) => P('cap', 'M' + m.h(-5.8, -28.6) + ' Q' + m.h(0, -30.4) + ' ' + m.h(5.8, -28.6) + ' Q' + m.h(0, -27.6) + ' ' + m.h(-5.8, -28.6) + ' Z')
+    + P('cap', 'M' + m.h(-4.6, -28.2) + ' Q' + m.h(-4.7, -33.2) + ' ' + m.h(0, -33.2) + ' Q' + m.h(4.7, -33.2) + ' ' + m.h(4.6, -28.2) + ' Z M' + m.h(-1.6, -28.6) + ' Q' + m.h(0, -30) + ' ' + m.h(1.6, -28.6));
+  // ヘルメット:つば(front:正面に見える / 後ろ姿は、山の両側にのぞく)、山、耳あて(side:-1 で画面の左、+1 で右)
+  function helmet(m, front, side) {
+    const q = -(side || -1);
     const brim = front ? 'M' + m.h(-5.8, -28.2) + ' Q' + m.h(0, -29.2) + ' ' + m.h(5.8, -28.2) + ' Q' + m.h(0, -25.8) + ' ' + m.h(-5.8, -28.2) + ' Z'
       : 'M' + m.h(-6.2, -28.3) + ' Q' + m.h(0, -30.2) + ' ' + m.h(6.2, -28.3) + ' Q' + m.h(0, -27.2) + ' ' + m.h(-6.2, -28.3) + ' Z';
     const dome = 'M' + m.h(-5, -27.4) + ' Q' + m.h(-5.2, -34) + ' ' + m.h(0, -34) + ' Q' + m.h(5.2, -34) + ' ' + m.h(5, -27.4) + (front ? ' Z' : ' L' + m.h(5, -26.4) + ' L' + m.h(-5, -26.4) + ' Z');
-    const flap = 'M' + m.h(-5, -27.6) + ' Q' + m.h(-6.9, -27) + ' ' + m.h(-6.2, -24.2) + ' Q' + m.h(-5.2, -23.4) + ' ' + m.h(-4.1, -24.6) + ' Z';
+    const flap = 'M' + m.h(-5 * q, -27.6) + ' Q' + m.h(-6.9 * q, -27) + ' ' + m.h(-6.2 * q, -24.2) + ' Q' + m.h(-5.2 * q, -23.4) + ' ' + m.h(-4.1 * q, -24.6) + ' Z';
     return front ? P('helmet', dome) + P('helmet', brim) + P('helmet', flap) : P('helmet', brim) + P('helmet', dome) + P('helmet', flap);
+  }
+
+  // ---------- 横向きの打者(相手の打者も、自分の打者も共通) ----------
+  //   基準:ホームベースの左に立ち、胸をホームベース(右、+x)へ向ける。後ろ(-x)の肩の上にバットを寝かせて構え、先は後ろ上方
+  //   face:'front'(顔をこちら=投手へ。投手のモード)/ 'back'(後ろ寄り。打者のモード)。fy:前の足の上下(奥行き。負で奥)
+  const POSE = {
+    grip: [-4.3, -23.4], batTip: [-15.8, -30.2], torso: [-4.4, 4.6],   // 胴の左右の端(横向きの厚み)
+    backFoot: [-5.8, 0], frontFoot: [6.2, 0],
+  };
+  function sideBatter(m, face, fy) {
+    const sx = (x0, y0, w) => shoe(m.at(x0, y0), w * m.s);
+    // 横向きの靴(つま先がホームベースの方)
+    const shoeSide = (x0, y0) => P('shoe', 'M' + m.p(x0 - 2.4, y0) + ' L' + m.p(x0 + 2.9, y0) + ' Q' + m.p(x0 + 3.5, y0 - 1.3) + ' ' + m.p(x0 + 1.8, y0 - 1.7) + ' L' + m.p(x0 - 1.7, y0 - 2) + ' Q' + m.p(x0 - 2.6, y0 - 1.5) + ' ' + m.p(x0 - 2.4, y0) + ' Z');
+    void sx;
+    const bf = POSE.backFoot, ff = POSE.frontFoot;
+    const legs = P('leg', limb(m, -1.4, -12, -4.4, -6.6, 5)) + P('leg', limb(m, -4.4, -6.6, bf[0], -1.6, 4.6))       // 後ろの足(捕手の側)
+      + P('leg', limb(m, 1.4, -12, 4.6, -6.9 + fy / 2, 5)) + P('leg', limb(m, 4.6, -6.9 + fy / 2, ff[0], -1.6 + fy, 4.6));   // 前の足(投手の側)
+    const shoes = shoeSide(bf[0], bf[1]) + shoeSide(ff[0], ff[1] + fy);
+    // 胴(横向き):胸が右、背中が左。厚みは肩幅より狭い
+    const t = 'M' + m.p(-4.1, -21) + ' Q' + m.p(-5.4, -16) + ' ' + m.p(-3.7, -11) + ' L' + m.p(3.7, -11) + ' Q' + m.p(5.3, -15.6) + ' ' + m.p(4.3, -20.4) + ' Q' + m.p(0, -22.6) + ' ' + m.p(-4.1, -21) + ' Z';
+    const u = 'M' + m.p(-4, -12.7) + ' L' + m.p(4.2, -12.7) + ' M' + m.p(2.4, -21.6) + ' Q' + m.p(3.4, -17) + ' ' + m.p(3, -12.7);   // ベルトと、前立て(胸の側)
+    const neck = P('neck', 'M' + m.h(-1.8, -24.5) + ' L' + m.h(-1.8, -20.3) + ' L' + m.h(1.8, -20.3) + ' L' + m.h(1.8, -24.5) + ' Z');
+    const g = POSE.grip, tip = POSE.batTip;
+    return legs + shoes + neck + P('torso', t) + P('uniform', u) + head(m) + helmet(m, face === 'front', 1)
+      + P('arm', limb(m, -1.6, -20, -6.6, -19.6, 3.8)) + P('arm', limb(m, -6.6, -19.6, g[0] - 0.4, g[1] - 0.6, 3.4))   // 後ろの腕(肘を張る)
+      + P('bat', taper(m, g[0] + 1, g[1] + 0.7, tip[0], tip[1], 1.3, 2.7))
+      + P('arm', limb(m, 2, -20, -0.6, -17.4, 3.8)) + P('arm', limb(m, -0.6, -17.4, g[0] + 0.5, g[1] + 0.6, 3.4))      // 前の腕(胸の前を通る)
+      + mitten(m.at(g[0] + 0.6, g[1] + 0.7), 1.7 * m.s) + mitten(m.at(g[0] - 0.6, g[1] - 0.6), 1.7 * m.s);
   }
 
   // ---------- 打者のモード(打席から、投手を見る) ----------
@@ -777,50 +815,43 @@
       + P('arm', limb(m, -6.2, -19.8, -10.6, -23.4, 3.4)) + P('arm', limb(m, -10.6, -23.4, -9.8, -29.6, 3))   // 投げる腕(振りかぶる)
       + mitten(m.at(-9.8, -30.6), 1.9 * m.s) + ball(m.at(-9.6, -32.6), 1.1 * m.s);
   }
-  // 手前の打者(後ろ姿。基準:右打席=画面の左寄り、バットは左側に構える)
-  function nearBatter() {
-    const m = mapper(57, 118, 3.0, K);
-    return body(m, true, 1) + head(m) + helmet(m, false)
-      + P('arm', limb(m, 6.3, -20, 1.6, -18.2, 3.8)) + P('arm', limb(m, 1.6, -18.2, -6.6, -23.2, 3.4))   // 奥の腕(背中を横切る)
-      + P('bat', taper(m, -7.4, -23.6, -17.2, -34.2, 1.3, 2.7))
-      + P('arm', limb(m, -6.3, -20, -10.8, -19, 3.8)) + P('arm', limb(m, -10.8, -19, -8.6, -23.8, 3.4))   // 手前の腕
-      + mitten(m.at(-7.2, -23.4), 1.7 * m.s) + mitten(m.at(-8.6, -24.8), 1.7 * m.s);
-  }
+  // 手前の自分の打者(横向き・後ろ寄り。やや大きめ。基準:右打席=ホームベースの左)
+  const NEAR_BATTER = { ox: 55, oy: 117, s: 2.85 };
+  const nearBatter = () => sideBatter(mapper(NEAR_BATTER.ox, NEAR_BATTER.oy, NEAR_BATTER.s, K), 'back', -1.4);
   function homePlate() { return P('plate', 'M86 104 L114 104 L114 110 L100 116 L86 110 Z'); }
   function mound() { return P('mound', 'M78 58 Q100 50 122 58 Z'); }
 
-  // ---------- 投手のモード(マウンドから、打者を見る) ----------
-  // 奥の打者(正面寄り。基準:右打席。投手から見て、右打者は画面の右側に立つ。バットは画面の右上に立てる)
-  function farBatter() {
-    const m = mapper(124, 74, 1.2, K);
-    return body(m, false, 1.1) + head(m) + helmet(m, true)
-      + P('arm', limb(m, -6.2, -19.8, -1, -16.6, 3.4)) + P('arm', limb(m, -1, -16.6, 6.6, -22.4, 3))
-      + P('bat', taper(m, 7.6, -23.4, 14, -35, 1.3, 2.6))
-      + P('arm', limb(m, 6.2, -19.8, 10.6, -18, 3.4)) + P('arm', limb(m, 10.6, -18, 8.6, -23.4, 3))
-      + mitten(m.at(7.2, -22.6), 1.8 * m.s) + mitten(m.at(8.4, -24), 1.8 * m.s);
-  }
-  // 捕手(しゃがんだ形を簡略に):マスクとミット。ホームベースは手前
+  // ---------- 投手のモード(マウンドの後ろから、自分の投手の背中ごしに、打者を見る) ----------
+  // 奥の打者(横向き。顔をこちらへ。基準の位置はホームベースの左。右打者は反転して右に立つ)
+  const FAR_BATTER = { ox: 79, oy: 57, s: 1.05 };
+  const farBatter = () => sideBatter(mapper(FAR_BATTER.ox, FAR_BATTER.oy, FAR_BATTER.s, K), 'front', 0.8);
+  // 捕手(ホームベースの後ろに、しゃがむ):マスクとミット。ホームベースは手前
   function farCatcher() {
-    const m = mapper(100, 68, 0.95, K);
+    const m = mapper(100, 51, 0.8, K);
     const legs = P('leg', limb(m, -3.2, -9.5, -8.4, -7.5, 4.6)) + P('leg', limb(m, -8.4, -7.5, -6.2, -1.4, 4.2))
       + P('leg', limb(m, 3.2, -9.5, 8.4, -7.5, 4.6)) + P('leg', limb(m, 8.4, -7.5, 6.2, -1.4, 4.2));
     const torso = P('torso', 'M' + m.p(-6.8, -17.5) + ' Q' + m.p(-7.8, -13) + ' ' + m.p(-5, -9) + ' L' + m.p(5, -9) + ' Q' + m.p(7.8, -13) + ' ' + m.p(6.8, -17.5) + ' Q' + m.p(0, -19.2) + ' ' + m.p(-6.8, -17.5) + ' Z');
-    const hm = mapper(100, 68 + 6.5 * 0.95, 0.95, K);   // 頭は、しゃがんだぶん低い
+    const hm = mapper(100, 51 + 6.5 * 0.8, 0.8, K);   // 頭は、しゃがんだぶん低い
     const mask = P('mask', 'M' + hm.h(-3.4, -27) + ' L' + hm.h(3.4, -27) + ' M' + hm.h(-3.6, -25) + ' L' + hm.h(3.6, -25) + ' M' + hm.h(0, -29.5) + ' L' + hm.h(0, -23.4));
-    return legs + torso + head(hm) + mask + glove(m.at(1.5, -13), 3.8 * m.s).replace(/data-el="glove"/g, 'data-el="mitt"') + homePlate2();
+    return legs + torso + head(hm) + mask + glove(m.at(1.5, -13), 3.8 * m.s).replace(/data-el="glove"/g, 'data-el="mitt"')
+      + P('plate', 'M90 52 L110 52 L110 55 L100 58.5 L90 55 Z');
   }
-  function homePlate2() { return P('plate', 'M92 72 L108 72 L108 75 L100 78 L92 75 Z'); }
-  // 手前の自分の投手(帽子のつば、袖、投げる腕とボール、グラブ。基準:右投げ=投げる手は画面の右、グラブは左)
+  // 手前の自分の投手(引きの後ろ姿。全身。基準:右投げ=投げる腕は画面の右、グラブは左。左投げは、その場で反転)
+  const NEAR_PITCHER = { ox: 100, oy: 117, s: 1.6 };
   function nearPitcher() {
-    const m = mapper(0, 0, 1, 1);
-    return P('cap', 'M48 0 Q100 17 152 0 Z')
-      + P('uniform', limb(m, 166, 130, 172, 106, 17)) + P('arm', limb(m, 172, 106, 176, 90, 11))
-      + mitten(m.at(176, 86) + ' rotate(-15)', 8.5) + ball(m.at(170, 79), 5)
-      + P('uniform', limb(m, 32, 130, 40, 110, 17)) + P('arm', limb(m, 40, 110, 48, 100, 11))
-      + glove(m.at(52, 92) + ' rotate(15)', 13);
+    const m = mapper(NEAR_PITCHER.ox, NEAR_PITCHER.oy, NEAR_PITCHER.s, K);
+    return P('mound', 'M' + f(NEAR_PITCHER.ox - 40) + ' 121 Q' + f(NEAR_PITCHER.ox) + ' 104 ' + f(NEAR_PITCHER.ox + 40) + ' 121 Z')
+      + body(m, true, 1.15)
+      + P('arm', limb(m, -6.2, -19.8, -10.4, -16.2, 3.4)) + P('arm', limb(m, -10.4, -16.2, -12.4, -20.2, 3))   // グラブの腕(前へ)
+      + glove(m.at(-12.8, -21.6), 3.4 * m.s)
+      + head(m) + capBack(m)
+      + P('arm', limb(m, 6.2, -19.8, 10.6, -23.2, 3.4)) + P('arm', limb(m, 10.6, -23.2, 10.2, -29.6, 3))   // 投げる腕(振りかぶる)
+      + mitten(m.at(10.2, -30.6), 1.9 * m.s) + ball(m.at(10, -32.6), 1.1 * m.s);
   }
 
   let K = 1;
+  // 打者の反転:打者のモードは左打席だけ。投手のモードは、右打者を画面の右に立てる(pitchRightyOn:'right')
+  const batterFlip = (mode, bats, o) => (mode === 'bat' ? bats === 'L' : (bats === 'L') !== ((o.pitchRightyOn || DEF.pitchRightyOn) === 'right'));
   function draw(o) {
     o = o || {};
     const mode = o.mode === 'pitch' ? 'pitch' : 'bat';
@@ -828,14 +859,23 @@
     const color = o.color || '#222', bg = o.bg || '#fff', sw = o.strokeWidth || DEF.strokeWidth;
     K = 3 / Math.max(2, Math.min(8, o.heads || DEF.heads));   // 頭身:3 で頭の大きさがそのまま。大きいほど頭が小さい
     let body;
-    if (mode === 'bat') body = mound() + group('pitcher', throws === 'L', farPitcher()) + homePlate() + group('batter', bats === 'L', nearBatter());
-    else body = group('plate', false, farCatcher()) + group('batter', bats === 'L', farBatter()) + group('pitcher', throws === 'L', nearPitcher());
+    if (mode === 'bat') body = mound() + group('pitcher', throws === 'L', farPitcher(), null, 'front') + homePlate() + group('batter', batterFlip(mode, bats, o), nearBatter(), null, 'side');
+    else body = group('plate', false, farCatcher()) + group('batter', batterFlip(mode, bats, o), farBatter(), null, 'side') + group('pitcher', throws === 'L', nearPitcher(), NEAR_PITCHER.ox, 'back');
     const size = (o.width ? ' width="' + o.width + '"' : '') + (o.height ? ' height="' + o.height + '"' : '');
-    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '"' + size + ' preserveAspectRatio="xMidYMid meet" role="img" aria-label="' + (mode === 'bat' ? '打席から投手を見る' : 'マウンドから打者を見る') + '"'
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '"' + size + ' preserveAspectRatio="xMidYMid meet" role="img" aria-label="' + (mode === 'bat' ? '打席から投手を見る' : 'マウンドの後ろから打者を見る') + '"'
       + ' data-mode="' + mode + '" data-bats="' + bats + '" data-throws="' + throws + '">'
       + '<g fill="' + bg + '" stroke="' + color + '" stroke-width="' + sw + '" stroke-linecap="round" stroke-linejoin="round">' + body + '</g></svg>';
   }
-  return { draw: draw, VIEWBOX: [W, H], DEFAULTS: DEF };
+  // 打者の立ち方(テスト用。画面の座標):胴の中心、胸の向き(+1 右 / −1 左)、握り、バットの先、両足、ホームベースの中心
+  function batterModel(o) {
+    o = o || {};
+    const mode = o.mode === 'pitch' ? 'pitch' : 'bat', flip = batterFlip(mode, o.bats === 'L' ? 'L' : 'R', o);
+    const B = mode === 'bat' ? NEAR_BATTER : FAR_BATTER;
+    const pt = (x, y) => { const X = B.ox + B.s * x; return [flip ? W - X : X, B.oy + B.s * y]; };
+    return { flip: flip, center: pt((POSE.torso[0] + POSE.torso[1]) / 2, -16), facing: flip ? -1 : 1, grip: pt(POSE.grip[0], POSE.grip[1]), batTip: pt(POSE.batTip[0], POSE.batTip[1]),
+      backFoot: pt(POSE.backFoot[0], 0), frontFoot: pt(POSE.frontFoot[0], 0), headTop: pt(0, -34), torsoDepth: (POSE.torso[1] - POSE.torso[0]) * B.s, plateX: 100 };
+  }
+  return { draw: draw, batterModel: batterModel, VIEWBOX: [W, H], DEFAULTS: DEF, POSE: POSE };
 });
 </script>
 <script>
