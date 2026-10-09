@@ -252,6 +252,7 @@
   function enroll(st) {
     const H = st.hero;
     H.preEnrollRng = st.rngState;      // テスト用:入部の直前のゲーム本体の乱数の状態
+    recordCohort(st);                  // H1.8:同期の入学時の記録と、確定した入口の一覧(表示だけ)
     HighSchool.confirmPolicies(st, HighSchool.autoPolicies(st));
     const p = heroOf(st);
     HighSchool.setWatch(st, p.id, true);
@@ -1275,6 +1276,56 @@
       sides: twoWayKnown(p) ? Core.ratingSides(p) : null, items: items, hint: awOn() && p.awk && p.awk.h ? p.awk.h : null };
   }
 
+  // ---------- H1.8:同期の答え合わせ(表示だけ。乱数は使わない) ----------
+  const CR = () => HM().cohortReview || {};
+  // 入部の直前:同期(今年の新入生全員)の入学時の総合値・同世代の順位・ラベル・ヒント・覚醒の素質と、確定した入口の一覧の並び
+  function recordCohort(st) {
+    const H = st.hero;
+    const snap = (p) => { const r = entryRank(p) || {}; return { id: p.id, r: Core.rating(p), top: r.top == null ? null : r.top, label: r.label || '', hint: !!(p.awk && p.awk.h), t: !!(p.awk && p.awk.t) }; };
+    H.cohort = { entry: entryList(st).map((p) => p.id), mates: st.pendingRecruits.filter((p) => !p.helper).map(snap), fin: null };
+  }
+  // 主人公の卒業のとき(3年の7月):同期の総合値と同世代の順位(3年夏の基準)
+  function recordCohortFin(st) {
+    const H = st.hero;
+    if (!H.cohort) return;
+    H.cohort.fin = H.cohort.mates.map((m) => {
+      const p = anyPlayer(st, m.id);
+      if (!p) return { id: m.id, gone: true };
+      const r = Generation.getGenerationRank(p, 3, 7) || {};
+      return { id: m.id, r: Core.rating(p), top: r.top == null ? null : r.top };
+    });
+  }
+  const SEASON = (m) => (m >= 4 && m <= 5 ? '春' : m >= 6 && m <= 8 ? '夏' : m >= 9 && m <= 11 ? '秋' : '冬');
+  // 同期の答え合わせの中身。rows は入学時の総合値の順。rank は同期の中の順位(同点は id の順)
+  function cohortReview(st) {
+    const H = st.hero;
+    const C = H.cohort;
+    if (!C || !C.fin) return null;
+    const fin = new Map(C.fin.map((f) => [f.id, f]));
+    const rows = C.mates.filter((m) => fin.get(m.id) && !fin.get(m.id).gone).map((m) => {
+      const p = anyPlayer(st, m.id), f = fin.get(m.id);
+      return { id: m.id, name: p.name, pos: p.position, hero: m.id === H.id, init: { r: m.r, top: m.top, label: m.label }, fin: { r: f.r, top: f.top },
+        hint: awOn() && m.hint, talent: awOn() && m.t, awoken: awOn() && p.awoken ? { g: p.awoken.g, m: p.awoken.m } : null, entry: C.entry.indexOf(m.id) >= 0 };
+    });
+    const rankBy = (k) => rows.slice().sort((a, b) => b[k].r - a[k].r || a.id - b.id).forEach((x, i) => { x[k].rank = i + 1; });
+    rankBy('init'); rankBy('fin');
+    rows.sort((a, b) => a.init.rank - b.init.rank);
+    // 選ばなかった選手(確定した入口の一覧の順。主人公を除く)
+    const byId = new Map(rows.map((x) => [x.id, x]));
+    const unselected = C.entry.filter((id) => id !== H.id && byId.has(id)).map((id) => byId.get(id));
+    const T = CR().texts || {};
+    const pick = (list, id) => (list && list.length ? list[id % list.length] : '');
+    const lines = [];
+    if (unselected.length) {
+      const best = unselected.reduce((b, x) => (!b || x.fin.r - x.init.r > b.fin.r - b.init.r ? x : b), null);
+      lines.push(fill(pick(T.best, best.id), { n: best.name, a: best.init.r, b: best.fin.r }));
+      const hinted = unselected.filter((x) => x.hint);
+      const h = hinted.find((x) => x.awoken) || hinted[0];
+      if (h) lines.push(fill(pick(h.awoken ? T.hintAwoke : T.hintNone, h.id), { n: h.name, when: h.awoken ? h.awoken.g + '年の' + SEASON(h.awoken.m) : '' }));
+    }
+    return { rows: rows, unselected: unselected, lines: lines.slice(0, 2) };
+  }
+
   // ---------- ライバルの今月の出場と成績(既存の簡易成績 = 試合の記録 box から。新しい計算はしない) ----------
   //   大会のある月は大会の試合、ない月は練習試合を合計する。戻り値:{ label, text } か null(試合のない月)
   function playerMonthLine(st, p) {
@@ -1461,6 +1512,7 @@
     const h = heroOf(st);
     if (!h) return;
     H.finalAbilities = Object.assign({}, h.abilities);
+    recordCohortFin(st);   // H1.8:同期の卒業時(3年の7月)の記録(表示だけ)
     H.finalPitches = (h.pitches || []).map((x) => Object.assign({}, x));
     hrng(st, (r) => HighSchool.graduatePlayer(st, r, h));   // 進路の決め方は既存のまま(乱数はこのモード専用)
     st.players = st.players.filter((p) => p !== h);
@@ -2783,7 +2835,7 @@
     autoRival: autoRival, getValueAt: getValueAt, gamePeak: gamePeak, monthAppearance: monthAppearance, lineText: lineText, emptyLine: emptyLine, addLine: addLine, toggleWatch: toggleWatch, swapWatch: swapWatch, addWatch: addWatch, diffSentence: diffSentence, getRank: getRank, toKmh: toKmh, breakTotal: breakTotal, syncPitches: syncPitches, pitchCountFor: pitchCountFor, closeNewYear: closeNewYear, rosterList: rosterList, makeHeroPlayer: makeHeroPlayer, contestOf: contestOf, convertEligible: convertEligible, heroOf: heroOf, rivalOf: rivalOf, statusLabel: statusLabel,
     rivalLine: rivalLine, contestAxisNow: contestAxisNow, keys: keys, save: save, load: load, wipeKeys: wipeKeys,
     startNew: startNew, resetSameSeed: resetSameSeed, resetNewSeed: resetNewSeed, wipeAll: wipeAll, startup: startup,
-    assignAwk: assignAwk, awaken: awaken, awakenFxData: awakenFxData, entryList: entryList, spotlightPicks: spotlightPicks, spotlightData: spotlightData,
+    assignAwk: assignAwk, awaken: awaken, awakenFxData: awakenFxData, cohortReview: cohortReview, entryList: entryList, spotlightPicks: spotlightPicks, spotlightData: spotlightData,
     subText: subText, subStatsText: subStatsText, pickable: pickable, makePickup: makePickup, goGraduate: goGraduate, summerResultLine: summerResultLine, playerMonthLine: playerMonthLine, ratingSeries: ratingSeries, autoRival: autoRival, lineupRows: lineupRows, tourneyLineupRows: tourneyLineupRows, anyPlayer: anyPlayer, statCells: statCells,
     pickText: pickText, fill: fill, typeOf: typeOf, setback: setback, tryRebound: tryRebound, hrng: hrng, serialOf: serialOf,
     mountUI: mountUI,

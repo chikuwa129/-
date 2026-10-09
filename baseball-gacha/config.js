@@ -396,7 +396,7 @@
 
     // ---- 新入部員モード(hero.html / play-hero.html)。数値はすべて仮の値。育成監督モードでは使わない ----
     heroMode: {
-      saveVersion: 12,              // H1.7 で 12:覚醒の前後の値(演出用)。H1.6b で 11:覚醒。保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5、H1.4b で 6:卒業待ち、H1.5a で 7:ピックアップ、H1.4c で 8:月ごとのスタメン、H1.5b で 9:救援、H1.6a で 10:途中出場)
+      saveVersion: 13,              // H1.8 で 13:同期の入学時・卒業時の記録と、確定した入口の一覧。H1.7 で 12:覚醒の前後の値(演出用)。H1.6b で 11:覚醒。保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5、H1.4b で 6:卒業待ち、H1.5a で 7:ピックアップ、H1.4c で 8:月ごとのスタメン、H1.5b で 9:救援、H1.6a で 10:途中出場)
       seedSalt: 0x4e52b1d3,         // このモード専用の乱数(引き直し・主人公の作成・物語の文面・転向と再起の抽選)
       rerollMax: 2,                 // 新入部員の一覧の引き直しの回数
       stopOnStory: true,            // 主人公の山場の物語で、自動進行を止める
@@ -457,6 +457,16 @@
       entranceMax: 8,               // 入口で大きなカードで出す新入生(ピックアップ)の最大人数(roster.version 'v2' のとき)
       entrancePickTop: 5,           // ピックアップのうち、総合値の上位から選ぶ人数(残りは無作為)
       ui: { progressBar: 'bottom' },   // 進行ボタンのバー:'bottom' 下に固定 / 'top' 上に固定 / 'inline' 固定しない(H1.4b の表示)
+      // 同期の答え合わせ(H1.8。卒業画面から。表示だけ)。すべて仮の値
+      cohortReview: {
+        enabled: true,              // false で、H1.7b と同じ(ボタンなし)
+        firstShow: 10,              // 先に出す人数(強調する行のほかに、並べた順の上位○人。残りは「全員を見る」)
+        texts: {
+          best: ['見送った{n}は、{a} → {b} まで伸びた。', '見送った{n}は、3年間で {a} から {b} へ。', '一覧で見送った{n}の総合値は、{a} → {b}。'],
+          hintAwoke: ['ヒント付きで見送った{n}は、{when}に覚醒した。', '✦の一言があった{n}は、{when}に覚醒した。あの一言は本物だった。', '見送った{n}のヒントは当たった。{when}、覚醒。'],
+          hintNone: ['ヒント付きで見送った{n}は、高校では覚醒しなかった。', '✦の一言があった{n}は、高校のうちには覚醒しなかった。', '見送った{n}のヒントは、高校では花開かなかった。'],
+        },
+      },
       // 演出(H1.7。見た目だけ。勝敗・能力・進路・成績・乱数は変えない)。すべて仮の値
       fx: {
         enabled: true,              // false で、H1.6b と同じ見た目(演出なし)
@@ -940,6 +950,8 @@
     ['heroMode.awakening.kmhMin', 'hero', '覚醒で伸びる球速の下限(km/h)'],
     ['heroMode.awakening.kmhMax', 'hero', '覚醒で伸びる球速の上限(km/h)'],
     ['heroMode.awakening.brkGain', 'hero', '覚醒で伸びる変化球(総変化量)'],
+    ['heroMode.cohortReview.enabled', 'hero', '卒業画面の「同期の答え合わせ」(オン/オフ。オフで H1.7b と同じ)', true],
+    ['heroMode.cohortReview.firstShow', 'hero', '同期の答え合わせ:先に出す人数(強調する行のほか)', true],
     ['heroMode.fx.enabled', 'hero', '演出(入口の登場・覚醒の瞬間)のオン/オフ。オフで H1.6b と同じ見た目', true],
     ['heroMode.fx.entry.stepSec', 'hero', '入口の演出:1人ずつ出る間隔(秒)', true],
     ['heroMode.fx.entry.totalMaxSec', 'hero', '入口の演出:総時間の上限(秒)', true],
