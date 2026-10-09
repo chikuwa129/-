@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="ja">
+<!-- このファイルは build-play.js が生成します。直接編集しないこと -->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>打席の試作</title>
+<style>
+  :root { --bg: #f4f1ea; --card: #fffdf8; --ink: #222; --sub: #777; --line: #ddd5c6; --accent: #1f5f8b; --win: #1d7a3a; --lose: #b03a2e; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; font-size: 15px; line-height: 1.5; }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 0 12px calc(170px + env(safe-area-inset-bottom)); }
+  header { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 8px 0 6px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 16px; margin: 0 0 4px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+  .small { font-size: 12px; color: var(--sub); }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0; }
+  .chip { padding: 5px 10px; border: 1px solid var(--line); background: #fff; border-radius: 14px; font-size: 13px; }
+  .chip.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  select, input { font-size: 14px; padding: 5px; border: 1px solid var(--line); border-radius: 6px; background: #fff; min-width: 0; }
+  input[type=number] { width: 7em; }
+  .scene { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+  .sc-big { font-size: 22px; font-weight: bold; }
+  .outs span { display: inline-block; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--lose); margin-right: 3px; vertical-align: middle; }
+  .outs span.on { background: var(--lose); }
+  .dia { position: relative; width: 84px; height: 84px; }
+  .dia i { position: absolute; width: 26px; height: 26px; border: 2px solid #999; background: #fff; transform: rotate(45deg); }
+  .dia i.on { background: #e0a800; border-color: #b07d00; }
+  .dia .b2 { left: 29px; top: 4px; } .dia .b1 { left: 54px; top: 29px; } .dia .b3 { left: 4px; top: 29px; } .dia .hp { left: 29px; top: 54px; background: #eee; border-color: #ccc; }
+  .abil { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 4px; margin-top: 4px; }
+  .abil div { min-width: 0; background: #f6f2e9; border-radius: 4px; padding: 2px; text-align: center; font-size: 11px; color: var(--sub); }
+  .abil b { display: block; font-size: 22px; line-height: 1.1; color: var(--ink); }
+  .abil i { display: block; font-style: normal; font-size: 13px; color: var(--ink); }
+  .abil b small { font-size: 11px; font-weight: normal; }
+  .rkS b, .rkA b { color: #c0392b; } .rkB b, .rkC b { color: #d35400; } .rkF b, .rkG b { color: #999; }
+  h2 { font-size: 15px; margin: 0 0 2px; }
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--card); border-top: 1px solid var(--line); box-shadow: 0 -2px 6px rgba(0,0,0,.08); padding-bottom: env(safe-area-inset-bottom); }
+  .bar-in { max-width: 560px; margin: 0 auto; padding: 6px 10px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .ob { border: 1px solid var(--accent); background: #fff; color: var(--accent); border-radius: 8px; padding: 6px 4px; min-height: 52px; font-size: 14px; font-weight: bold; text-align: center; line-height: 1.25; }
+  .ob small { display: block; font-size: 10px; font-weight: normal; color: var(--sub); }
+  .ob .ev { display: block; font-size: 11px; font-weight: normal; color: var(--ink); }
+  .ob.best { border-width: 2px; box-shadow: 0 0 0 2px #cfe3f2; }
+  .ob.next { grid-column: 1 / -1; background: var(--accent); color: #fff; min-height: 48px; font-size: 16px; }
+  .res { font-size: 20px; font-weight: bold; }
+  .up { color: var(--win); } .dn { color: var(--lose); }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; } td, th { border-bottom: 1px dotted #ddd; padding: 2px 3px; text-align: left; }
+  .dev { font-family: ui-monospace, monospace; font-size: 10px; word-break: break-all; background: #eef; }
+  details summary { cursor: pointer; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>⚾ 打席の試作(T1)</h1><div class="row" id="modes"></div></header>
+  <main id="main"></main>
+</div>
+<div class="bar"><div class="bar-in" id="bar"></div></div>
+<script>
+// ---- atbat-engine.js(build-play.js で埋め込み)----
+// =============================================================
+// atbat-engine.js : 打席の試作(T1)の計算の部品
+//   能力と場面と指示から、打席の結果の確率を出し、抽選し、走者と得点を更新する。
+//   得点期待値(走者とアウトの24通り)、指示ごとの見込み、介入場面の判定(isKeyScene)も持つ。
+//   画面・保存・本編の設定に依存しない(本編・監督モードへ、あとで使えるように)。数値はすべて仮。
+// =============================================================
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.AtBat = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  // ---------- 設定(すべて仮の値) ----------
+  const CONFIG = {
+    // 打席の結果の基準の確率(高校野球の水準の仮置き。合計 1)
+    base: { K: 0.17, BB: 0.09, GO: 0.31, FO: 0.21, S: 0.16, XB: 0.05, HR: 0.01 },
+    // 能力の差の補正:w = 基準 × exp(clamp(Σ 係数 × z, ±expCap))、z = (能力 − 50) ÷ 50。最後に合計 1 に割り直す
+    expCap: 1.6,
+    coef: {
+      K:  { stuff: 0.6, con: -0.7 },
+      BB: { ctl: -0.7, con: 0.25 },
+      GO: { brk: 0.25, def: 0.2, pow: -0.1 },
+      FO: { def: 0.2 },
+      S:  { con: 0.5, stuff: -0.3, def: -0.35, spd: 0.15 },
+      XB: { pow: 0.6, stuff: -0.25, ctl: -0.25, def: -0.2, spd: 0.1 },
+      HR: { pow: 1.0, stuff: -0.3, ctl: -0.35 },
+    },
+    // 指示の効き:結果ごとの log 倍率(m)と、能力による追加(z の係数)。方向は設計メモの 6 に従う。大きさは仮
+    orders: {
+      bat: {
+        normal: {},
+        power:  { K: { m: 0.3, con: -0.3 }, S: { m: -0.15 }, GO: { m: -0.15 }, FO: { m: 0.15 }, XB: { m: 0.3, pow: 0.15 }, HR: { m: 0.45, pow: 0.2 } },
+        contact: { K: { m: -0.4 }, BB: { m: -0.1 }, GO: { m: 0.1 }, S: { m: 0.2, con: 0.1 }, XB: { m: -0.3 }, HR: { m: -0.7 } },
+      },
+      pitch: {
+        normal: {},
+        fast:   { K: { m: 0.1, vel: 0.35 }, BB: { m: -0.1 }, GO: { m: -0.1 }, XB: { m: 0.15, ctl: -0.35 }, HR: { m: 0.2, ctl: -0.4 } },
+        breaking: { K: { m: 0.1, brk: 0.3 }, GO: { m: 0.2 }, BB: { m: 0.15, ctl: -0.35 }, XB: { m: -0.05 }, S: { m: 0.05 } },
+        outside: { XB: { m: -0.25, pow: -0.15 }, HR: { m: -0.4, pow: -0.25 }, BB: { m: 0.22, ctl: -0.25 }, S: { m: 0.08 }, K: { m: -0.05 } },
+        inside: { K: { m: 0.1, con: -0.15 }, FO: { m: 0.12 }, BB: { m: 0.1, ctl: -0.3 }, XB: { m: 0.1, ctl: -0.3, pow: 0.15 }, HR: { m: 0.2, ctl: -0.4, pow: 0.25 }, S: { m: -0.1 } },
+      },
+    },
+    // 送りバント:成功率 = clamp(base + con × z(ミート) + spd × z(走力) − def × z(守備))。成功で走者が1つ進み、打者はアウト
+    bunt: { base: 0.78, con: 0.1, spd: 0.06, def: 0.08, min: 0.4, max: 0.96, hitBase: 0.04, hitSpd: 0.06, hitMax: 0.15 },
+    // スクイズ:成功率 = clamp(base + con × z(ミート) − def × z(守備))。成功で三塁走者が生還し、打者はアウト(他の走者は1つ進む)
+    //   失敗:三塁走者が本塁でアウト。打者は一塁へ(野選)、他の走者は進まない
+    squeeze: { base: 0.68, con: 0.25, def: 0.08, min: 0.3, max: 0.93 },
+    // 盗塁(一塁走者だけ):成功率 = clamp(base + spd × z(走者の走力) − arm × z(肩) − quick × z(クイック))
+    steal: { base: 0.66, spd: 0.3, arm: 0.15, quick: 0.12, min: 0.15, max: 0.95 },
+    // 走者の進塁(z は走者の走力、肩は守備側)
+    run: {
+      goAdv: 0.5,                                  // ゴロのアウト(2アウト未満):走者が、そろって1つ進む確率(内野ゴロの進塁打)
+      s2home: { base: 0.6, spd: 0.3, arm: 0.2 },   // 単打:二塁走者が生還する確率(残りは三塁へ)
+      s1third: { base: 0.25, spd: 0.3, arm: 0.2 }, // 単打:一塁走者が三塁まで進む確率(三塁が空いたとき。残りは二塁へ)
+      x1home: { base: 0.45, spd: 0.3, arm: 0.2 },  // 長打:一塁走者が生還する確率(残りは三塁へ)
+      triple: { base: 0.1, spd: 0.1 },             // 長打のうち、三塁打の割合(打者の走力)
+      pMin: 0.05, pMax: 0.95,
+    },
+    // 得点期待値の基準の打者・投手・守備(能力はすべて中位)
+    reBase: 50,
+    // 終盤の接戦(inning 回以降、点差が diff 以内)は、最善の指示を「1点以上取る(取られる)確率」で選ぶ。それ以外は得点期待値
+    lateClose: { inning: 8, diff: 1 },
+    // 介入場面の判定(isKeyScene)のプリセット
+    keyScene: {
+      success: { bat: { who: 'all', minInning: 1, chance: false }, pitch: { pinch: true, maxDiff: 3, minInning: 1 } },
+      manager: { bat: { who: 'focus', minInning: 7, chance: true }, pitch: { pinch: true, maxDiff: 3, minInning: 7 } },
+    },
+  };
+  const OUTCOMES = ['K', 'BB', 'GO', 'FO', 'S', 'XB', 'HR'];
+  const OUTCOME_LABEL = { K: '三振', BB: '四球', GO: 'ゴロのアウト', FO: 'フライのアウト', S: '単打', XB: '長打', HR: '本塁打' };
+  const ORDER_LABEL = {
+    bat: { normal: '通常', power: '長打狙い', contact: '短打狙い', bunt: '送りバント', squeeze: 'スクイズ', steal: '盗塁' },
+    pitch: { normal: '通常', fast: '直球中心', breaking: '変化球中心', outside: '外角中心', inside: '内角中心', walk: '敬遠' },
+  };
+
+  // ---------- 乱数(試作専用。本編と共有しない。mulberry32) ----------
+  function Rng(seed) { this.s = seed >>> 0; }
+  Rng.prototype.next = function () {
+    this.s = (this.s + 0x6D2B79F5) >>> 0;
+    let t = this.s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  Rng.prototype.int = function (a, b) { return a + Math.floor(this.next() * (b - a + 1)); };
+  Rng.prototype.chance = function (p) { return this.next() < p; };
+
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const z = (v) => ((v == null ? 50 : v) - 50) / 50;
+
+  // ---------- 能力のプリセット(本編と同じ尺度:0〜100、特別な選手は150まで) ----------
+  const PRESETS = {
+    batter: {
+      strong: { contact: 80, power: 75, speed: 70 },
+      normal: { contact: 50, power: 50, speed: 50 },
+      weak: { contact: 25, power: 20, speed: 30 },
+    },
+    pitcher: {
+      strong: { velocity: 80, control: 75, breaking: 70, quick: 60 },
+      normal: { velocity: 50, control: 50, breaking: 50, quick: 50 },
+      weak: { velocity: 25, control: 25, breaking: 25, quick: 40 },
+    },
+  };
+  // 本編と同じ見せ方(ランク文字、球速 km/h、変化量)
+  const RANK = { S: 100, A: 80, B: 65, C: 50, D: 35, E: 20, F: 10 };
+  function rankOf(v) { for (const k of Object.keys(RANK)) if (v >= RANK[k]) return k; return 'G'; }
+  function kmh(v) { const x = v <= 100 ? 112 + v * 0.45 : 157 + (v - 100) * 0.1; return Math.min(170, Math.round(x)); }
+  function breakTotal(v) { return Math.round(v * 0.12); }
+
+  // ---------- 確率 ----------
+  // 場面の打者・投手・守備から、z の値をまとめる
+  function zs(sc) {
+    const b = sc.batter, p = sc.pitcher;
+    return { con: z(b.contact), pow: z(b.power), spd: z(b.speed), vel: z(p.velocity), ctl: z(p.control), brk: z(p.breaking),
+      stuff: (z(p.velocity) + z(p.breaking)) / 2, def: z(sc.defense), arm: z(sc.arm), quick: z(p.quick) };
+  }
+  function termSum(t, Z) { let s = 0; for (const k of Object.keys(t || {})) s += k === 'm' ? t[k] : t[k] * (Z[k] || 0); return s; }
+  // 打席の結果の確率 { K, BB, GO, FO, S, XB, HR }(合計 1)。order は打撃の指示(bat)か投球の指示(pitch)
+  function probs(sc, order, cfg) {
+    const C = cfg || CONFIG;
+    const Z = zs(sc);
+    const side = sc.side === 'pitch' ? 'pitch' : 'bat';
+    if (side === 'pitch' && order === 'walk') return { K: 0, BB: 1, GO: 0, FO: 0, S: 0, XB: 0, HR: 0 };
+    const O = (C.orders[side] && C.orders[side][order]) || {};
+    const w = {};
+    let sum = 0;
+    for (const k of OUTCOMES) {
+      const e = clamp(termSum(C.coef[k], Z), -C.expCap, C.expCap) + termSum(O[k], Z);
+      w[k] = C.base[k] * Math.exp(e);
+      sum += w[k];
+    }
+    for (const k of OUTCOMES) w[k] /= sum;
+    return w;
+  }
+  const p01 = (C, x) => clamp(x, C.run.pMin, C.run.pMax);
+  function buntP(sc, C) { const Z = zs(sc), B = C.bunt; return clamp(B.base + B.con * Z.con + B.spd * Z.spd - B.def * Z.def, B.min, B.max); }
+  function buntHitP(sc, C) { const B = C.bunt; return clamp(B.hitBase + B.hitSpd * z(sc.batter.speed), 0, B.hitMax); }
+  function squeezeP(sc, C) { const Z = zs(sc), Q = C.squeeze; return clamp(Q.base + Q.con * Z.con - Q.def * Z.def, Q.min, Q.max); }
+  function stealP(sc, C) { const S = C.steal; return clamp(S.base + S.spd * z(runnerSpd(sc, 1)) - S.arm * z(sc.arm) - S.quick * z(sc.pitcher.quick), S.min, S.max); }
+  const runnerSpd = (sc, base) => (sc.runnerSpeed && sc.runnerSpeed[base - 1] != null ? sc.runnerSpeed[base - 1] : 50);
+
+  // ---------- 走者の更新(分岐つき) ----------
+  // 状態:{ outs, b: [一塁, 二塁, 三塁](走者の走力 または null) }。戻り値:[{ q: 確率, outs, b, runs }]
+  function branchesOf(sc, kind, C) {
+    const b = sc.bases.slice(), outs = sc.outs, R = C.run;
+    const arm = z(sc.arm);
+    const out = [];
+    const add = (q, o, nb, runs) => { if (q > 0) out.push({ q: q, outs: o, b: nb, runs: runs }); };
+    const bs = b.map((x) => (x == null ? null : x));
+    const bat = sc.batter.speed;
+    const pr = (P, spd) => p01(C, P.base + P.spd * z(spd) - (P.arm || 0) * arm);
+    if (kind === 'K' || kind === 'FO') { add(1, outs + 1, bs, 0); return out; }
+    if (kind === 'GO') {
+      if (outs < 2 && bs.some((x) => x != null)) {
+        const adv = [null, bs[0], bs[1]];
+        add(R.goAdv, outs + 1, adv, bs[2] != null ? 1 : 0);
+        add(1 - R.goAdv, outs + 1, bs, 0);
+      } else add(1, outs + 1, bs, 0);
+      return out;
+    }
+    if (kind === 'BB') {
+      let nb = bs.slice(), runs = 0;
+      if (nb[0] != null) { if (nb[1] != null) { if (nb[2] != null) runs = 1; nb[2] = nb[1]; } nb[1] = nb[0]; }
+      nb[0] = bat;
+      add(1, outs, nb, runs);
+      return out;
+    }
+    if (kind === 'HR') { add(1, outs, [null, null, null], 1 + bs.filter((x) => x != null).length); return out; }
+    if (kind === 'S') {
+      // 三塁走者は生還。二塁走者は生還か三塁。一塁走者は二塁か(三塁が空けば)三塁
+      const base3 = bs[2] != null ? 1 : 0;
+      const opts2 = bs[1] != null ? [[pr(R.s2home, bs[1]), true], [1 - pr(R.s2home, bs[1]), false]] : [[1, null]];
+      for (const [q2, home2] of opts2) {
+        const third = home2 === false ? bs[1] : null;
+        const runs = base3 + (home2 ? 1 : 0);
+        if (bs[0] != null) {
+          const p13 = third == null ? pr(R.s1third, bs[0]) : 0;
+          add(q2 * p13, outs, [bat, null, bs[0]], runs);
+          add(q2 * (1 - p13), outs, [bat, bs[0], third], runs);
+        } else add(q2, outs, [bat, null, third], runs);
+      }
+      return out;
+    }
+    if (kind === 'XB') {
+      const pt = p01(C, R.triple.base + R.triple.spd * z(bat));
+      const base23 = (bs[1] != null ? 1 : 0) + (bs[2] != null ? 1 : 0);
+      const opts1 = bs[0] != null ? [[pr(R.x1home, bs[0]), true], [1 - pr(R.x1home, bs[0]), false]] : [[1, null]];
+      for (const [q1, home1] of opts1) {
+        const runs = base23 + (home1 ? 1 : 0);
+        // 三塁打:一塁走者も生還
+        add(q1 * pt, outs, [null, null, bat], base23 + (bs[0] != null ? 1 : 0));
+        add(q1 * (1 - pt), outs, [null, bat, home1 === false ? bs[0] : null], runs);
+      }
+      return out;
+    }
+    throw new Error('unknown ' + kind);
+  }
+  // 指示ごとの分岐([{ q, outs, b, runs, kind }])。kind は結果の種類(打席の7つ、または bunt_ok など)
+  function orderBranches(sc, order, cfg) {
+    const C = cfg || CONFIG;
+    const side = sc.side === 'pitch' ? 'pitch' : 'bat';
+    const out = [];
+    const push = (q, list, kind) => { for (const x of list) out.push(Object.assign({}, x, { q: q * x.q, kind: kind })); };
+    if (side === 'bat' && order === 'bunt') {
+      const ps = buntP(sc, C), ph = buntHitP(sc, C) * ps;
+      const adv = [null, sc.bases[0], sc.bases[1]];
+      push(ps - ph, [{ q: 1, outs: sc.outs + 1, b: adv, runs: sc.bases[2] != null ? 1 : 0 }], 'bunt_ok');
+      push(ph, [{ q: 1, outs: sc.outs, b: [sc.batter.speed, sc.bases[0], sc.bases[1]], runs: sc.bases[2] != null ? 1 : 0 }], 'bunt_hit');
+      push(1 - ps, [{ q: 1, outs: sc.outs + 1, b: sc.bases.slice(), runs: 0 }], 'bunt_ng');
+      return out;
+    }
+    if (side === 'bat' && order === 'squeeze') {
+      const ps = squeezeP(sc, C);
+      push(ps, [{ q: 1, outs: sc.outs + 1, b: [null, sc.bases[0], sc.bases[1]], runs: 1 }], 'sq_ok');
+      push(1 - ps, [{ q: 1, outs: sc.outs + 1, b: [sc.batter.speed, sc.bases[0], sc.bases[1]], runs: 0 }], 'sq_ng');
+      return out;
+    }
+    if (side === 'bat' && order === 'steal') {
+      const ps = stealP(sc, C);
+      push(ps, [{ q: 1, outs: sc.outs, b: [null, sc.bases[0], sc.bases[2]], runs: 0 }], 'st_ok');
+      push(1 - ps, [{ q: 1, outs: sc.outs + 1, b: [null, sc.bases[1], sc.bases[2]], runs: 0 }], 'st_ng');
+      return out;
+    }
+    const P = probs(sc, order, C);
+    for (const k of OUTCOMES) if (P[k] > 0) push(P[k], branchesOf(sc, k, C), k);
+    return out;
+  }
+  // 指示が使えるか
+  function legalOrders(sc) {
+    const b = sc.bases, side = sc.side === 'pitch' ? 'pitch' : 'bat';
+    if (side === 'pitch') return ['normal', 'fast', 'breaking', 'outside', 'inside'].concat(b[0] == null ? ['walk'] : []);
+    const L = ['normal', 'power', 'contact'];
+    if (sc.outs < 2 && b.some((x) => x != null)) L.push('bunt');
+    if (sc.outs < 2 && b[2] != null) L.push('squeeze');
+    if (b[0] != null && b[1] == null) L.push('steal');
+    return L;
+  }
+
+  // ---------- 得点期待値(24通り。基準の打者・投手で、反復で解く) ----------
+  const stateKey = (outs, b) => outs * 8 + (b[0] != null ? 1 : 0) + (b[1] != null ? 2 : 0) + (b[2] != null ? 4 : 0);
+  const reCache = new Map(), p1Cache = new Map();
+  // 基準の打者・投手での、状態ごとの分岐(24通り)
+  function baseTrans(C) {
+    const m = C.reBase;
+    const base = { side: 'bat', batter: { contact: m, power: m, speed: m }, pitcher: { velocity: m, control: m, breaking: m, quick: m }, defense: m, arm: m };
+    const trans = [];
+    for (let s = 0; s < 24; s++) {
+      const outs = Math.floor(s / 8), bits = s % 8;
+      const b = [bits & 1 ? m : null, bits & 2 ? m : null, bits & 4 ? m : null];
+      trans.push(orderBranches(Object.assign({}, base, { outs: outs, bases: b }), 'normal', C));
+    }
+    return trans;
+  }
+  // 1点以上取る確率(そのイニングの残りで)。P(s) = Σ q × (得点あり ? 1 : P(次))
+  function p1Table(cfg) {
+    const C = cfg || CONFIG;
+    if (p1Cache.has(C)) return p1Cache.get(C);
+    const trans = baseTrans(C);
+    let v = new Array(24).fill(0);
+    for (let it = 0; it < 400; it++) {
+      const nx = trans.map((list) => list.reduce((a, x) => a + x.q * (x.runs > 0 ? 1 : x.outs >= 3 ? 0 : v[stateKey(x.outs, x.b)]), 0));
+      const d = nx.reduce((a, w, i) => Math.max(a, Math.abs(w - v[i])), 0);
+      v = nx;
+      if (d < 1e-10) break;
+    }
+    p1Cache.set(C, v);
+    return v;
+  }
+  function p1Of(outs, b, cfg) { return outs >= 3 ? 0 : p1Table(cfg)[stateKey(outs, b)]; }
+  function reTable(cfg) {
+    const C = cfg || CONFIG;
+    if (reCache.has(C)) return reCache.get(C);
+    const trans = baseTrans(C);
+    let re = new Array(24).fill(0);
+    for (let it = 0; it < 400; it++) {
+      const nx = trans.map((list) => list.reduce((a, x) => a + x.q * (x.runs + (x.outs >= 3 ? 0 : re[stateKey(x.outs, x.b)])), 0));
+      const d = nx.reduce((a, v, i) => Math.max(a, Math.abs(v - re[i])), 0);
+      re = nx;
+      if (d < 1e-10) break;
+    }
+    reCache.set(C, re);
+    return re;
+  }
+  function reOf(outs, b, cfg) { return outs >= 3 ? 0 : reTable(cfg)[stateKey(outs, b)]; }
+  // 指示の見込み:この打席(または盗塁)の得点 + 次の状態の得点期待値の期待値。攻撃側から見た値
+  function expectOrder(sc, order, cfg) {
+    const br = orderBranches(sc, order, cfg);
+    return br.reduce((a, x) => a + x.q * (x.runs + reOf(x.outs, x.b, cfg)), 0);
+  }
+  // 1点以上取る確率の見込み
+  function expectOrderP1(sc, order, cfg) {
+    const br = orderBranches(sc, order, cfg);
+    return br.reduce((a, x) => a + x.q * (x.runs > 0 ? 1 : p1Of(x.outs, x.b, cfg)), 0);
+  }
+  const isLateClose = (sc, C) => sc.inning >= C.lateClose.inning && Math.abs(sc.diff) <= C.lateClose.diff;
+  // 全指示の見込み(確率の変化つき)。best:攻撃は最大、守備(投手)は最小。終盤の接戦は「1点以上の確率」、それ以外は得点期待値で比べる
+  function evaluate(sc, cfg) {
+    const C = cfg || CONFIG;
+    const now = reOf(sc.outs, sc.bases, C);
+    const p0 = probs(sc, 'normal', C);
+    const rows = legalOrders(sc).map((o) => {
+      const special = ['bunt', 'squeeze', 'steal', 'walk'].indexOf(o) >= 0;
+      const P = special ? null : probs(sc, o, C);
+      const delta = P ? OUTCOMES.reduce((d, k) => (d[k] = P[k] - p0[k], d), {}) : null;
+      const succ = o === 'bunt' ? buntP(sc, C) : o === 'squeeze' ? squeezeP(sc, C) : o === 'steal' ? stealP(sc, C) : null;
+      return { order: o, label: ORDER_LABEL[sc.side === 'pitch' ? 'pitch' : 'bat'][o], ev: expectOrder(sc, o, C), p1: expectOrderP1(sc, o, C), probs: P, delta: delta, success: succ };
+    });
+    const metric = isLateClose(sc, C) ? 'p1' : 'ev';
+    const pick = sc.side === 'pitch' ? (a, b) => (b[metric] < a[metric] ? b : a) : (a, b) => (b[metric] > a[metric] ? b : a);
+    return { re: now, p1: p1Of(sc.outs, sc.bases, C), metric: metric, rows: rows, best: rows.reduce(pick).order };
+  }
+
+  // ---------- 抽選と結果 ----------
+  function resolve(sc, order, rng, cfg) {
+    const br = orderBranches(sc, order, cfg);
+    let u = rng.next(), x = br[br.length - 1];
+    for (const y of br) { if (u < y.q) { x = y; break; } u -= y.q; }
+    const before = reOf(sc.outs, sc.bases, cfg);
+    const after = reOf(x.outs, x.b, cfg);
+    return { kind: x.kind, label: KIND_LABEL[x.kind] || OUTCOME_LABEL[x.kind], outs: x.outs, bases: x.b, runs: x.runs, reBefore: before, reAfter: after,
+      // 攻撃側の得点期待値の変化(この打席の得点を含む)
+      delta: x.runs + after - before };
+  }
+  const KIND_LABEL = { bunt_ok: '送りバント成功', bunt_hit: 'バントヒット', bunt_ng: '送りバント失敗', sq_ok: 'スクイズ成功', sq_ng: 'スクイズ失敗(三塁走者アウト)', st_ok: '盗塁成功', st_ng: '盗塁失敗' };
+
+  // ---------- 場面 ----------
+  // 場面:{ inning, side:'bat'|'pitch', outs, bases:[走力|null ×3], diff(自校−相手), batter, pitcher, defense, arm, hero, focus }
+  function makeScene(o) {
+    return Object.assign({ inning: 1, side: 'bat', outs: 0, bases: [null, null, null], diff: 0, batter: Object.assign({}, PRESETS.batter.normal), pitcher: Object.assign({}, PRESETS.pitcher.normal),
+      defense: 50, arm: 50, hero: true, focus: false }, o);
+  }
+  const R = 50;
+  const SCENES = [
+    { name: '無死一塁', inning: 3, outs: 0, bases: [R, null, null], diff: 0 },
+    { name: '無死二塁', inning: 5, outs: 0, bases: [null, R, null], diff: 0 },
+    { name: '一死三塁', inning: 6, outs: 1, bases: [null, null, R], diff: -1 },
+    { name: '一死二三塁', inning: 7, outs: 1, bases: [null, R, R], diff: 0 },
+    { name: '二死満塁・1点差', inning: 8, outs: 2, bases: [R, R, R], diff: -1 },
+    { name: '9回・1点リード・二死二塁(守備)', inning: 9, side: 'pitch', outs: 2, bases: [null, R, null], diff: 1 },
+    { name: '一死一三塁(守備)', inning: 7, side: 'pitch', outs: 1, bases: [R, null, R], diff: 0 },
+    { name: '無死満塁(守備)', inning: 4, side: 'pitch', outs: 0, bases: [R, R, R], diff: 2 },
+    { name: '二死一塁・俊足', inning: 8, outs: 2, bases: [80, null, null], diff: 0 },
+    { name: '一死一塁(守備)・強打者', inning: 6, side: 'pitch', outs: 1, bases: [R, null, null], diff: -1, batter: Object.assign({}, PRESETS.batter.strong) },
+    { name: '先頭打者', inning: 1, outs: 0, bases: [null, null, null], diff: 0 },
+  ].map((s) => makeScene(s));
+  // シードから場面を作る(試作専用の乱数)
+  function randomScene(seed) {
+    const r = new Rng(seed);
+    const pick = (o) => { const ks = Object.keys(o); return o[ks[r.int(0, ks.length - 1)]]; };
+    const jit = (o) => { const x = {}; for (const k of Object.keys(o)) x[k] = clamp(o[k] + r.int(-10, 10), 1, 100); return x; };
+    const bases = [0, 1, 2].map(() => (r.chance(0.4) ? r.int(30, 80) : null));
+    return makeScene({ name: 'シード ' + seed, inning: r.int(1, 9), side: r.chance(0.5) ? 'bat' : 'pitch', outs: r.int(0, 2), bases: bases, diff: r.int(-4, 4),
+      batter: jit(pick(PRESETS.batter)), pitcher: jit(pick(PRESETS.pitcher)), defense: r.int(30, 70), arm: r.int(30, 70), hero: r.chance(0.6), focus: r.chance(0.3) });
+  }
+
+  // ---------- 介入場面の判定 ----------
+  //   rule:プリセット名('success' / 'manager')か、{ bat:{ who:'all'|'focus', minInning, chance }, pitch:{ pinch, maxDiff, minInning } }
+  //   野手:who が 'all' なら主人公の打席、'focus' なら注目選手の打席。chance が true なら、得点圏に走者がいるときだけ
+  //   投手:得点圏に走者(満塁を含む)、かつ |点差| ≤ maxDiff、かつ minInning 回以降
+  function isKeyScene(sc, rule, cfg) {
+    const C = cfg || CONFIG;
+    const K = typeof rule === 'string' ? C.keyScene[rule] : rule;
+    if (!K) return false;
+    const risp = sc.bases[1] != null || sc.bases[2] != null;
+    if (sc.side === 'pitch') {
+      const P = K.pitch;
+      if (!P || !P.pinch) return false;
+      return risp && Math.abs(sc.diff) <= P.maxDiff && sc.inning >= (P.minInning || 1);
+    }
+    const B = K.bat;
+    if (!B) return false;
+    const who = B.who === 'focus' ? !!sc.focus : !!sc.hero;
+    return who && sc.inning >= (B.minInning || 1) && (!B.chance || risp);
+  }
+
+  return {
+    CONFIG: CONFIG, OUTCOMES: OUTCOMES, OUTCOME_LABEL: OUTCOME_LABEL, ORDER_LABEL: ORDER_LABEL, PRESETS: PRESETS, SCENES: SCENES,
+    Rng: Rng, probs: probs, orderBranches: orderBranches, legalOrders: legalOrders, reTable: reTable, reOf: reOf, p1Table: p1Table, p1Of: p1Of, expectOrderP1: expectOrderP1, expectOrder: expectOrder,
+    evaluate: evaluate, resolve: resolve, makeScene: makeScene, randomScene: randomScene, isKeyScene: isKeyScene,
+    buntP: buntP, squeezeP: squeezeP, stealP: stealP, rankOf: rankOf, kmh: kmh, breakTotal: breakTotal,
+  };
+});
+</script>
+<script>
+(function () {
+  'use strict';
+  const A = window.AtBat;
+  const DEV = /[?&]dev=1(&|$)/.test(location.search);
+  const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const pct = (v) => (v * 100).toFixed(1) + '%';
+  const sgn = (v, d) => (v >= 0 ? '+' : '') + v.toFixed(d == null ? 2 : d);
+  let mode = 'bat';        // 'bat' 野手(自分の打席) / 'pitch' 投手(ピンチ)
+  let seed = 1;
+  let rng = new A.Rng(seed);
+  let sc = null;           // 今の場面
+  let result = null;       // 直前の結果
+  let presetIdx = -1;
+  let bat = 'normal', pit = 'normal';
+  let lastEval = null;
+
+  function scenesOfMode() { return A.SCENES.map((s, i) => ({ s: s, i: i })).filter((x) => (x.s.side === 'pitch') === (mode === 'pitch')); }
+  function applyPresets(s) {
+    s.batter = Object.assign({}, A.PRESETS.batter[bat]);
+    s.pitcher = Object.assign({}, A.PRESETS.pitcher[pit]);
+    return s;
+  }
+  function newScene(fromSeed) {
+    result = null;
+    if (fromSeed || presetIdx < 0) {
+      const s = A.randomScene(seed);
+      s.side = mode;
+      sc = applyPresets(s);
+    } else sc = applyPresets(A.makeScene(Object.assign({}, A.SCENES[presetIdx], { side: mode })));
+    rng = new A.Rng((seed * 2654435761) >>> 0);
+  }
+  // 結果のあと:3アウトまでは同じイニングを続ける(次の打者は同じ能力)。3アウトなら、次のシードの場面
+  function nextScene() {
+    if (result && result.outs < 3) {
+      const diff = sc.diff + (mode === 'bat' ? result.runs : -result.runs);
+      sc = Object.assign({}, sc, { outs: result.outs, bases: result.bases, diff: diff });
+      result = null;
+    } else { seed = (seed + 1) >>> 0; presetIdx = -1; newScene(true); }
+  }
+
+  const box = (label, v, sub) => '<div class="rk' + A.rankOf(v) + '">' + label + '<b>' + A.rankOf(v) + '</b><i>' + Math.round(v) + '</i>' + (sub || '') + '</div>';
+  function abilHtml() {
+    const b = sc.batter, p = sc.pitcher;
+    const prs = (who, cur) => ['strong', 'normal', 'weak'].map((k) => '<button class="chip' + (cur === k ? ' on' : '') + '" data-' + who + '="' + k + '">' + { strong: '強い', normal: '普通', weak: '弱い' }[k] + '</button>').join('');
+    return '<div class="card"><h2>' + (mode === 'bat' ? '自分(打者)' : '相手の打者') + '</h2><div class="row">' + prs('bat', bat) + '</div>'
+      + '<div class="abil" style="--cols:3">' + box('ミート', b.contact) + box('パワー', b.power) + box('走力', b.speed) + '</div>'
+      + '<h2 style="margin-top:8px">' + (mode === 'bat' ? '相手の投手' : '自分(投手)') + '</h2><div class="row">' + prs('pit', pit) + '</div>'
+      + '<div class="abil" style="--cols:4"><div class="rk' + A.rankOf(p.velocity) + '">球速<b>' + A.kmh(p.velocity) + '<small>km/h</small></b><i>' + Math.round(p.velocity) + '</i></div>'
+      + box('制球', p.control) + '<div class="rk' + A.rankOf(p.breaking) + '">変化量<b>' + A.breakTotal(p.breaking) + '</b><i>' + Math.round(p.breaking) + '</i></div>' + box('クイック', p.quick) + '</div>'
+      + '<div class="small" style="margin-top:4px">守備側:守備 ' + sc.defense + ' / 肩 ' + sc.arm + (sc.bases.some((x) => x != null) ? ' / 走者の走力 ' + sc.bases.map((x, i) => (x == null ? '' : (i + 1) + '塁 ' + x)).filter(Boolean).join('、') : '') + '</div></div>';
+  }
+  function sceneHtml() {
+    const b = sc.bases;
+    const diffT = sc.diff === 0 ? '同点' : sc.diff > 0 ? sc.diff + '点リード' : -sc.diff + '点ビハインド';
+    return '<div class="card"><div class="scene"><div><div class="sc-big">' + sc.inning + '回 ' + (mode === 'bat' ? '攻撃' : '守備') + '</div>'
+      + '<div class="outs">' + [0, 1].map((i) => '<span class="' + (i < sc.outs ? 'on' : '') + '"></span>').join('') + ' ' + sc.outs + 'アウト</div>'
+      + '<div>' + esc(diffT) + '(自校から見て)</div><div class="small">' + esc(sc.name || '') + '</div></div>'
+      + '<div class="dia"><i class="b2' + (b[1] != null ? ' on' : '') + '"></i><i class="b3' + (b[2] != null ? ' on' : '') + '"></i><i class="b1' + (b[0] != null ? ' on' : '') + '"></i><i class="hp"></i></div></div>'
+      + '<div class="small">得点期待値(このイニングの残り。攻撃側):<b>' + A.reOf(sc.outs, sc.bases).toFixed(2) + '</b> ・ 1点以上の確率 ' + pct(A.p1Of(sc.outs, sc.bases)) + '</div></div>';
+  }
+  function controlsHtml() {
+    const opts = '<option value="-1"' + (presetIdx < 0 ? ' selected' : '') + '>(シードで作る)</option>' + scenesOfMode().map((x) => '<option value="' + x.i + '"' + (presetIdx === x.i ? ' selected' : '') + '>' + esc(x.s.name) + '</option>').join('');
+    return '<div class="card"><div class="row"><span class="small">場面</span><select id="preset">' + opts + '</select></div>'
+      + '<div class="row"><span class="small">シード</span><input type="number" id="seed" value="' + seed + '"><button class="chip" id="useSeed">この場面</button></div></div>';
+  }
+  // ボタンの小さな文字:確率の変化の大きい順に2つ。特別な指示は成功率
+  function deltaText(r) {
+    if (r.success != null) return '成功率 ' + Math.round(r.success * 100) + '%';
+    if (r.order === 'walk') return '四球にする';
+    if (!r.delta) return '';
+    const top = A.OUTCOMES.map((k) => [k, r.delta[k]]).filter((x) => Math.abs(x[1]) >= 0.005).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 2);
+    return top.length ? top.map((x) => A.OUTCOME_LABEL[x[0]].replace('のアウト', '') + (x[1] > 0 ? '+' : '') + Math.round(x[1] * 100) + '%').join(' ') : '基準';
+  }
+  function barHtml() {
+    if (result) return '<button class="ob next" id="next">' + (result.outs >= 3 ? 'チェンジ。次の場面へ' : '次の場面へ(次の打者)') + '</button>';
+    lastEval = A.evaluate(sc);
+    const m = lastEval.metric;
+    return lastEval.rows.map((r) => '<button class="ob' + (DEV && r.order === lastEval.best ? ' best' : '') + '" data-order="' + r.order + '">' + esc(r.label)
+      + '<small>' + esc(deltaText(r)) + '</small><span class="ev">' + (m === 'p1' ? '1点以上 ' + pct(r.p1) : '期待 ' + r.ev.toFixed(2)) + '</span></button>').join('');
+  }
+  function resultHtml() {
+    if (!result) return '';
+    const runs = result.runs;
+    const good = mode === 'bat' ? result.delta >= 0 : result.delta <= 0;
+    return '<div class="card"><div class="small">結果(' + esc(result.orderLabel) + ')</div><div class="res ' + (good ? 'up' : 'dn') + '">' + esc(result.label) + '</div>'
+      + '<div>' + (runs ? runs + '点' + (mode === 'bat' ? '入った' : '取られた') + '。' : '') + result.outs + 'アウト' + (result.outs < 3 ? '、走者 ' + (result.bases.map((x, i) => (x == null ? '' : (i + 1) + '塁')).filter(Boolean).join('・') || 'なし') : '(チェンジ)') + '</div>'
+      + '<div class="small">得点期待値の変化(攻撃側。この打席の得点を含む):<b class="' + (good ? 'up' : 'dn') + '">' + sgn(result.delta) + '</b>(' + result.reBefore.toFixed(2) + ' → ' + result.reAfter.toFixed(2) + (runs ? ' + ' + runs + '点' : '') + ')</div></div>';
+  }
+  function keyTableHtml() {
+    const list = A.SCENES.concat(Array.from({ length: 20 }, (_, i) => A.randomScene(500 + i)));
+    const yn = (v) => (v ? '◯' : '−');
+    return '<details class="card"><summary>介入場面の判定(確認用。' + list.length + '場面)</summary><table><tr><th>場面</th><th>攻守</th><th>回</th><th>状況</th><th>新入部員</th><th>監督</th></tr>'
+      + list.map((s) => '<tr><td>' + esc(s.name) + (s.side === 'bat' ? (s.hero ? ' 主' : '') + (s.focus ? ' 注' : '') : '') + '</td><td>' + (s.side === 'pitch' ? '守' : '攻') + '</td><td>' + s.inning + '</td><td>' + s.outs + '死 ' + (s.bases.map((x, i) => (x == null ? '' : i + 1)).join('') || '無走者') + ' ' + (s.diff > 0 ? '+' : '') + s.diff + '</td><td>' + yn(A.isKeyScene(s, 'success')) + '</td><td>' + yn(A.isKeyScene(s, 'manager')) + '</td></tr>').join('')
+      + '</table><div class="small">主=主人公の打席、注=注目選手の打席。新入部員:主人公の打席すべて・ピンチ。監督:注目選手で7回以降のチャンス・7回以降のピンチ。</div></details>';
+  }
+  function devHtml() {
+    if (!DEV) return '';
+    const P = lastEval ? lastEval.rows.map((r) => r.order + ': ' + (r.probs ? A.OUTCOMES.map((k) => k + ' ' + pct(r.probs[k])).join(' ') : '成功率 ' + (r.success != null ? pct(r.success) : '-')) + ' / 期待 ' + r.ev.toFixed(3) + ' / 1点以上 ' + pct(r.p1)).join('<br>') : '';
+    return '<div class="card dev">dev:最善 ' + (lastEval ? lastEval.best + '(' + lastEval.metric + ')' : '-') + '<br>' + P + '<br><br>設定(仮の値):' + esc(JSON.stringify(A.CONFIG)) + '</div>';
+  }
+  function render() {
+    document.getElementById('modes').innerHTML = [['bat', '野手(自分の打席)'], ['pitch', '投手(ピンチ)']].map((x) => '<button class="chip' + (mode === x[0] ? ' on' : '') + '" data-mode="' + x[0] + '">' + x[1] + '</button>').join('');
+    const bar = barHtml();
+    document.getElementById('main').innerHTML = sceneHtml() + resultHtml() + abilHtml() + controlsHtml() + keyTableHtml() + devHtml();
+    document.getElementById('bar').innerHTML = bar;
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const d = b.dataset;
+    if (d.mode) { mode = d.mode; presetIdx = -1; newScene(true); render(); return; }
+    if (d.bat) { bat = d.bat; sc.batter = Object.assign({}, A.PRESETS.batter[bat]); render(); return; }
+    if (d.pit) { pit = d.pit; sc.pitcher = Object.assign({}, A.PRESETS.pitcher[pit]); render(); return; }
+    if (d.order) { const r = A.resolve(sc, d.order, rng); r.orderLabel = A.ORDER_LABEL[mode][d.order]; result = r; render(); window.scrollTo(0, 0); return; }
+    if (b.id === 'next') { nextScene(); render(); window.scrollTo(0, 0); return; }
+    if (b.id === 'useSeed') { const v = Number(document.getElementById('seed').value); seed = (Number.isFinite(v) ? Math.floor(v) : 1) >>> 0; presetIdx = -1; newScene(true); render(); return; }
+  });
+  document.addEventListener('change', (e) => {
+    if (e.target.id === 'preset') { presetIdx = Number(e.target.value); newScene(presetIdx < 0); render(); }
+  });
+  newScene(true);
+  render();
+})();
+</script>
+</body>
+</html>
