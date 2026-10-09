@@ -2,7 +2,7 @@
 // build-play.js : 単一ファイル版を作る
 //   play.html      … index.html に config.js・benchmark.js・logic.js を埋め込む(育成監督モード)
 //   play-hero.html … hero.html に config.js・benchmark.js・logic.js・story.js・hero.js を埋め込む(新入部員モード)
-//   atbat-proto.html … atbat.html に atbat-engine.js を埋め込む(打席の試作 T1。本編とは別)
+//   atbat-proto.html … atbat.html に atbat-engine.js・atbat-art.js を埋め込む(打席の試作 T1。本編とは別)
 //   使い方: node build-play.js
 //   config.js / logic.js / index.html / hero.html / story.js / hero.js を直したら、実行し直すこと。
 // =============================================================
@@ -31,4 +31,4 @@ function build(src, out, files) {
 
 build('index.html', 'play.html', ['config.js', 'benchmark.js', 'logic.js']);
 build('hero.html', 'play-hero.html', ['config.js', 'benchmark.js', 'logic.js', 'story.js', 'hero.js']);
-build('atbat.html', 'atbat-proto.html', ['atbat-engine.js']);
+build('atbat.html', 'atbat-proto.html', ['atbat-engine.js', 'atbat-art.js']);
