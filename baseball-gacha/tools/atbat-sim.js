@@ -43,7 +43,7 @@ const pct = (v) => (v * 100).toFixed(1) + '%';
   const scenes = A.SCENES.concat(Array.from({ length: 200 }, (_, i) => A.randomScene(1000 + i)));
   const res = { bat: {}, pitch: {} }, resEv = { bat: {}, pitch: {} }, tot = { bat: 0, pitch: 0 }, legal = { bat: {}, pitch: {} };
   let inRange = 0, inN = 0, gbBest = 0;
-  const rDist = {}, rTop = { bat: {}, pitch: {} }, rTopF = { bat: {}, pitch: {} }; let rN = 0, tie = 0, dom = 0, sMin = 1, sMax = 0;
+  const rDist = {}, rTop = { bat: {}, pitch: {} }, rTopF = { bat: {}, pitch: {} }; let rN = 0, tie = 0, dom = 0, gap3 = 0, tacN = 0, tacO = {}, sMin = 1, sMax = 0;
   const lines = [];
   for (const sc of scenes) {
     const e = A.evaluate(sc);
@@ -59,7 +59,10 @@ const pct = (v) => (v * 100).toFixed(1) + '%';
     const mx = Math.max.apply(null, def.map((r) => r.rating)), tops = def.filter((r) => r.rating === mx);
     if (tops.length > 1) tie++;
     for (const r of tops) { rTop[s][r.order] = (rTop[s][r.order] || 0) + 1; rTopF[s][r.order] = (rTopF[s][r.order] || 0) + 1 / tops.length; }
-    if (A.twoChoice(e).dominated) dom++;
+    const tc = A.twoChoice(e);
+    if (tc.dominated) dom++;
+    if (tc.gap != null && tc.gap >= 3) gap3++;
+    if (tc.tactic) { tacN++; tacO[tc.tactic.order] = (tacO[tc.tactic.order] || 0) + 1; }
     const topGood = def.reduce((a, b) => (b.good > a.good ? b : a), def[0]);
     if (topGood && topGood.order === e.best) gbBest++;
     const pick = s === 'pitch' ? (a, b) => (b.ev < a.ev ? b : a) : (a, b) => (b.ev > a.ev ? b : a);
@@ -95,9 +98,10 @@ const pct = (v) => (v * 100).toFixed(1) + '%';
     sum.push('11. 評価が最高の指示(' + (s === 'bat' ? '野手' : '投手') + '):' + t.join('、'));
   }
   log('12. 評価が最高の指示が、複数ある場面:' + pct(tie / all) + '(' + tie + '/' + all + '。報告のみ)');
-  log('13. 2択で「堅実」が、成功確率でも評価でも「攻め」を上回らない場面:' + pct(dom / all) + '(' + dom + '/' + all + '。報告のみ)');
+  log('13. 2択(T1f:同じ種類の指示から)で「堅実」が、成功確率でも評価でも「攻め」を上回らない場面:' + pct(dom / all) + '(' + dom + '/' + all + '。T1d は 23.7%。報告のみ)');
+  log('13b. 攻めと堅実の評価の差が3段階以上の場面:' + pct(gap3 / all) + '(' + gap3 + '/' + all + ')。作戦のカード(評価' + A.CONFIG.ui.tacticMin + '以上)が出る場面:' + pct(tacN / all) + ' ' + JSON.stringify(tacO));
   log('14. カードの成功確率の範囲:' + pct(sMin) + '〜' + pct(sMax) + '(5〜90% に収める)');
-  sum.push('12. 評価が最高の指示が複数ある場面:' + pct(tie / all) + ' / 13. 2択で堅実が攻めに劣る場面:' + pct(dom / all) + ' / 14. 成功確率の範囲:' + pct(sMin) + '〜' + pct(sMax));
+  sum.push('12. 評価が最高の指示が複数ある場面:' + pct(tie / all) + ' / 13. 2択で堅実が攻めに劣る場面:' + pct(dom / all) + '(T1d 23.7%)・評価の差3以上 ' + pct(gap3 / all) + '・作戦のカード ' + pct(tacN / all) + ' / 14. 成功確率の範囲:' + pct(sMin) + '〜' + pct(sMax));
   log('### 場面の一覧(最善の指示と、指示ごとの得点期待値 / 1点以上の確率%)\n' + lines.join('\n'));
 }
 

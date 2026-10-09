@@ -124,20 +124,38 @@ test('評価の写像(1〜7):通常が 4。得なら大きく、損なら小さ�
   }
 });
 
-test('表示の切り替えで、カードの内容が変わる(2択は、攻めと堅実が定義どおり)', () => {
-  for (let i = 0; i < 200; i++) {
-    const e = A.evaluate(A.randomScene(i)), rows = e.rows.filter((r) => r.good != null);
+test('表示の切り替えで、カードの内容が変わる(2択は、同じ種類の指示から攻めと堅実。作戦は評価5以上のときだけ3枚目)', () => {
+  const U = A.CONFIG.ui;
+  let tacSeen = 0, noTac = 0;
+  for (let i = 0; i < 300; i++) {
+    const sc = A.randomScene(i), e = A.evaluate(sc), rows = e.rows.filter((r) => r.good != null);
     const ra = A.cardsOf(e, 'rating'), po = A.cardsOf(e, 'prob-only'), tw = A.cardsOf(e, 'two-choice');
     assert.strictEqual(ra.length, rows.length); assert.ok(ra.every((c) => c.rating >= 1 && c.rating <= 7 && c.good != null && c.feature));
     assert.strictEqual(po.length, rows.length); assert.ok(po.every((c) => c.rating == null), '成功確率だけ');
-    assert.strictEqual(tw.length, 2); assert.deepStrictEqual(tw.map((c) => c.as), ['attack', 'safe']);
     assert.ok(tw.every((c) => c.sub && c.name !== c.sub), '実際の指示の名前');
-    const maxR = Math.max.apply(null, rows.map((r) => r.rating));
-    const att = rows.filter((r) => r.rating === maxR).reduce((a, b) => (b.good < a.good ? b : a));
-    assert.strictEqual(tw[0].order, att.order, '攻め=評価が最も高い(同じなら成功確率が低いほう)');
-    const safe = rows.filter((r) => r.order !== att.order).reduce((a, b) => (b.good > a.good ? b : a));
-    assert.strictEqual(tw[1].order, safe.order, '堅実=攻めを除いて成功確率が最も高い');
+    const grp = U.twoGroups[sc.side === 'pitch' ? 'pitch' : 'bat'], same = rows.filter((r) => grp.indexOf(r.order) >= 0);
+    const maxR = Math.max.apply(null, same.map((r) => r.rating));
+    const att = same.filter((r) => r.rating === maxR).reduce((a, b) => (b.good < a.good ? b : a));
+    assert.strictEqual(tw[0].as, 'attack'); assert.strictEqual(tw[0].order, att.order, '攻め=同じ種類で評価が最も高い(同じなら成功確率が低いほう)');
+    const safe = same.filter((r) => r.order !== att.order).reduce((a, b) => (b.good > a.good ? b : a));
+    assert.strictEqual(tw[1].as, 'safe'); assert.strictEqual(tw[1].order, safe.order, '堅実=同じ種類で、攻めを除いて成功確率が最も高い');
+    assert.ok(grp.indexOf(tw[0].order) >= 0 && grp.indexOf(tw[1].order) >= 0, '作戦系は2択に入らない');
+    const tacs = rows.filter((r) => grp.indexOf(r.order) < 0 && r.rating >= U.tacticMin);
+    const t3 = tw.find((c) => c.as === 'tactic');
+    if (tacs.length) { tacSeen++; assert.ok(t3 && grp.indexOf(t3.order) < 0 && t3.rating === Math.max.apply(null, tacs.map((r) => r.rating)), '作戦のカード'); assert.strictEqual(tw.length, 3); }
+    else { noTac++; assert.ok(!t3, '評価が低い作戦は出さない'); assert.strictEqual(tw.length, 2); }
   }
+  assert.ok(tacSeen > 0 && noTac > 0, '作戦のカードが出る場面と出ない場面の両方 ' + tacSeen + '/' + noTac);
+  // 同じ種類に、攻め以外の候補がないときは、攻めだけ
+  const keep = U.twoGroups.bat;
+  try { U.twoGroups.bat = ['normal']; const t = A.cardsOf(A.evaluate(A.makeScene({})), 'two-choice'); assert.deepStrictEqual(t.map((c) => c.as), ['attack']); } finally { U.twoGroups.bat = keep; }
+});
+
+test('表と裏は自校先攻(攻撃は表、守備は裏)', () => {
+  assert.strictEqual(A.makeScene({}).half, 'top'); assert.strictEqual(A.makeScene({ side: 'pitch' }).half, 'bottom');
+  for (let i = 0; i < 50; i++) { const sc = A.randomScene(i); assert.strictEqual(sc.half, sc.side === 'pitch' ? 'bottom' : 'top'); }
+  const html = fs.readFileSync(path.join(__dirname, '..', 'atbat.html'), 'utf8');
+  assert.ok(/戦力:/.test(html) && /いまの勝率:/.test(html), '戦力と勝率のラベルを分ける');
 });
 
 test('特徴の一言は、実際の確率の変化から作られる(確率を変えると、矢印が変わる)', () => {
@@ -183,17 +201,19 @@ test('線画の部品が単独で動き、左右の反転が正しい(右と左�
   for (const mode of ['bat', 'pitch']) {
     const rr = ART.draw({ mode: mode, bats: 'R', throws: 'R' }), ll = ART.draw({ mode: mode, bats: 'L', throws: 'L' });
     assert.ok(/^<svg[^>]*viewBox="0 0 200 120"/.test(rr), 'SVG');
-    const part = (svg, name) => { const m = svg.match(new RegExp('<g data-part="' + name + '" data-flip="(\\d)"( transform="([^"]*)")?>(.*?)</g>')); return m && { flip: m[1], tf: m[3] || '', body: m[4] }; };
+    const part = (svg, name) => { const m = svg.match(new RegExp('<g data-part="' + name + '" data-flip="(\\d)"(?: data-view="[^"]*")?( transform="([^"]*)")?>(.*?)</g>')); return m && { flip: m[1], tf: m[3] || '', body: m[4] }; };
     for (const name of ['batter', 'pitcher']) {
       const a = part(rr, name), b = part(ll, name);
       assert.ok(a && b, mode + ' ' + name);
-      assert.strictEqual(a.flip, '0'); assert.strictEqual(a.tf, '');
-      assert.strictEqual(b.flip, '1'); assert.ok(/scale\(-1,1\)/.test(b.tf), '左は反転');
+      assert.notStrictEqual(a.flip, b.flip, mode + ' ' + name + ' 右と左で、反転が逆');
+      const fl = a.flip === '1' ? a : b, nf = a.flip === '1' ? b : a;
+      assert.strictEqual(nf.tf, ''); assert.ok(/scale\(-1,1\)/.test(fl.tf), '反転');
       assert.strictEqual(a.body, b.body, '同じ形(鏡像)');
     }
-    // 打席と投げは、別々に反転する
+    // 投げの左右は、右投げが基準(反転しない)。打席と投げは、別々に反転する
+    assert.strictEqual(part(rr, 'pitcher').flip, '0');
     const rl = ART.draw({ mode: mode, bats: 'R', throws: 'L' });
-    assert.strictEqual(part(rl, 'batter').flip, '0'); assert.strictEqual(part(rl, 'pitcher').flip, '1');
+    assert.strictEqual(part(rl, 'batter').flip, part(rr, 'batter').flip); assert.strictEqual(part(rl, 'pitcher').flip, '1');
     assert.ok(/data-mode="/.test(rr), 'data-mode');
     for (const name of ['batter', 'pitcher']) { const n = (part(rr, name).body.match(/<path/g) || []).length; assert.ok(n <= 40, name + ' のパスの数 ' + n); }
   }
@@ -210,9 +230,31 @@ test('線画:人の形の要素(頭・首・胴・腕・脚・手・靴、帽子
   need(els(bat, 'pitcher'), human.concat(['cap', 'glove', 'ball']), '投手(奥)');
   need(els(pit, 'batter'), human.concat(['helmet', 'bat']), '打者(奥)');
   need(els(pit, 'plate'), ['head', 'torso', 'leg', 'mask', 'mitt', 'plate'], '捕手');
-  need(els(pit, 'pitcher'), ['cap', 'uniform', 'arm', 'hand', 'ball', 'glove'], '自分の投手(手前。腕とグラブ)');
+  need(els(pit, 'pitcher'), human.concat(['cap', 'glove', 'ball']), '自分の投手(手前。引きの後ろ姿)');
+  assert.ok(/data-part="batter"[^>]*data-view="side"/.test(bat) && /data-part="batter"[^>]*data-view="side"/.test(pit), '打者は横向き');
+  assert.ok(/data-part="pitcher"[^>]*data-view="back"/.test(pit), '投手のモードの自分は後ろ姿');
   assert.ok(!/<circle|<line /.test(bat + pit), '輪郭は閉じた形(棒と丸だけで描かない)');
   assert.notStrictEqual(ART.draw({ mode: 'bat', heads: 5 }), bat, '頭身の設定');
+});
+
+test('打者は横向き:ホームベースの横に立ち、胸をホームベースへ。バットは後ろの肩の上で、先は後ろ上方。右と左で鏡像', () => {
+  const P = ART.POSE;
+  assert.ok(P.torso[1] - P.torso[0] < 14 * 0.75, '胴の厚み(横向き)は、正面の肩幅(14)より狭い');
+  for (const mode of ['bat', 'pitch']) {
+    const R = ART.batterModel({ mode: mode, bats: 'R' }), L = ART.batterModel({ mode: mode, bats: 'L' });
+    for (const [M, tag] of [[R, '右'], [L, '左']]) {
+      const t = mode + ' ' + tag;
+      assert.ok((M.plateX - M.center[0]) * M.facing > 10, t + ' ホームベースの横に立ち、胸をホームベースへ');
+      assert.ok((M.grip[0] - M.center[0]) * M.facing < 0, t + ' 握りは後ろの側');
+      assert.ok((M.batTip[0] - M.grip[0]) * M.facing < 0 && M.batTip[1] < M.grip[1], t + ' バットの先は後ろ上方');
+      assert.ok(M.grip[1] < M.center[1], t + ' 肩の高さで構える');
+      assert.ok((M.frontFoot[0] - M.backFoot[0]) * M.facing > 0, t + ' 前の足がホームベースの側');
+    }
+    assert.ok(Math.abs(R.center[0] + L.center[0] - 200) < 1e-9 && R.facing === -L.facing, mode + ' 右と左で鏡像');
+  }
+  assert.ok(ART.batterModel({ mode: 'bat', bats: 'R' }).center[0] < 100, '打者のモードの右打者は、画面の左');
+  assert.ok(ART.batterModel({ mode: 'pitch', bats: 'R' }).center[0] > 100, '投手のモードの右打者は、投手から見て画面の右');
+  assert.ok(ART.batterModel({ mode: 'pitch', bats: 'R', pitchRightyOn: 'left' }).center[0] < 100, '設定で左にもできる');
 });
 
 test('左右:同じシードで同じ割り当て。右の割合は設定どおり。確率の計算には使われない', () => {
