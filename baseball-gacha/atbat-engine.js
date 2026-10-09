@@ -73,13 +73,26 @@
       success: { bat: { who: 'all', minInning: 1, chance: false }, pitch: { pinch: true, maxDiff: 3, minInning: 1 }, winRange: [0.3, 0.8] },
       manager: { bat: { who: 'focus', minInning: 7, chance: true }, pitch: { pinch: true, maxDiff: 3, minInning: 7 }, winRange: [0.3, 0.8] },
     },
-    // 良い結果・悪い結果の定義(打席の7つの結果。バント・スクイズ・盗塁は、成功と失敗)
+    // 成功と失敗の定義(打席の7つの結果を、どちらかに必ず入れる。補数で合計 1。バント・スクイズ・盗塁は、成功と失敗)
+    //   T1d:投手の失敗に単打を入れた(T1b は、単打をどちらにも入れていなかった)
     goodBad: {
-      bat: { good: ['BB', 'S', 'XB', 'HR'], bad: ['K', 'GO', 'FO'] },     // 打者:良い=出塁(長打を含む)、悪い=三振・凡退
-      pitch: { good: ['K', 'GO', 'FO'], bad: ['BB', 'XB', 'HR'] },        // 投手:良い=アウト(三振を含む)、悪い=四球・長打以上(単打はどちらでもない)
+      bat: { good: ['BB', 'S', 'XB', 'HR'], bad: ['K', 'GO', 'FO'] },     // 打者:成功=出塁(四球・単打・長打・本塁打)、失敗=アウト
+      pitch: { good: ['K', 'GO', 'FO'], bad: ['BB', 'S', 'XB', 'HR'] },   // 投手:成功=アウト(三振を含む)、失敗=出塁を許す
     },
-    // 確率の上限と下限(100% の選択肢を作らない):良い結果は goodMax を超えず、悪い結果は badMin を下回らない
-    cap: { goodMax: 0.9, badMin: 0.05 },
+    // 成功確率の上限と下限(100% の選択肢を作らない)。表示も内部も、成功確率を min〜max に収める(バント・スクイズ・盗塁も)
+    cap: { min: 0.05, max: 0.9 },
+    // 期待値の評価(1〜7):通常を base にし、通常との差を step ごとに1段階(ev:得点期待値の点、p1:1点以上の確率)。投手は、失点が小さいほど高い
+    //   round:'round'(四捨五入)か 'trunc'(切り捨て。差が step に届くまで同じ段階)
+    //   仕様の仮の値(ev 0.05・p1 0.02)では、4 が 7 割を超えたため、細かくした(T1d)
+    rating: { base: 4, min: 1, max: 7, step: { ev: 0.02, p1: 0.008 }, round: 'round' },
+    // カードの特徴の一言:通常との差が min(ポイント)以上、または相対で rel 以上(ただし floor ポイント以上)の結果を、増える・減るから各 maxEach 個まで(変化の相対の大きい順)
+    //   rel を 0 にすると、仕様の仮の値(2ポイント以上だけ)になる
+    feature: { min: 0.02, rel: 0.1, floor: 0.002, maxEach: 2, label: { K: '三振', BB: '四球', GO: 'ゴロ', FO: 'フライ', S: '単打', XB: '長打', HR: '本塁打' },
+      normal: '基準(いつもどおり)', flat: '通常とほぼ同じ',
+      // バント・スクイズ・盗塁(・敬遠)は、仕組みを短く(自作の文)
+      mech: { bunt: '走者を進める。打者はアウト', squeeze: '三塁走者を返す。失敗すると走者がアウト', steal: '走者を進める。失敗すると走者がアウト', walk: '打者を歩かせる' } },
+    // 画面:カードの表示(rating:成功確率と評価 / prob-only:成功確率だけ / two-choice:攻めと堅実の2枚)、結果の表示時間、誤タップよけ
+    ui: { cardMode: 'rating', resultMs: 1500, tapGuardMs: 300, ratingLabel: '期待', two: { attack: '攻め', safe: '堅実' } },
     // 試合の事前勝率と戦力差:事前勝率が under 以下なら「格上」(相手が強い)、over 以上なら「格下」、その間は「同格」
     strength: { under: 0.4, over: 0.6 },
     // 試合の勝率の推定(簡易):半イニングの得点の分散 v(仮)。残りイニングの得点は、得点期待値 μ(無死走者なし)と、事前勝率から逆算した力の差で見込む
@@ -102,14 +115,13 @@
         { key: 'control', max: 30, word: '制球が荒い' }, { key: 'velocity', max: 30, word: '球威がない' }, { key: 'breaking', max: 25, word: '変化球が少ない' },
       ],
     },
-    // 指示の説明(メッセージ行に出す自作の一文)
+    // 指示の説明(結果のあとの、メッセージ行に出す自作の一文)
     orderText: {
       bat: { normal: 'いつもどおりに打つ。', power: '大きいのを狙う。長打は増えるが、空振りも増える。', contact: '確実に当てにいく。三振は減るが、長打は出にくい。',
         bunt: '走者を進める。打者はアウトになる。', squeeze: '三塁走者を、バントで迎え入れる。失敗すると、走者がアウト。', steal: '一塁走者が、二塁を狙う。失敗するとアウト。' },
       pitch: { normal: 'いつもどおりに投げる。', fast: '直球で押す。球が速いほど効くが、遅いと打たれる。', breaking: '変化球でかわす。三振とゴロが増えるが、制球が悪いと四球が増える。',
         outside: '外角に集める。長打は減るが、四球が増える。', inside: '内角を攻める。詰まらせるが、制球が悪いと危ない。', walk: '勝負を避けて、歩かせる。' },
     },
-    messages: { idle: '指示のカードを選んでください。説明を読んでから「決定」。' },
   };
   const OUTCOMES = ['K', 'BB', 'GO', 'FO', 'S', 'XB', 'HR'];
   const OUTCOME_LABEL = { K: '三振', BB: '四球', GO: 'ゴロのアウト', FO: 'フライのアウト', S: '単打', XB: '長打', HR: '本塁打' };
@@ -177,19 +189,15 @@
     for (const k of OUTCOMES) w[k] /= sum;
     return capProbs(w, side, C);
   }
-  // 上限と下限:良い結果の合計を goodMax 以下に、悪い結果の合計を badMin 以上に(それぞれ、残りの結果で釣り合いを取る)
+  // 上限と下限:成功の合計を cap.min〜cap.max に収める(成功と失敗は補数なので、失敗の側を同じ割合で釣り合わせる)
   function capProbs(w, side, C) {
     const G = C.goodBad[side], cap = C.cap;
-    const tot = (ks) => ks.reduce((a, k) => a + w[k], 0);
-    const scale = (ks, f, rest, g) => { for (const k of ks) w[k] *= f; for (const k of rest) w[k] *= g; };
-    const others = (ks) => OUTCOMES.filter((k) => ks.indexOf(k) < 0);
-    let g = tot(G.good);
-    if (g > cap.goodMax) scale(G.good, cap.goodMax / g, others(G.good), (1 - cap.goodMax) / (1 - g));
-    const b = tot(G.bad);
-    if (b < cap.badMin && b > 0) scale(G.bad, cap.badMin / b, others(G.bad), (1 - cap.badMin) / (1 - b));
+    const g = G.good.reduce((a, k) => a + w[k], 0);
+    const t = clamp(g, cap.min, cap.max);
+    if (t !== g && g > 0 && g < 1) { for (const k of G.good) w[k] *= t / g; for (const k of G.bad) w[k] *= (1 - t) / (1 - g); }
     return w;
   }
-  // 指示ごとの、良い結果と悪い結果の確率(バント・スクイズ・盗塁は、成功と失敗。敬遠は null)
+  // 指示ごとの、成功と失敗の確率(補数。good = 成功、bad = 失敗。バント・スクイズ・盗塁は kind 'success'。敬遠は null)
   function goodBadOf(sc, order, cfg) {
     const C = cfg || CONFIG;
     const side = sc.side === 'pitch' ? 'pitch' : 'bat';
@@ -198,14 +206,15 @@
       const p = order === 'bunt' ? buntP(sc, C) : order === 'squeeze' ? squeezeP(sc, C) : stealP(sc, C);
       return { good: p, bad: 1 - p, kind: 'success' };
     }
-    const P = probs(sc, order, C), G = C.goodBad[side];
-    return { good: G.good.reduce((a, k) => a + P[k], 0), bad: G.bad.reduce((a, k) => a + P[k], 0), kind: 'outcome' };
+    const P = probs(sc, order, C), g = C.goodBad[side].good.reduce((a, k) => a + P[k], 0);
+    return { good: g, bad: 1 - g, kind: 'outcome' };
   }
   const p01 = (C, x) => clamp(x, C.run.pMin, C.run.pMax);
-  function buntP(sc, C) { C = C || CONFIG; const Z = zs(sc), B = C.bunt; return clamp(B.base + B.con * Z.con + B.spd * Z.spd - B.def * Z.def, B.min, B.max); }
+  const capP = (C, p) => clamp(p, C.cap.min, C.cap.max);
+  function buntP(sc, C) { C = C || CONFIG; const Z = zs(sc), B = C.bunt; return capP(C, clamp(B.base + B.con * Z.con + B.spd * Z.spd - B.def * Z.def, B.min, B.max)); }
   function buntHitP(sc, C) { C = C || CONFIG; const B = C.bunt; return clamp(B.hitBase + B.hitSpd * z(sc.batter.speed), 0, B.hitMax); }
-  function squeezeP(sc, C) { C = C || CONFIG; const Z = zs(sc), Q = C.squeeze; return clamp(Q.base + Q.con * Z.con - Q.def * Z.def, Q.min, Q.max); }
-  function stealP(sc, C) { C = C || CONFIG; const S = C.steal; return clamp(S.base + S.spd * z(runnerSpd(sc, 1)) - S.arm * z(sc.arm) - S.quick * z(sc.pitcher.quick), S.min, S.max); }
+  function squeezeP(sc, C) { C = C || CONFIG; const Z = zs(sc), Q = C.squeeze; return capP(C, clamp(Q.base + Q.con * Z.con - Q.def * Z.def, Q.min, Q.max)); }
+  function stealP(sc, C) { C = C || CONFIG; const S = C.steal; return capP(C, clamp(S.base + S.spd * z(runnerSpd(sc, 1)) - S.arm * z(sc.arm) - S.quick * z(sc.pitcher.quick), S.min, S.max)); }
   const runnerSpd = (sc, base) => (sc.runnerSpeed && sc.runnerSpeed[base - 1] != null ? sc.runnerSpeed[base - 1] : 50);
 
   // ---------- 走者の更新(分岐つき) ----------
@@ -383,7 +392,41 @@
     });
     const metric = isLateClose(sc, C) ? 'p1' : 'ev';
     const pick = sc.side === 'pitch' ? (a, b) => (b[metric] < a[metric] ? b : a) : (a, b) => (b[metric] > a[metric] ? b : a);
+    const n = rows.find((r) => r.order === 'normal');
+    for (const r of rows) {
+      r.dm = (r[metric] - n[metric]) * (sc.side === 'pitch' ? -1 : 1);   // 通常との差(得をする向きが正)
+      r.rating = ratingOf(r.dm, metric, C);
+      r.feature = featureOf(r, C);
+    }
     return { re: now, p1: p1Of(sc.outs, sc.bases, C), metric: metric, rows: rows, best: rows.reduce(pick).order };
+  }
+  // 期待値の評価(1〜7)。dm:通常との差(得をする向きが正)
+  function ratingOf(dm, metric, cfg) {
+    const R = (cfg || CONFIG).rating, x = dm / R.step[metric] + 1e-9 * Math.sign(dm);
+    return clamp(R.base + (R.round === 'trunc' ? Math.trunc(x) : Math.round(x)), R.min, R.max);
+  }
+  // 特徴の一言:{ up:[結果], down:[結果], text }。確率の変化(row.delta)から作る。バント・スクイズ・盗塁は、仕組みの文
+  function featureOf(row, cfg) {
+    const F = (cfg || CONFIG).feature;
+    if (row.order === 'normal') return { up: [], down: [], text: F.normal };
+    if (!row.delta) return { up: [], down: [], text: F.mech[row.order] || '' };
+    const p0 = {}; for (const k of OUTCOMES) p0[k] = row.probs[k] - row.delta[k];
+    const hit = OUTCOMES.map((k) => ({ k: k, d: row.delta[k], r: Math.abs(row.delta[k]) / Math.max(1e-9, p0[k]) }))
+      .filter((x) => Math.abs(x.d) >= F.min - 1e-12 || (F.rel > 0 && x.r >= F.rel && Math.abs(x.d) >= F.floor));
+    hit.sort((a, b) => b.r - a.r);
+    const up = hit.filter((x) => x.d > 0).slice(0, F.maxEach).map((x) => x.k), down = hit.filter((x) => x.d < 0).slice(0, F.maxEach).map((x) => x.k);
+    const text = up.map((k) => F.label[k] + '↑').concat(down.map((k) => F.label[k] + '↓')).join(' ');
+    return { up: up, down: down, text: text || F.flat };
+  }
+  // 2択の表示:攻め=評価が最も高い指示(同じなら成功確率が低いほう)、堅実=攻めを除いて成功確率が最も高い指示
+  //   dominated:堅実が、成功確率でも評価でも、攻めを上回らない(選ぶ意味がない)
+  function twoChoice(ev) {
+    const rows = ev.rows.filter((r) => r.good != null);
+    const attack = rows.reduce((a, b) => (b.rating > a.rating || (b.rating === a.rating && b.good < a.good) ? b : a));
+    const rest = rows.filter((r) => r !== attack);
+    if (!rest.length) return { attack: attack, safe: null, dominated: false };
+    const safe = rest.reduce((a, b) => (b.good > a.good ? b : a));
+    return { attack: attack, safe: safe, dominated: safe.good <= attack.good && safe.rating <= attack.rating };
   }
 
   // ---------- 抽選と結果 ----------
@@ -445,13 +488,12 @@
     const out = hit.slice(0, T.max).map((t) => t.word);
     return out.length ? out : ['平均的'];
   }
-  // 画面の手順(2段階で選ぶ):select で選択(進まない)、confirm で確定して結果、next で次へ
+  // 画面の手順(1タップで確定):pick でカードを押すと、すぐ結果。auto は勝負にならない試合(通常)。next で次へ(結果が出るまでは進まない)
   function uiStep(st, action, arg) {
     const s = Object.assign({ sel: null, result: null }, st);
-    if (action === 'select') { if (!s.result) s.sel = arg; return s; }
-    if (action === 'confirm') { if (!s.result && s.sel) s.result = { order: s.sel }; return s; }
+    if (action === 'pick') { if (!s.result && arg) { s.sel = arg; s.result = { order: arg }; } return s; }
     if (action === 'auto') { if (!s.result) { s.sel = 'normal'; s.result = { order: 'normal', auto: true }; } return s; }
-    if (action === 'next') return { sel: null, result: null };
+    if (action === 'next') return s.result || !st ? { sel: null, result: null } : s;
     return s;
   }
 
@@ -507,7 +549,7 @@
   return {
     CONFIG: CONFIG, OUTCOMES: OUTCOMES, OUTCOME_LABEL: OUTCOME_LABEL, ORDER_LABEL: ORDER_LABEL, PRESETS: PRESETS, SCENES: SCENES,
     Rng: Rng, probs: probs, orderBranches: orderBranches, legalOrders: legalOrders, reTable: reTable, reOf: reOf, p1Table: p1Table, p1Of: p1Of, expectOrderP1: expectOrderP1, expectOrder: expectOrder,
-    evaluate: evaluate, resolve: resolve, goodBadOf: goodBadOf, gameWinProb: gameWinProb, strengthLabel: strengthLabel, inWinRange: inWinRange, makeScene: makeScene, randomScene: randomScene, handsOf: handsOf, tagsOf: tagsOf, uiStep: uiStep, isKeyScene: isKeyScene,
+    evaluate: evaluate, ratingOf: ratingOf, featureOf: featureOf, twoChoice: twoChoice, resolve: resolve, goodBadOf: goodBadOf, gameWinProb: gameWinProb, strengthLabel: strengthLabel, inWinRange: inWinRange, makeScene: makeScene, randomScene: randomScene, handsOf: handsOf, tagsOf: tagsOf, uiStep: uiStep, isKeyScene: isKeyScene,
     buntP: buntP, squeezeP: squeezeP, stealP: stealP, rankOf: rankOf, kmh: kmh, breakTotal: breakTotal,
   };
 });
