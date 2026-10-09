@@ -987,7 +987,19 @@ test('入口(v2):ピックアップは8人以下(上位5人を含む)。主人�
 });
 
 // H1.6a より前のフェーズとの一致の確認は、途中出場の層(経験値で能力が変わる)を切って行う
-function withSubOff(fn) { const S = CONFIG.heroMode.substitute; const prev = S.enabled; S.enabled = false; try { return fn(); } finally { S.enabled = prev; } }
+// (H1.6b 以降は、覚醒を切り、ライバルの表示を出す = それより前のフェーズの動き)
+function withSubOff(fn) {
+  const S = CONFIG.heroMode.substitute, A = CONFIG.heroMode.awakening, R = CONFIG.heroMode.rival;
+  const prev = [S.enabled, A.enabled, R.display];
+  S.enabled = false; A.enabled = false; R.display = true;
+  try { return fn(); } finally { S.enabled = prev[0]; A.enabled = prev[1]; R.display = prev[2]; }
+}
+function withPreH16b(fn) {
+  const A = CONFIG.heroMode.awakening, R = CONFIG.heroMode.rival;
+  const prev = [A.enabled, R.display];
+  A.enabled = false; R.display = true;
+  try { return fn(); } finally { A.enabled = prev[0]; R.display = prev[1]; }
+}
 // ---------- H1.4c:3年の7月の画面のスタメンと名簿 ----------
 test('H1.4c:勝敗・能力・進路・本体の乱数が H1.5a と一致する(20回)', () => {
   if (!Core.isV2()) return;
@@ -1081,6 +1093,7 @@ test('救援(H1.5b):人数は reliefMax まで。救援の投球回の合計 = 9
 
 // ---------- H1.6a:途中出場 ----------
 test('途中出場(H1.6a):無効なら H1.5b と完全に一致(勝敗・能力・進路・成績・物語。10回)。有効でも経験値0倍なら勝敗・得点・失点は一致', () => {
+  withPreH16b(() => {
   if (!Core.isV2()) return;
   const FP = require('./hero-fingerprint.js');
   const ref = require('./fixtures/h15b-fingerprint.json');
@@ -1089,9 +1102,11 @@ test('途中出場(H1.6a):無効なら H1.5b と完全に一致(勝敗・能力�
   withSubOff(() => { for (let i = 0; i < ref.length; i++) assert.deepStrictEqual(noText(FP.fingerprint(i, { stories: true, stats: true, games: true })), noText(ref[i]), '無効:' + i + '回目'); });
   const S = CONFIG.heroMode.substitute; const prev = S.expMult; S.expMult = 0;
   try { for (let i = 0; i < ref.length; i++) { const f = FP.fingerprint(i, { games: true }); assert.deepStrictEqual(f.glog, ref[i].glog, '経験値0倍:' + i + '回目'); } } finally { S.expMult = prev; }
+  });
 });
 
 test('途中出場(H1.6a):チーム合計は変わらない(打数・安打は配分だけ)。上限・条件を守る。簡易成績と途中出場の成績が記録と一致(20回)', () => {
+  withPreH16b(() => {
   if (!Core.isV2()) return;
   const C = CONFIG.heroMode.substitute;
   let subs = 0;
@@ -1119,6 +1134,7 @@ test('途中出場(H1.6a):チーム合計は変わらない(打数・安打は�
     });
   }
   assert.ok(subs > 100, '途中出場 ' + subs);
+  });
 });
 
 // ---------- H1.6a-fix1:ひとことと、同じ月の大会結果・試合の呼び名 ----------
@@ -1152,6 +1168,74 @@ test('ひとこと(大会での活躍)は、同じ月の最後の試合の結果
     if (st.hero.phase === 'graduate') assert.ok(/^夏の地区大会:(優勝|出場なし|(1回戦|2回戦|準々決勝|準決勝|決勝)で敗退)/.test(Hero.summerResultLine(st)), '7月の画面の呼び名:' + Hero.summerResultLine(st));
   }
   assert.ok(seen.semi_win_champ + seen.semi_win_finalLoss > 0, JSON.stringify(seen));
+});
+
+// ---------- H1.6b:覚醒とヒント、ライバルの表示を外す ----------
+test('H1.6b:覚醒を無効・ライバルの表示を有効にすると、H1.6a-fix1 と完全に一致(勝敗・能力・進路・成績・物語。10回)', () => {
+  if (!Core.isV2()) return;
+  const FP = require('./hero-fingerprint.js');
+  const ref = require('./fixtures/h16a-fingerprint.json');
+  withPreH16b(() => { for (let i = 0; i < ref.length; i++) assert.deepStrictEqual(FP.fingerprint(i, { stories: true, stats: true, games: true }), ref[i], i + '回目'); });
+});
+
+test('H1.6b:覚醒は年度ごとに0〜2人、1人1回まで。3年生は4〜7月。伸びは仮の幅で、下がらない。素質とヒントの割合は設定どおり(30回)', () => {
+  if (!Core.isV2()) return;
+  const A = CONFIG.heroMode.awakening;
+  const cnt = [0, 0, 0];
+  let n = 0, t = 0, hT = 0, hN = 0, nT = 0, nN = 0, aw = 0;
+  for (let s = 1; s <= 30; s++) {
+    const st = Hero.newHeroGame(8100 + s);
+    Hero.pickHero(st, Hero.pickable(st)[s % Hero.pickable(st).length].id);
+    Hero.startPlay(st);
+    const seen = {};
+    for (let i = 0; i < 200 && st.hero.phase === 'play'; i++) {
+      const before = new Map(st.players.map((p) => [p.id, Object.assign({}, p.abilities)]));
+      Hero.advance(st, 'month');
+      for (const p of st.players) {
+        if (!p.awoken || seen[p.id] || p.awoken.s !== st.lastEvents[st.lastEvents.length - 1].serial) continue;
+        seen[p.id] = true;
+        aw++;
+        if (p.awoken.g === 3) assert.ok(p.awoken.m >= 4 && p.awoken.m <= 7, '3年生は4〜7月');
+        const b = before.get(p.id);
+        for (const k of Core.visibleKeys(p)) assert.ok(p.abilities[k] >= b[k] - 1e-9, '下がらない');
+        const k0 = Core.visibleKeys(p).filter((k) => k !== 'velocity' && k !== 'breaking' && p.abilities[k] < p.statCap - 1e-6);
+        // 月の成長と合わさるので、伸びは覚醒の下限以上
+        for (const k of k0) assert.ok(p.abilities[k] - b[k] >= A.gainMin - 1e-9, k + ' の伸び ' + (p.abilities[k] - b[k]));
+      }
+    }
+    for (const x of st.hero.awLog || []) { assert.ok(x.n >= 0 && x.n <= 2); cnt[x.n]++; }
+    const all = st.players.concat(st.alumni || []).filter((p) => p.awk);
+    for (const p of all) { n++; if (p.awk.t) { t++; if (p.awk.h) hT++; } else if (p.awk.h) hN++; }
+    nT += all.filter((p) => p.awk.t).length; nN += all.filter((p) => !p.awk.t).length;
+  }
+  const tot = cnt[0] + cnt[1] + cnt[2];
+  assert.ok(cnt[1] / tot > 0.35 && cnt[1] / tot < 0.65 && cnt[0] / tot > 0.15 && cnt[2] / tot > 0.08, '人数の分布 ' + cnt.join('/'));
+  assert.ok(Math.abs(t / n - A.talentRate) < 0.04, '素質の割合 ' + (t / n).toFixed(3));
+  assert.ok(Math.abs(hT / nT - A.hintRateTalent) < 0.1, '素質ありのヒント ' + (hT / nT).toFixed(2));
+  assert.ok(Math.abs(hN / nN - A.hintRateNone) < 0.02, '素質なしのヒント ' + (hN / nN).toFixed(3));
+  assert.ok(aw > 20);
+});
+
+test('H1.6b:ライバルの表示を外すと、ひとこと・卒業の読み物・通算成績にライバルが出ない(40回)', () => {
+  if (!Core.isV2()) return;
+  assert.strictEqual(CONFIG.heroMode.rival.display, false, '既定は非表示');
+  let checked = 0;
+  for (let s = 1; s <= 40; s++) {
+    const st = Hero.newHeroGame(8300 + s);
+    if (s % 2) Hero.pickHero(st, Hero.pickable(st)[0].id);
+    else { Hero.createHero(st, FIELD); Hero.confirmRival(st, 'auto'); }
+    Hero.startPlay(st);
+    for (let i = 0; i < 200 && st.hero.phase === 'play'; i++) Hero.advance(st, 'event');
+    const H = st.hero;
+    const rv = st.players.concat(st.alumni).find((p) => p.id === H.rivalId);
+    if (!rv) continue;
+    checked++;
+    for (const x of H.stories) assert.ok(x.text.indexOf(rv.name) < 0, 'ひとことにライバル:' + x.text);
+    for (const l of H.graduation.lines) assert.ok(l.indexOf(rv.name) < 0, '卒業の読み物にライバル:' + l);
+    assert.ok(H.graduation.lines.length >= 4 && H.graduation.lines.length <= 7);
+    assert.ok(H.rivalId != null, '内部のライバルは残る');
+  }
+  assert.ok(checked > 30);
 });
 
 // legacy の一致の確認(別プロセス)

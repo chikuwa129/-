@@ -115,6 +115,7 @@
   body.has-pbar-top .wrap { padding-top: calc(64px + env(safe-area-inset-top)); }
   .mk.ret { background: #eee; color: var(--sub); }
   .subst { color: var(--accent); }
+  .impress.hint { color: var(--special); } .mk.awk { background: #f3e8ff; color: var(--special); }
   .linkbtn { background: none; border: none; color: var(--accent); font-size: 12px; padding: 4px 0; cursor: pointer; text-decoration: underline; }
   .result1 { margin: 2px 0 4px; }
   .rrow .r1 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 4px; } .rrow .r2 { padding-left: 2px; }
@@ -4892,6 +4893,14 @@
         '{n}、今月は{to}番。{from}番の頃より、のびのび振れそうだ。',
       ],
     },
+    // H1.6b:ライバルを表示しないときの、ライバルを名指ししない文(ポジション争い・再起)
+    noRival: {
+      contestStart: ['{pos}の座をめぐる争いが始まった。{n}も、その渦中にいる。', '{pos}は激戦区だ。{n}は自分の場所をつかみにいく。', '同じ{pos}に、負けられない相手がいる。{n}の争いが始まった。'],
+      stole: ['{n}が{pos}の座をつかんだ。争いの末の、大きな一歩だ。', '{pos}に{n}の名前が戻ってきた。', '競り合いを制し、{n}が{pos}のスタメンに入った。'],
+      lost: ['{pos}の座を明け渡した。{n}は、悔しさをかみしめた。', '今月の{pos}に、{n}の名前はなかった。', '{n}は{pos}の争いに敗れた。ここからが勝負だ。'],
+      rebound: ['追いかけていた背中に、{n}がついに追いついた。', '{n}が、届かなかった壁を越えた。', '悔しさを越えて、{n}が前に出た。'],
+      gradContest: ['{pos}の座をめぐる争いは、{n}を大きくした。', '{n}の3年間には、いつも{pos}の争いがあった。', '{pos}の争いで鍛えられた3年間だった。'],
+    },
     // H1.6b:覚醒({detail} は「球速が +5km/h、制球が +9」のような実際の伸び)
     awaken: {
       hero: ['{n}が覚醒した。{detail}伸びた。', '何かが弾けた。{n}は、{detail}伸びた。', '別人のような{n}。覚醒だ。{detail}伸びた。'],
@@ -5947,6 +5956,7 @@
     contestStart: 1, bench3: 1, bench6: 1, dropped: 1, bigMonth: 1, settle: 1, noRebound: 1, twoWayBoth: 1, rivalMoved: 1, benchMonth: 1 };
   const BAD_KINDS = { lost: 1, bench3: 1, bench6: 1, convertFail: 1, twoWayLost: 1 };
   // ライバルに触れる物語には、その月の差を数字で添える
+  const rivalShown = () => HM().rival.display !== false;
   const RIVAL_KINDS = { rivalStar: 1, rankUp: 1, rankDown: 1, bothStart: 1, contestStart: 1, stole: 1, lost: 1, rivalTwoWay: 1 };
   function diffSentence(st) {
     const H = st.hero;
@@ -5959,8 +5969,14 @@
     return rv.name + 'との差は' + Math.abs(d0) + 'から' + Math.abs(d1) + 'に' + (Math.abs(d1) < Math.abs(d0) ? '縮まった。' : '広がった。');
   }
   function addStory(st, r, out, kind, list, vars, imp) {
+    // H1.6b:ライバルを表示しないときは、ライバルを名指しする文({r})を使わない。代わりの文がなければ、物語にしない
+    if (!rivalShown()) {
+      const L = (list || []).filter((t) => t.indexOf('{r}') < 0);
+      list = L.length ? L : (STORY.noRival[kind] || null);
+      if (!list) return { meta: null };   // 出さない(画面の物語には入れない)
+    }
     let text = pickText(st, r, list, vars);
-    if (RIVAL_KINDS[kind] && st.hero.phase === 'play') text += diffSentence(st);
+    if (RIVAL_KINDS[kind] && st.hero.phase === 'play' && rivalShown()) text += diffSentence(st);
     const s = { s: serialOf(st), y: st.year, m: HighSchool.CALENDAR[st.month].month, kind: kind, text: text,
       imp: imp || (STOP_KINDS[kind] ? (kind === 'rebound' ? 4 : 3) : 2), bad: !!BAD_KINDS[kind] };
     out.push(s);
@@ -6561,7 +6577,7 @@
           const k = r.weighted(pool.map((p) => (p.awk && p.awk.t ? A.talentWeight : 1)));
           const p = pool.splice(k, 1)[0];
           const last = p.grade >= 3 ? 3 : 11;   // 3年生は、3年の7月までに
-          plan.push({ id: p.id, s: HighSchool.monthSerial(st.year, r.int(0, last)) });
+          plan.push({ id: p.id, g: p.grade, s: HighSchool.monthSerial(st.year, r.int(0, last)) });
         }
         return plan;
       });
@@ -6571,13 +6587,13 @@
     for (const e of (H.awPlan || []).filter((x) => x.s === sv)) {
       const p = st.players.find((q) => q.id === e.id);
       if (!p || p.awoken || p.helper) continue;
-      out.push(awaken(st, p, sv));
+      out.push(awaken(st, p, sv, e.g));
     }
     return out;
   }
   // 覚醒:見える能力をそれぞれ伸ばす(下がらない。項目の上限まで)。球速は km/h、変化球は総変化量で幅を決める
   //   成長の限界(隠れた値)は、伸びを鈍らせるだけで、能力を下げないので、そのままにする
-  function awaken(st, p, sv) {
+  function awaken(st, p, sv, grade) {
     const A = AW();
     const before = Object.assign({}, p.abilities);
     const gains = arng(st, (r) => {
@@ -6599,7 +6615,7 @@
     });
     // 月ごとの記録(この月の値)にも反映する
     if (p.mlog && p.mlog.a.length && p.mlog.s + p.mlog.a.length - 1 === sv) p.mlog.a[p.mlog.a.length - 1] = HighSchool.packAbilities(p.abilities);
-    p.awoken = { s: sv, y: st.year, m: HighSchool.CALENDAR[st.month].month, g: p.grade };
+    p.awoken = { s: sv, y: st.year, m: HighSchool.CALENDAR[st.month].month, g: grade || p.grade };   // 学年は、その年度の学年(3月の進級より前)
     // ひとことの詳細:伸びの大きい順に detailMax 項目
     const items = Object.keys(gains).filter((k) => gains[k] > 0).map((k) => {
       if (k === 'velocity') return { w: 99, t: '球速が +' + (toKmh(p.abilities.velocity) - toKmh(before.velocity)) + 'km/h' };
@@ -6834,7 +6850,10 @@
       const peak = gamePeak(H);
       H.peakGame = peak;
       if (peak) L.push(pickText(st, r, G.game2[(peak.roundNo === peak.rounds ? 'final_' : '') + (peak.win ? 'win' : 'loss')], Object.assign({ when: peak.when, round: peak.roundLabel }, vars)));
-      if (rv) {
+      if (rv && !rivalShown()) {
+        // H1.6b:ライバルを出さない。ポジション争いがあったときだけ、ライバルを名指ししない文で1行
+        if (Object.keys(H.contestEver).length) L.push(pickText(st, r, STORY.noRival.gradContest, Object.assign({ pos: AXIS_LABEL[H.mainAxis || 'P'].replace('枠', '') }, vars)));
+      } else if (rv) {
         const ax = H.mainAxis || 'X';
         const hr = gradSide(a, ax);
         const rr = gradSide(rv, ax);
@@ -6858,6 +6877,14 @@
       }
       const best = bestResult(st, H.enrolledYear);
       L.push(pickText(st, r, G.result, Object.assign({ stage: best, pos: a.career }, vars)));
+      // H1.6b:ライバルの段落を外して4文に満たないときは、総合値の伸びの1文を足す(実際の値。乱数は使わない)
+      if (!rivalShown() && L.length < 4) L.splice(Math.max(0, L.length - 1), 0, a.name + 'の総合値は、入学時の' + H.initRating + 'から、3年夏の' + a.rating + 'まで伸びた。');
+      // H1.6b:覚醒の答え合わせ(実際の状態から。乱数は使わない)
+      if (awOn() && a.awk) {
+        const hint = !!a.awk.h, aw = !!a.awoken;
+        const list = hint && aw ? STORY.awaken.gradHintAwoke : aw ? STORY.awaken.gradNoHintAwoke : hint ? STORY.awaken.gradHintNone : null;
+        if (list) { const t = fill(list[a.id % list.length], vars); if (L.length < 7) L.splice(L.length - 1, 0, t); else L[L.length - 2] = t; }
+      }
       // H1.6a:途中出場の通算(出場があったときだけ。乱数は使わない)
       const sl = a.subStats && a.subStats.career;
       if (sl && sl.subG > 0) {
@@ -7242,7 +7269,8 @@
         : sort === 'pos' ? (a, b) => ord[a.position] - ord[b.position] || Core.rating(b) - Core.rating(a) || a.id - b.id
         : (a, b) => b.grade - a.grade || Core.rating(b) - Core.rating(a) || a.id - b.id;
       const row = (p) => compactRow(p, (july && (p.retired || p.finalAbilities) ? ' <span class="mk ret">引退</span>' : '') + (inLine.has(p.id) ? ' <span class="mk on">◯</span>' : '') + (p.id === H.id ? ' <span class="mk me">主人公</span>' : '')
-        + (p.id === H.rivalId ? ' <span class="mk rv">ライバル</span>' : '') + (samePos(p) ? ' <span class="mk sp">同じポジション</span>' : ''), rosterStats(p));
+        + (p.id === H.rivalId && rivalShown() ? ' <span class="mk rv">ライバル</span>' : '') + (samePos(p) ? ' <span class="mk sp">同じポジション</span>' : '')
+        + (awOn() && p.awoken ? ' <span class="mk awk">覚醒(' + p.awoken.g + '年' + p.awoken.m + '月)</span>' : ''), rosterStats(p));
       const btn = (k, l) => '<button class="chip' + (sort === k ? ' on' : '') + '" data-rsort="' + k + '">' + l + '</button>';
       let html = '<div class="row2">' + btn('grade', '学年順') + btn('rating', '総合値順') + btn('pos', '守備区分順') + '</div>';
       // 3年の7月の画面:卒業した主人公も、引退した3年生と一緒に名簿に残す(卒業時の能力)
@@ -7270,12 +7298,12 @@
       const rest = st.pendingRecruits.filter((p) => picks.indexOf(p) < 0).sort((a, b) => Core.rating(b) - Core.rating(a) || a.id - b.id);
       html += '<div class="card">' + (rest.length ? '<div class="small">ピックアップ(' + picks.length + '人)。主人公に選べるのは、この中の1人です。</div>' : '') + picks.slice().sort((a, b) => H.pickup ? Core.rating(b) - Core.rating(a) || a.id - b.id : 0).map((p) => {
         let c = '<div class="player">' + starBtn(p) + '<span class="pname">' + esc(p.name) + '</span>' + posTag(p.position) + extraTags(p) + ' <span class="small">' + ratingHtml(p) + '</span>'
-          + '<div class="impress">' + esc(impression(p)) + '</div>' + boxes(p);
+          + '<div class="impress">' + esc(impression(p)) + '</div>' + hintLine(p) + boxes(p);
         if (p.reincarnation && p.reincarnationRevealed) c += '<div class="reveal">……!? この新入生、ただ者ではない。<br>【' + esc(Core.reincarnationName(p.reincarnation)) + '】の転生者だ!</div>';
         if (p.twoWay && p.twoWayRevealed) c += '<div class="reveal">投げても打っても本職級……! <br>【二刀流】の素質を持っている!</div>';
         return c + '<div class="btns"><button class="btn small" data-pick="' + p.id + '">この選手で始める</button></div></div>';
       }).join('') + (rest.length ? renderCollapsible('selOthers', '他の新入生(' + rest.length + '人)', () => rest.map((p) => compactRow(p)).join('')) : '')
-        + '</div><div class="small">ライバル:' + (HM().rival.selectMode === 'strongest' ? '同じポジションの、最も強い選手(自動)' : '同じポジションで、少し上の追える相手(自動)') + '</div>';
+        + '</div>' + (rivalShown() ? '<div class="small">ライバル:' + (HM().rival.selectMode === 'strongest' ? '同じポジションの、最も強い選手(自動)' : '同じポジションで、少し上の追える相手(自動)') + '</div>' : '');
       return html;
     }
     // ---------- 自分で作る ----------
@@ -7394,16 +7422,18 @@
           + '<div class="small">' + esc(mainRanks(p)) + '</div></div>').join('');
       }).join('');
       return '<div class="card"><h2>🎒 ' + esc(h.name) + 'の3年間が始まる</h2>' + heroCard(h, false)
-        + '<div class="story">' + esc(H.originText) + '</div>'
-        + (rv ? rivalCard(rv) : '<div class="small">ライバル:なし</div>') + topMateLine(h, rv)
+        + '<div class="story">' + esc(H.originText) + '</div>' + hintLine(h)
+        + (rivalShown() ? (rv ? rivalCard(rv) : '<div class="small">ライバル:なし</div>') : '') + topMateLine(h, rv)
         + '<div class="sublabel">同じポジションの先輩たち</div>' + (sen || '<div class="small">同じポジションの先輩はいません</div>')
         + '<div class="btns"><button class="btn sub small" id="hRoster">部員名簿を見る</button></div>'
         + '</div>' + pbar('<button class="btn" id="hStart">始める</button>');
     }
     // 今年の最強の同期(開始画面だけの1行。ライバルと同じ選手なら出さない。比較や物語には使わない)
+    // H1.6b:覚醒のヒントの一言(入学画面の新入生の一覧と、入学時の主人公のカードだけ)
+    function hintLine(p) { return awOn() && p && p.awk && p.awk.h ? '<div class="impress hint">✦ ' + esc(p.awk.h) + '</div>' : ''; }
     function topMateLine(h, rv) {
       const top = sameGrade(st, h).sort((a, b) => Core.rating(b) - Core.rating(a) || a.id - b.id)[0];
-      if (!top || (rv && top.id === rv.id)) return '';
+      if (!top || (rv && rivalShown() && top.id === rv.id)) return '';
       const rk = rankOf(top);
       const pos = twoWayKnown(top) ? '二刀流' : Core.POSITION_LABEL[top.position].replace(/手$/, '') + '手';
       return '<div class="small topmate">今年の最強の同期:<button class="namebtn" data-pdet="' + top.id + '">' + esc(top.name) + '</button>(' + pos + '、総合値 ' + Core.rating(top)
@@ -7455,6 +7485,7 @@
     // ライバルとの比較の1行(2人の総合値・差・矢印・今月のスタメン)
     function rivalCompare(july) {
       const H = st.hero;
+      if (!rivalShown()) return '';
       const h = july ? heroView() : heroOf(st);
       const rv = july ? rivalView() : rivalOf(st);
       if (!h || !rv) return '';
@@ -7583,7 +7614,7 @@
       const pit = c.pg ? ' / ' + c.w + '勝' + c.l + '敗 防' + Core.formatEra(c) + ' 投球回 ' + Math.floor(c.outs / 3) + ' 完投 ' + (c.cg || 0) : '';
       let html = '<div class="modal-bg"><div class="modal pdetail"><div>' + (isHero || alum ? '' : starBtn(p)) + '<span class="pname">' + esc(p.name) + '</span>' + posTag(p.position) + extraTags(view)
         + (p.grade ? ' <span class="small">' + p.grade + '年</span>' : '') + '</div>';
-      if (p.id === H.rivalId && !alum) {
+      if (p.id === H.rivalId && !alum && rivalShown()) {
         const h = heroOf(st) || (st.alumni || []).find((a) => a.id === H.id);
         const hr = h ? Math.round(h.finalAbilities ? h.rating : Core.rating(h)) : 0;
         const rr = Core.rating(p);
@@ -7626,13 +7657,14 @@
         + '<div class="grad"><div><div class="small">入学時</div>' + num(sides(G.init)) + '<div class="small">' + (G.init.top != null ? '同世代 上位' + Generation.formatTop(G.init.top) : '同世代 上位50%より下') + '</div></div>'
         + '<div class="arrow">→</div><div><div class="small">卒業時(3年夏)</div>' + num(sides(G.fin)) + '<div class="small">' + (G.fin.top != null ? '同世代 上位' + Generation.formatTop(G.fin.top) : '同世代 上位50%より下') + '</div></div></div>'
         + (a && abil ? boxes(Object.assign({}, a, { abilities: abil, pitches: st.hero.finalPitches || [] }), null, abil) : '')
-        + gradTotals(G.totals) + gradRival(G.rival) + (G.watch && G.watch.length ? '<div class="sublabel">気になる選手のその後</div>' + G.watch.map((t) => '<div class="small">' + esc(t) + '</div>').join('') : '')
+        + gradTotals(G.totals) + (rivalShown() ? gradRival(G.rival) : '') + (G.watch && G.watch.length ? '<div class="sublabel">気になる選手のその後</div>' + G.watch.map((t) => '<div class="small">' + esc(t) + '</div>').join('') : '')
         + '<div class="btns"><button class="btn sub small" data-detail="1">3年間の年表</button></div>'
         + '<div class="btns"><button class="btn" id="hAgain">もう一度引く</button><button class="btn sub" id="hSame">同じシードでやり直す</button></div></div>';
     }
     // 通算成績(大会と練習試合。ライバルと2列で並べる。数が小さいときは「参考」)
     function gradTotals(T) {
       if (!T) return '';
+      if (!rivalShown()) T = Object.assign({}, T, { rival: null });   // H1.6b:ライバルの列を出さない
       const cols = [T.hero].concat(T.rival ? [T.rival] : []);
       const bat = (l) => (l.g || 0) + '試合 ' + l.ab + '打数' + l.h + '安打<br>打率' + Core.formatAverage(l) + (l.ab < CONFIG.heroMode.totals.minAb ? '(参考)' : '') + ' ' + l.hr + '本 ' + l.rbi + '打点';
       const era = (l, er) => (l.outs ? (er * 27 / l.outs).toFixed(2) : '-.--') + (l.outs < CONFIG.heroMode.totals.minOuts ? '(参考)' : '');
@@ -7691,6 +7723,7 @@
       if (screen === 'settings') html = renderSettings();
       else if (H.phase === 'select') html = screen === 'create' ? renderCreate() : renderSelect();
       else if (screen === 'roster') html = '<div class="card"><h2>部員名簿</h2>' + rosterView() + '<div class="btns"><button class="btn sub small" id="hRosterClose">戻る</button></div></div>';
+      else if (H.phase === 'rival' && !rivalShown()) { confirmRival(st, 'auto'); save(storage, st); html = renderStart(); }   // H1.6b:ライバルを選ぶ画面は出さない(内部では自動で選ぶ)
       else if (H.phase === 'rival') html = renderRival();
       else if (H.phase === 'start') html = renderStart();
       else if (H.phase === 'graduate') html = H.gradPending || julyView ? renderHome(true) : renderGraduate();
