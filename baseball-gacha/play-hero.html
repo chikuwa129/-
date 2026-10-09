@@ -2447,7 +2447,10 @@
     const batters = (box.batters || []).map((b) => ({ b: b, p: byId_(b.id) })).filter((x) => x.p);
     const used = new Set();
     const pool = (bench || []).filter((p) => !p.retired && !used.has(p.id));
+    // 前の試合で途中出場した選手は、条件を満たす別の控えがいれば、後回しにする(起用が1人に偏りすぎないように)
+    const recent = new Set(H.subRecent || []);
     const free = () => pool.filter((p) => !used.has(p.id));
+    const pickBest = (list, score, ok) => { const L = list.filter(ok).sort((a, b) => score(b) - score(a) || a.id - b.id); return L.find((p) => !recent.has(p.id)) || L[0] || null; };
     const subs = [];
     const addLine = (p, f) => { for (const l of subLinesFor(p, year)) f(l); };
     const bat = (p) => (effAbility(p.abilities.contact) + effAbility(p.abilities.power)) / 2;
@@ -2462,8 +2465,8 @@
       const cands = batters.filter((x) => x.b.num >= 6 && x.b.ab > 0 && !used.has(x.b.id));
       if (!cands.length) continue;
       const t = cands[Math.floor(rr.next() * cands.length)];
-      const best = free().filter((p) => p.position !== 'P' || isTwoWayKnown(p)).sort((a, b) => bat(b) - bat(a) || a.id - b.id)[0];
-      if (!best || bat(best) < bat(t.p) + C.phMargin || !rr.chance(C.phProb)) continue;
+      const best = pickBest(free(), bat, (p) => (p.position !== 'P' || isTwoWayKnown(p)) && bat(p) >= bat(t.p) + C.phMargin);
+      if (!best || !rr.chance(C.phProb)) continue;
       // 1打席を移す:安打は代打の能力で抽選(移せる安打がないときは凡打)。凡打を移せないときは安打を移す
       const pHit = clamp(CONFIG.stats.hit.base + (effAbility(best.abilities.contact) - CONFIG.stats.hit.pivot) * CONFIG.stats.hit.perContact, CONFIG.stats.hit.min, CONFIG.stats.hit.max);
       let hit = rr.chance(pHit) && t.b.h > t.b.hr;
@@ -2480,8 +2483,8 @@
     let prFor = null;
     if (Math.abs(diff) <= C.prDiff && rr.chance(C.prProb)) {
       const onb = batters.filter((x) => x.b.pos !== 'P' && (x.b.h + (x.b.bb || 0)) > 0 && !used.has(x.b.id)).sort((a, b) => spd(a.p) - spd(b.p) || a.b.id - b.b.id)[0];
-      const best = onb ? free().sort((a, b) => spd(b) - spd(a) || a.id - b.id)[0] : null;
-      if (onb && best && spd(best) >= spd(onb.p) + C.prMargin) {
+      const best = onb ? pickBest(free(), spd, (p) => spd(p) >= spd(onb.p) + C.prMargin) : null;
+      if (onb && best) {
         used.add(best.id); used.add(onb.b.id);
         prFor = { runner: best, from: onb.b.id };
         addLine(best, (l) => { l.subG++; l.prG++; });
@@ -2497,7 +2500,8 @@
         for (const p of free()) {
           if (p.position === 'P' && !isTwoWayKnown(p)) continue;
           const gain = aptitude(p, x.b.pos) - cur;
-          if (gain >= C.defMargin && (!pick || gain > pick.gain || (gain === pick.gain && p.id < pick.p.id))) pick = { p: p, x: x, gain: gain };
+          const rec = recent.has(p.id) ? 1 : 0;
+          if (gain >= C.defMargin && (!pick || rec < pick.rec || (rec === pick.rec && (gain > pick.gain || (gain === pick.gain && p.id < pick.p.id))))) pick = { p: p, x: x, gain: gain, rec: rec };
         }
       }
       if (!pick) break;
@@ -2526,6 +2530,7 @@
     box.subs = subs;
     box.sb = sb;
     H.subRng = rr.s;
+    H.subRecent = subs.map((x) => x.id);
   }
 
   // 新入部員モード:先発の投球回と救援の候補(控えの本職の投手を総合値の高い順。reliefMax > 1 なら、ベンチ入りの二刀流も)
@@ -7044,7 +7049,7 @@
       return '<span class="rst">' + c.cells.map((x, i) => (x.unit ? x.v + '<i>km</i>' : lab[i] + '<b>' + x.rank + '</b>')).join(' ') + ' <span class="' + (c.stat.faint ? 'faint' : '') + '">' + (p.position === 'P' ? '防' : '') + c.stat.text + '</span></span>';
     }
     // 名簿の途中出場の通算(H1.6a。出場や盗塁があるときだけ)
-    function subOf(p) { const t = subStatsText(p.subStats && p.subStats.career); return t ? '途中出場:' + t : ''; }
+    function subOf(p) { const l = p.subStats && p.subStats.career; const t = subStatsText(l); return t ? (l.subG ? '途中出場:' : '') + t : ''; }   // 盗塁だけの選手は「途中出場」と書かない
     function compactRow(p, marks, stats) {
       const r = rankOf(p);
       if (stats) {

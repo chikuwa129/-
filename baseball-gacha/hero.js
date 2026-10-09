@@ -1700,7 +1700,7 @@
       return '<span class="rst">' + c.cells.map((x, i) => (x.unit ? x.v + '<i>km</i>' : lab[i] + '<b>' + x.rank + '</b>')).join(' ') + ' <span class="' + (c.stat.faint ? 'faint' : '') + '">' + (p.position === 'P' ? '防' : '') + c.stat.text + '</span></span>';
     }
     // 名簿の途中出場の通算(H1.6a。出場や盗塁があるときだけ)
-    function subOf(p) { const t = subStatsText(p.subStats && p.subStats.career); return t ? '途中出場:' + t : ''; }
+    function subOf(p) { const l = p.subStats && p.subStats.career; const t = subStatsText(l); return t ? (l.subG ? '途中出場:' : '') + t : ''; }   // 盗塁だけの選手は「途中出場」と書かない
     function compactRow(p, marks, stats) {
       const r = rankOf(p);
       if (stats) {

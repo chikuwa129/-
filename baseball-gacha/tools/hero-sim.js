@@ -514,4 +514,74 @@ for (const g of BGROUPS) {
   log('   7. ' + line7(S, '旧方式 strongest:'));
   log('      ' + line7(L, '新方式 chaseable:'));
 }
+// H1.6a 途中出場(代打・代走・守備固め)と盗塁:有効 / 無効(= H1.5b)を、同じシード・同じ選択で比べる
+//   凡人(入学時の総合値 80〜120)の 引き・野手 と 作成・投手、各 NB 人
+function subRun(group, seed, on) {
+  const S = CONFIG.heroMode.substitute;
+  const prev = S.enabled;
+  S.enabled = on;
+  try {
+    const st = Hero.newHeroGame(seed);
+    const wantP = group.pitch;
+    if (group.pick) {
+      const L = Hero.pickable(st).filter((p) => p.talent !== 'genius' && !p.reincarnation && !Core.isTwoWayKnown(p) && (p.position === 'P') === wantP && Core.rating(p) >= 80 && Core.rating(p) <= 120);
+      if (!L.length) return null;
+      Hero.pickHero(st, new Core.Rng((seed * 40503) >>> 0).pick(L).id);
+    } else {
+      const r = new Core.Rng((seed * 2654435761) >>> 0);
+      if (Hero.createHero(st, { pos: wantP ? 'pitcher' : 'fielder', type: r.pick(Object.keys(wantP ? Hero.PITCH_TYPES : Hero.BAT_TYPES)), level: ['low', 'mid', 'high'][seed % 3], talent: 'normal' })) return null;
+      Hero.confirmRival(st, 'auto');
+    }
+    const H = st.hero;
+    if (H.initRating < 80 || H.initRating > 120) return null;
+    const y0 = H.enrolledYear;
+    Hero.startPlay(st);
+    for (let g = 0; H.phase === 'play' && g < 200; g++) Hero.advance(st, 'event');
+    const inLine = new Set((H.monthLog || []).filter((x) => x[1]).map((x) => x[0]));
+    const subMonths = new Set(H.appear.filter((e) => e.sub && !inLine.has(e.s)).map((e) => e.s));
+    const T = H.appear.filter((e) => e.kind === 'tourney');
+    // チームの全員の、年度ごとの途中出場と盗塁(主人公の在籍した3年間)
+    const py = [];
+    for (const p of st.players.concat(st.alumni || [])) {
+      const by = (p.subStats && p.subStats.byYear) || {};
+      for (const y of Object.keys(by)) if (Number(y) >= y0 && Number(y) <= y0 + 2) py.push({ y: y, ph: by[y].phAb, pr: by[y].prG, def: by[y].defG, g: by[y].subG, sbA: by[y].sbA, sbS: by[y].sbS, spd: (p.finalAbilities || p.abilities).speed });
+    }
+    // 偏り:年度ごとに、チームの途中出場の合計のうち、上位1人の割合
+    const conc = [];
+    for (let y = y0; y <= y0 + 2; y++) { const L = py.filter((x) => Number(x.y) === y && x.g > 0); const tot = L.reduce((a, x) => a + x.g, 0); if (tot >= 4) conc.push(Math.max.apply(null, L.map((x) => x.g)) / tot); }
+    return { months: H.starterMonths + subMonths.size, starts: H.starterMonths, wins: T.filter((e) => e.win).length, games: T.length, py: py, conc: conc };
+  } finally { S.enabled = prev; }
+}
+{
+  const G2 = [{ label: '引き・野手', pick: true, pitch: false }, { label: '作成・投手', pick: false, pitch: true }];
+  log('');
+  log('■ H1.6a 途中出場と盗塁(凡人 80〜120、各 ' + NB + '人。有効 / 無効(= H1.5b)を同じシード・同じ選択で)');
+  let winOn = 0, gOn = 0, winOff = 0, gOff = 0;
+  const allPY = [];
+  const CONC = [];
+  for (const g of G2) {
+    const ON = [], OFF = [];
+    for (let seed = 1; ON.length < NB && seed < NB * 40; seed++) {
+      const a = subRun(g, 20000 + seed, true);
+      if (!a) continue;
+      const b = subRun(g, 20000 + seed, false);
+      ON.push(a); OFF.push(b);
+      winOn += a.wins; gOn += a.games; winOff += b.wins; gOff += b.games;
+      a.py.forEach((x) => allPY.push(x));
+      a.conc.forEach((x) => CONC.push(x));
+    }
+    log('  【' + g.label + '】' + ON.length + '人');
+    log('   出場月数(スタメン + 途中出場だけの月):有効 ' + d4(ON, (x) => x.months) + ' / 0〜2か月 ' + share(ON, (x) => x.months <= 2));
+    log('                                  無効 ' + d4(OFF, (x) => x.months) + ' / 0〜2か月 ' + share(OFF, (x) => x.months <= 2));
+    log('   スタメンの月数(参考):有効 ' + d4(ON, (x) => x.starts) + ' / 無効 ' + d4(OFF, (x) => x.starts));
+  }
+  const yr = allPY.filter((x) => x.g > 0);
+  log('  1人あたりの年間の途中出場(途中出場した選手・年度 ' + yr.length + '件):代打 ' + d4(yr, (x) => x.ph) + ' / 代走 ' + d4(yr, (x) => x.pr) + ' / 守備固め ' + d4(yr, (x) => x.def) + ' / 合計の最大 ' + Math.max.apply(null, yr.map((x) => x.g)));
+  for (const [lo, hi] of [[0, 40], [40, 60], [60, 80], [80, 999]]) {
+    const L = allPY.filter((x) => x.spd >= lo && x.spd < hi);
+    if (L.length) log('  盗塁(走力 ' + lo + (hi > 900 ? '以上' : '〜' + hi) + '、選手・年度 ' + L.length + '件):試行 ' + d4(L, (x) => x.sbA) + ' / 成功 ' + d4(L, (x) => x.sbS) + ' / 成功率 ' + pct(L.reduce((a, x) => a + x.sbS, 0) / Math.max(1, L.reduce((a, x) => a + x.sbA, 0))));
+  }
+  log('  偏り(年度ごとの途中出場のうち、上位1人の割合。途中出場4回以上の年度 ' + CONC.length + '件):' + d4(CONC, (x) => x * 100) + '(%)/ 半分以上の年度 ' + share(CONC, (x) => x >= 0.5));
+  log('  チームの大会の勝率:有効 ' + pct(winOn / gOn) + ' / 無効 ' + pct(winOff / gOff) + '(差 ' + ((winOn / gOn - winOff / gOff) * 100).toFixed(1) + 'ポイント)');
+}
 console.log(out.join('\n'));
