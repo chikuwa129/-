@@ -50,9 +50,9 @@
     bunt: { base: 0.85, con: 0.1, spd: 0.06, def: 0.08, min: 0.4, max: 0.9, hitBase: 0.04, hitSpd: 0.06, hitMax: 0.15 },
     // スクイズ:成功率 = clamp(base + con × z(ミート) − def × z(守備))。成功で三塁走者が生還し、打者はアウト(他の走者は1つ進む)
     //   失敗:三塁走者が本塁でアウト。打者は一塁へ(野選)、他の走者は進まない
-    squeeze: { base: 0.7, con: 0.25, def: 0.08, min: 0.3, max: 0.9 },
+    squeeze: { base: 0.58, con: 0.25, def: 0.08, min: 0.3, max: 0.9 },
     // 盗塁(一塁走者だけ):成功率 = clamp(base + spd × z(走者の走力) − arm × z(肩) − quick × z(クイック))
-    steal: { base: 0.66, spd: 0.3, arm: 0.15, quick: 0.12, min: 0.15, max: 0.9, ds3: 0.4 },   // ds3:三塁に走者がいるとき、盗塁失敗の間に三塁走者が生還する確率,
+    steal: { base: 0.6, spd: 0.3, arm: 0.15, quick: 0.12, min: 0.15, max: 0.9, ds3: 0.4 },   // ds3:三塁に走者がいるとき、盗塁失敗の間に三塁走者が生還する確率,
     // 走者の進塁(z は走者の走力、肩は守備側)
     run: {
       goAdv: 0.35,                                 // (三塁に走者がいるときは go3)
@@ -84,6 +84,32 @@
     strength: { under: 0.4, over: 0.6 },
     // 試合の勝率の推定(簡易):半イニングの得点の分散 v(仮)。残りイニングの得点は、得点期待値 μ(無死走者なし)と、事前勝率から逆算した力の差で見込む
     winModel: { v: 0.9 },
+    // 左右(表示だけ。確率には効かせない):右の割合。両打ちは作らない。場面のシードから決める(試作専用の乱数)
+    hands: { right: 0.75 },
+    // 指示の選択肢:敬遠は、次の打者の能力を持たないため、出さない(true で戻す)
+    walkEnabled: false,
+    // ランダムな場面のうち、終盤の接戦(7回以降・2点差以内)にする割合
+    lateCloseShare: 0.3,
+    // 傾向タグ(実際の能力から。最大 max 個、偏りの大きい順。該当がなければ「平均的」)。どの能力も、結果の確率に効いている
+    tags: {
+      max: 3,
+      batter: [
+        { key: 'contact', min: 70, word: '巧打' }, { key: 'power', min: 70, word: '長打力' }, { key: 'speed', min: 70, word: '俊足' },
+        { key: 'power', max: 30, word: '非力' }, { key: 'contact', max: 30, word: '空振りが多い' }, { key: 'speed', max: 25, word: '足が遅い' },
+      ],
+      pitcher: [
+        { key: 'velocity', min: 70, word: '速球派' }, { key: 'breaking', min: 70, word: '変化球が多彩' }, { key: 'control', min: 70, word: '制球が良い' },
+        { key: 'control', max: 30, word: '制球が荒い' }, { key: 'velocity', max: 30, word: '球威がない' }, { key: 'breaking', max: 25, word: '変化球が少ない' },
+      ],
+    },
+    // 指示の説明(メッセージ行に出す自作の一文)
+    orderText: {
+      bat: { normal: 'いつもどおりに打つ。', power: '大きいのを狙う。長打は増えるが、空振りも増える。', contact: '確実に当てにいく。三振は減るが、長打は出にくい。',
+        bunt: '走者を進める。打者はアウトになる。', squeeze: '三塁走者を、バントで迎え入れる。失敗すると、走者がアウト。', steal: '一塁走者が、二塁を狙う。失敗するとアウト。' },
+      pitch: { normal: 'いつもどおりに投げる。', fast: '直球で押す。球が速いほど効くが、遅いと打たれる。', breaking: '変化球でかわす。三振とゴロが増えるが、制球が悪いと四球が増える。',
+        outside: '外角に集める。長打は減るが、四球が増える。', inside: '内角を攻める。詰まらせるが、制球が悪いと危ない。', walk: '勝負を避けて、歩かせる。' },
+    },
+    messages: { idle: '指示のカードを選んでください。説明を読んでから「決定」。' },
   };
   const OUTCOMES = ['K', 'BB', 'GO', 'FO', 'S', 'XB', 'HR'];
   const OUTCOME_LABEL = { K: '三振', BB: '四球', GO: 'ゴロのアウト', FO: 'フライのアウト', S: '単打', XB: '長打', HR: '本塁打' };
@@ -276,7 +302,7 @@
   // 指示が使えるか
   function legalOrders(sc) {
     const b = sc.bases, side = sc.side === 'pitch' ? 'pitch' : 'bat';
-    if (side === 'pitch') return ['normal', 'fast', 'breaking', 'outside', 'inside'].concat(b[0] == null ? ['walk'] : []);
+    if (side === 'pitch') return ['normal', 'fast', 'breaking', 'outside', 'inside'].concat(CONFIG.walkEnabled && b[0] == null ? ['walk'] : []);
     const L = ['normal', 'power', 'contact'];
     if (sc.outs < 2 && (b[0] != null || b[1] != null) && b[2] == null) L.push('bunt');   // 三塁に走者がいるときは、スクイズ
     if (sc.outs < 2 && b[2] != null) L.push('squeeze');
@@ -376,7 +402,7 @@
   // ---------- 場面 ----------
   // 場面:{ inning, side:'bat'|'pitch', outs, bases:[走力|null ×3], diff(自校−相手), batter, pitcher, defense, arm, hero, focus }
   function makeScene(o) {
-    return Object.assign({ inning: 1, half: 'top', winP: 0.5, side: 'bat', outs: 0, bases: [null, null, null], diff: 0, batter: Object.assign({}, PRESETS.batter.normal), pitcher: Object.assign({}, PRESETS.pitcher.normal),
+    return Object.assign({ inning: 1, half: 'top', winP: 0.5, bats: 'R', throws: 'R', side: 'bat', outs: 0, bases: [null, null, null], diff: 0, batter: Object.assign({}, PRESETS.batter.normal), pitcher: Object.assign({}, PRESETS.pitcher.normal),
       defense: 50, arm: 50, hero: true, focus: false }, o);
   }
   const R = 50;
@@ -400,8 +426,33 @@
     const jit = (o) => { const x = {}; for (const k of Object.keys(o)) x[k] = clamp(o[k] + r.int(-10, 10), 1, 100); return x; };
     const bases = [0, 1, 2].map(() => (r.chance(0.4) ? r.int(30, 80) : null));
     const winP = Math.round((0.15 + r.next() * 0.75) * 100) / 100;   // 事前勝率 15〜90%
-    return makeScene({ name: 'シード ' + seed, inning: r.int(1, 9), half: r.chance(0.5) ? 'top' : 'bottom', winP: winP, side: r.chance(0.5) ? 'bat' : 'pitch', outs: r.int(0, 2), bases: bases, diff: r.int(-4, 4),
+    const late = r.chance(CONFIG.lateCloseShare);   // 終盤の接戦
+    const sc = makeScene({ name: 'シード ' + seed, inning: late ? r.int(7, 9) : r.int(1, 9), half: r.chance(0.5) ? 'top' : 'bottom', winP: winP, side: r.chance(0.5) ? 'bat' : 'pitch', outs: r.int(0, 2), bases: bases, diff: late ? r.int(-2, 2) : r.int(-4, 4),
       batter: jit(pick(PRESETS.batter)), pitcher: jit(pick(PRESETS.pitcher)), defense: r.int(30, 70), arm: r.int(30, 70), hero: r.chance(0.6), focus: r.chance(0.3) });
+    return Object.assign(sc, handsOf(seed));
+  }
+  // 左右(場面のシードから決める。別系統の乱数。表示だけ)
+  function handsOf(seed) {
+    const h = new Rng((seed ^ 0x5bd1e995) >>> 0);
+    const R = CONFIG.hands.right;
+    return { bats: h.next() < R ? 'R' : 'L', throws: h.next() < R ? 'R' : 'L' };
+  }
+  // 傾向タグ(kind:'batter' | 'pitcher')
+  function tagsOf(kind, ab, cfg) {
+    const T = (cfg || CONFIG).tags;
+    const hit = T[kind].filter((t) => (t.min != null ? ab[t.key] >= t.min : ab[t.key] <= t.max)).map((t) => ({ word: t.word, dev: Math.abs(ab[t.key] - 50) }));
+    hit.sort((a, b) => b.dev - a.dev);
+    const out = hit.slice(0, T.max).map((t) => t.word);
+    return out.length ? out : ['平均的'];
+  }
+  // 画面の手順(2段階で選ぶ):select で選択(進まない)、confirm で確定して結果、next で次へ
+  function uiStep(st, action, arg) {
+    const s = Object.assign({ sel: null, result: null }, st);
+    if (action === 'select') { if (!s.result) s.sel = arg; return s; }
+    if (action === 'confirm') { if (!s.result && s.sel) s.result = { order: s.sel }; return s; }
+    if (action === 'auto') { if (!s.result) { s.sel = 'normal'; s.result = { order: 'normal', auto: true }; } return s; }
+    if (action === 'next') return { sel: null, result: null };
+    return s;
   }
 
   // ---------- 試合の事前勝率・戦力差・勝率の推定 ----------
@@ -456,7 +507,7 @@
   return {
     CONFIG: CONFIG, OUTCOMES: OUTCOMES, OUTCOME_LABEL: OUTCOME_LABEL, ORDER_LABEL: ORDER_LABEL, PRESETS: PRESETS, SCENES: SCENES,
     Rng: Rng, probs: probs, orderBranches: orderBranches, legalOrders: legalOrders, reTable: reTable, reOf: reOf, p1Table: p1Table, p1Of: p1Of, expectOrderP1: expectOrderP1, expectOrder: expectOrder,
-    evaluate: evaluate, resolve: resolve, goodBadOf: goodBadOf, gameWinProb: gameWinProb, strengthLabel: strengthLabel, inWinRange: inWinRange, makeScene: makeScene, randomScene: randomScene, isKeyScene: isKeyScene,
+    evaluate: evaluate, resolve: resolve, goodBadOf: goodBadOf, gameWinProb: gameWinProb, strengthLabel: strengthLabel, inWinRange: inWinRange, makeScene: makeScene, randomScene: randomScene, handsOf: handsOf, tagsOf: tagsOf, uiStep: uiStep, isKeyScene: isKeyScene,
     buntP: buntP, squeezeP: squeezeP, stealP: stealP, rankOf: rankOf, kmh: kmh, breakTotal: breakTotal,
   };
 });
