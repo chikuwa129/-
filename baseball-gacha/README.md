@@ -99,6 +99,7 @@ node sim.js 200 42 random
 - [x] フェーズH1.6a:途中出場(代打・代走・守備固め)と盗塁の起用ルール(heroMode.substitute)
 - [x] フェーズH1.6b:覚醒とヒント(heroMode.awakening)、ライバルの表示を外す(heroMode.rival.display)
 - [x] フェーズH1.7:演出(heroMode.fx。入口の登場演出、主人公の覚醒の瞬間の全画面の演出。見た目だけで、結果と乱数は変えない。保存 v12)
+- [x] フェーズH1.7b:入口の演出の強化(自動スクロール、見せ場の全画面演出 heroMode.fx.entry.spotlight、引き直しを等速に)
 - [ ] フェーズ2:大会と国際大会
 - [ ] フェーズ3:スカウトと「逃した魚」
 - [ ] フェーズ4:対戦成績と因縁
