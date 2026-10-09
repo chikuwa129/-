@@ -1308,6 +1308,62 @@ test('H1.7:覚醒の演出に出る数値が、実際の能力値と一致する
   assert.ok(checked > 15, '確認した覚醒 ' + checked);
 });
 
+test('H1.7b:見せ場の対象は、一覧の中で総合値が最大の1人(逸材以上だけ。同点は一覧の順で先。該当なしは出ない)(60回)', () => {
+  if (!Core.isV2()) return;
+  const { Generation } = require('../logic.js');
+  const ORD = ['有望', '逸材', '怪物級', '規格外'];
+  const lab = (p) => (Generation.getGenerationRank(p, 1, 4) || {}).label;
+  let found = 0, none = 0;
+  for (let s = 1; s <= 60; s++) {
+    const st = Hero.newHeroGame(9500 + s);
+    const L = Hero.entryList(st);
+    const ok = L.filter((p) => ORD.indexOf(lab(p)) >= 1);
+    const best = ok.reduce((b, p) => (!b || Core.rating(p) > Core.rating(b) ? p : b), null);
+    const got = Hero.spotlightPicks(st, L);
+    if (best) { found++; assert.deepStrictEqual(got.map((p) => p.id), [best.id], 'seed ' + s); assert.ok(L.every((p) => Core.rating(p) <= Core.rating(best)), '一覧の最大'); }
+    else { none++; assert.deepStrictEqual(got, [], '該当なし seed ' + s); }
+    // 逸材未満だけの一覧では、出ない
+    assert.deepStrictEqual(Hero.spotlightPicks(st, L.filter((p) => ORD.indexOf(lab(p)) < 1)), []);
+    // 同点:同じ能力の選手を後ろに足しても、先の選手のまま。前に足すと、前の選手
+    if (best) {
+      const twin = Object.assign({}, best, { id: 99999 });
+      assert.strictEqual(Hero.spotlightPicks(st, L.concat([twin]))[0].id, best.id, '同点は先');
+      assert.strictEqual(Hero.spotlightPicks(st, [twin].concat(L))[0].id, 99999, '同点は先(前に足す)');
+    }
+  }
+  assert.ok(found >= 3 && none >= 3, '見せ場あり ' + found + ' / なし ' + none);
+  // 引きの結果(誰が出るか・能力・順位)は、演出・見せ場の有無で変わらない(引き直しを含む)
+  const F = CONFIG.heroMode.fx, prev = [F.enabled, F.entry.spotlight.enabled];
+  const draw = (on, sp) => { F.enabled = on; F.entry.spotlight.enabled = sp; try { const st = Hero.newHeroGame(9601); const out = []; for (let k = 0; k < 3; k++) { out.push(Hero.entryList(st).map((p) => p.id + ':' + Core.rating(p) + ':' + JSON.stringify(p.abilities)).join('|')); Hero.reroll(st); } return out.join('#') + st.hero.rng; } finally { F.enabled = prev[0]; F.entry.spotlight.enabled = prev[1]; } };
+  assert.strictEqual(draw(true, true), draw(false, false)); assert.strictEqual(draw(true, false), draw(false, false));
+});
+
+test('H1.7b:見せ場に出る数値が、実際の能力値と一致する(総合値・項目・ランク・順位・ヒント)(80回)', () => {
+  if (!Core.isV2()) return;
+  const { Generation } = require('../logic.js');
+  let n = 0;
+  for (let s = 1; s <= 80; s++) {
+    const st = Hero.newHeroGame(9700 + s);
+    for (const p of Hero.spotlightPicks(st)) {
+      const d = Hero.spotlightData(st, p);
+      n++;
+      assert.strictEqual(d.rating, Core.rating(p));
+      const rk = Generation.getGenerationRank(p, 1, 4);
+      assert.strictEqual(d.label, rk.label); assert.strictEqual(d.top, rk.top);
+      const keys = Core.isTwoWayKnown(p) ? Core.PITCH_KEYS.concat(Core.BAT_KEYS) : Core.sideKeys(Core.sideOf(p.position));
+      assert.deepStrictEqual(d.items.map((x) => x.k), keys);
+      for (const x of d.items) {
+        const v = p.abilities[x.k];
+        if (x.k === 'velocity') assert.strictEqual(x.value, Hero.toKmh(v));
+        else if (x.k === 'breaking') assert.strictEqual(x.value, Hero.breakTotal(p));
+        else { assert.strictEqual(x.value, Math.round(v)); assert.strictEqual(x.rank, Hero.getRank(v)); }
+      }
+      assert.strictEqual(d.hint, p.awk && p.awk.h ? p.awk.h : null);
+    }
+  }
+  assert.ok(n >= 5, '見せ場 ' + n);
+});
+
 // legacy の一致の確認(別プロセス)
 if (!LEGACY_ONLY && Core.isV2()) {
   test("roster.version 'legacy' の一致の確認(BBGACHA_ROSTER=legacy の別プロセスで、legacy の指紋のテストを実行)", () => {
