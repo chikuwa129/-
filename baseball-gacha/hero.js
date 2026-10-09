@@ -1205,9 +1205,8 @@
     if (p.mlog && p.mlog.a.length && p.mlog.s + p.mlog.a.length - 1 === sv) p.mlog.a[p.mlog.a.length - 1] = HighSchool.packAbilities(p.abilities);
     p.awoken = { s: sv, y: st.year, m: HighSchool.CALENDAR[st.month].month, g: grade || p.grade };   // 学年は、その年度の学年(3月の進級より前)
     // H1.7:覚醒の前後の値(演出用。見える能力だけ。結果には使わない)
-    const r2 = (v) => Math.round(v * 100) / 100;
     p.awoken.b = {}; p.awoken.a = {};
-    for (const k of Object.keys(gains)) { p.awoken.b[k] = r2(before[k]); p.awoken.a[k] = r2(p.abilities[k]); }
+    for (const k of Object.keys(gains)) { p.awoken.b[k] = before[k]; p.awoken.a[k] = p.abilities[k]; }
     // ひとことの詳細:伸びの大きい順に detailMax 項目
     const items = Object.keys(gains).filter((k) => gains[k] > 0).map((k) => {
       if (k === 'velocity') return { w: 99, t: '球速が +' + (toKmh(p.abilities.velocity) - toKmh(before.velocity)) + 'km/h' };
@@ -1500,7 +1499,7 @@
       if (awOn() && a.awk) {
         const hint = !!a.awk.h, aw = !!a.awoken;
         const list = hint && aw ? STORY.awaken.gradHintAwoke : aw ? STORY.awaken.gradNoHintAwoke : hint ? STORY.awaken.gradHintNone : null;
-        if (list) { let t = fill(list[a.id % list.length], vars); if (fxOn() && aw && a.awoken.g) t = t.replace(/。$/, '(' + a.awoken.g + '年の' + a.awoken.m + '月)。'); if (L.length < 7) L.splice(L.length - 1, 0, t); else L[L.length - 2] = t; }
+        if (list) { let t = fill(list[a.id % list.length], vars); if (fxOn() && aw && a.awoken.g) t = t.replace(/。$/, '（' + a.awoken.g + '年の' + a.awoken.m + '月）。'); if (L.length < 7) L.splice(L.length - 1, 0, t); else L[L.length - 2] = t; }
       }
       // H1.6a:途中出場の通算(出場があったときだけ。乱数は使わない)
       const sl = a.subStats && a.subStats.career;
@@ -2006,7 +2005,7 @@
         return '<div class="awfx-it awfx-late"' + late(t0 - 0.2) + '><div class="lb">' + esc(x.label) + '</div>'
           + (x.r1 ? '<div class="rk' + (chg ? ' chg' : '') + '" data-r0="' + x.r0 + '" data-r1="' + x.r1 + '">' + (d.final ? x.r1 : x.r0) + '</div>' : '')
           + '<div class="nv"><span data-from="' + x.from + '" data-to="' + x.to + '" data-t="' + t0.toFixed(2) + '">' + (d.final ? x.to : x.from) + '</span>' + (x.unit ? '<small>' + x.unit + '</small>' : '') + '</div>'
-          + '<div class="ov">' + x.from + ' → ' + x.to + (chg ? '(' + x.r0 + '→' + x.r1 + ')' : '') + '</div></div>';
+          + '<div class="ov">' + x.from + ' → ' + x.to + (chg ? '（' + x.r0 + '→' + x.r1 + '）' : '') + '</div></div>';
       }).join('');
       const tSum = intro + Math.max(0, d.items.length - 1) * step + cnt + 0.2;
       const top = (v) => (v == null ? '50%より下' : Generation.formatTop(v));
@@ -2139,7 +2138,7 @@
     // ---------- 主人公のカード ----------
     function heroCard(h, withStatus) {
       let html = '<div class="hero"><button class="pnamebtn" data-detail="1">' + esc(h.name) + '</button>' + posTag(h.position) + extraTags(h)
-        + ' <span class="small">' + (h.grade || 1) + '年</span>' + (fxOn() && awOn() && h.awoken ? ' <span class="mk awk">覚醒(' + h.awoken.g + '年' + h.awoken.m + '月)</span>' : '') + (withStatus ? ' <span class="status">' + esc(statusLabel(st)) + '</span>' : '')
+        + ' <span class="small">' + (h.grade || 1) + '年</span>' + (fxOn() && awOn() && h.awoken ? ' <span class="mk awk">覚醒（' + h.awoken.g + '年' + h.awoken.m + '月）</span>' : '') + (withStatus ? ' <span class="status">' + esc(statusLabel(st)) + '</span>' : '')
         + '<div class="small">' + ratingHtml(h) + '</div>' + boxes(h);
       if (withStatus) {
         // 今月の出場と、今年度の成績(最大2行)

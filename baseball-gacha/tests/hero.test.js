@@ -1241,6 +1241,73 @@ test('H1.6b:ライバルの表示を外すと、ひとこと・卒業の読み�
   assert.ok(checked > 30);
 });
 
+// ---------- H1.7:演出(見た目だけ) ----------
+test('H1.7:演出の有無で、勝敗・能力・進路・成績・乱数が一致する。卒業の読み物の違いは、覚醒の年月の添え書きだけ(8回)', () => {
+  if (!Core.isV2()) return;
+  const FP = require('./hero-fingerprint.js');
+  const F = CONFIG.heroMode.fx;
+  const prev = F.enabled;
+  const run = (on) => { F.enabled = on; try { return [0, 1, 2, 3, 4, 5, 6, 7].map((i) => FP.fingerprint(i, { stories: true, stats: true, games: true })); } finally { F.enabled = prev; } };
+  const a = run(true), b = run(false);
+  const noText = (o) => { const x = Object.assign({}, o); delete x.stories; return x; };
+  for (let i = 0; i < a.length; i++) assert.deepStrictEqual(noText(a[i]), noText(b[i]), i + '回目');
+  // 卒業の読み物:添え書きを外すと、演出なしと同じ文面
+  const grad = (on, seed) => { F.enabled = on; try {
+    const st = Hero.newHeroGame(seed);
+    Hero.pickHero(st, Hero.pickable(st)[0].id); Hero.startPlay(st);
+    for (let g = 0; g < 200 && st.hero.phase === 'play'; g++) Hero.advance(st, 'event');
+    return { lines: (st.hero.graduation && st.hero.graduation.lines) || [], aw: (Hero.anyPlayer(st, st.hero.id) || {}).awoken };
+  } finally { F.enabled = prev; } };
+  let withYm = 0;
+  for (let s = 0; s < 40 && withYm < 2; s++) {
+    const x = grad(true, 9300 + s), y = grad(false, 9300 + s);
+    const strip = x.lines.map((t) => t.replace(/\uFF08[1-3]年の\d+月\uFF09。$/, '。'));
+    assert.deepStrictEqual(strip, y.lines, 'seed ' + (9300 + s));
+    if (x.aw) { withYm++; assert.ok(x.lines.some((t) => t.indexOf('\uFF08' + x.aw.g + '年の' + x.aw.m + '月\uFF09') >= 0), '覚醒の年月が入る'); }
+  }
+  assert.ok(withYm >= 1, '主人公の覚醒が見つからない');
+});
+
+test('H1.7:覚醒の演出に出る数値が、実際の能力値と一致する(覚醒した全員。20回)', () => {
+  if (!Core.isV2()) return;
+  let checked = 0, heroes = 0;
+  for (let s = 1; s <= 20; s++) {
+    const st = Hero.newHeroGame(8300 + s);
+    Hero.pickHero(st, Hero.pickable(st)[s % Hero.pickable(st).length].id);
+    Hero.startPlay(st);
+    const seen = {};
+    for (let i = 0; i < 200 && st.hero.phase === 'play'; i++) {
+      Hero.advance(st, 'month');
+      if (!(st.lastEvents || []).length) continue;   // 新年度の画面(月は進まない)
+      if (st.hero.newYear && !st.hero.newYear.closed) Hero.closeNewYear(st);
+      const sv = st.lastEvents[st.lastEvents.length - 1].serial;
+      for (const p of st.players) {
+        if (!p.awoken || seen[p.id] || p.awoken.s !== sv) continue;
+        seen[p.id] = true;
+        const d = Hero.awakenFxData(st, p);
+        assert.ok(d && d.items.length > 0, '項目がある');
+        const w = p.awoken;
+        for (const x of d.items) {
+          const now = p.abilities[x.k];
+          assert.ok(Math.abs(w.a[x.k] - now) < 0.006, x.k + ':覚醒後の値は、その月の能力値');
+          const shown = x.k === 'velocity' ? Hero.toKmh(now) : x.k === 'breaking' ? Hero.breakTotal(p) : Math.round(now);
+          assert.strictEqual(x.to, shown, x.k + ':新しい値');
+          if (x.r1) { assert.strictEqual(x.r1, Hero.getRank(now)); assert.strictEqual(x.r0, Hero.getRank(w.b[x.k])); }
+          assert.ok(x.from <= x.to, x.k + ':下がらない');
+          assert.ok(w.b[x.k] <= now, x.k);
+        }
+        assert.strictEqual(d.rating.after, Core.rating(p), '覚醒後の総合値');
+        assert.ok(d.rating.before <= d.rating.after, '覚醒前の総合値');
+        assert.strictEqual(d.hint, p.awk && p.awk.h ? p.awk.h : null, 'ヒント');
+        assert.strictEqual(d.g, w.g); assert.strictEqual(d.m, w.m);
+        if (p.id === st.hero.id) { heroes++; assert.strictEqual(d.rating.init, st.hero.initRating, '入学時の総合値'); }
+        checked++;
+      }
+    }
+  }
+  assert.ok(checked > 15, '確認した覚醒 ' + checked);
+});
+
 // legacy の一致の確認(別プロセス)
 if (!LEGACY_ONLY && Core.isV2()) {
   test("roster.version 'legacy' の一致の確認(BBGACHA_ROSTER=legacy の別プロセスで、legacy の指紋のテストを実行)", () => {
