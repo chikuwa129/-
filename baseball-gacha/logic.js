@@ -3121,6 +3121,7 @@
     monthSerial: monthSerial,
     serialLabel: serialLabel,
     abilitiesAt: abilitiesAt,
+    packAbilities: packAbilities,
     monthDelta: monthDelta,
     unpackAbilities: unpackAbilities,
     compressAlumniLogs: compressAlumniLogs,

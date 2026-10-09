@@ -82,6 +82,7 @@
     };
     trng(st, (r) => { for (const p of st.players.concat(st.pendingRecruits)) syncPitches(r, p); });
     if (Core.isV2()) { st.hero.prng = HighSchool.hashSeed(st.seed ^ 0x7c15e3a1, HM().seedSalt); makePickup(st); }
+    if (awOn()) { st.hero.arng = HighSchool.hashSeed(st.seed ^ 0x3a6f1c95, HM().seedSalt); assignAwk(st, st.players.concat(st.pendingRecruits)); }
     return st;
   }
   // 入口のピックアップ(v2):総合値の上位 entrancePickTop 人 + 残りから無作為に(このモード専用の乱数)。合計 entranceMax 人まで
@@ -108,6 +109,7 @@
     hrng(st, (r) => HighSchool.drawRecruitBatch(st, r, n, q));
     trng(st, (r) => { for (const p of st.pendingRecruits) syncPitches(r, p); });
     if (H.pickup) makePickup(st);
+    if (awOn()) assignAwk(st, st.pendingRecruits);
     // 引き直しで消えた新入生の「気になる」は外す
     H.watch = (H.watch || []).filter((id) => st.players.some((p) => p.id === id));
     for (const k of Object.keys(H.watchLog || {})) if (!st.players.some((p) => p.id === Number(k))) delete H.watchLog[k];
@@ -227,6 +229,7 @@
       const others = st.pendingRecruits.filter((q) => q !== p).sort((a, b) => Core.rating(a) - Core.rating(b) || b.id - a.id);
       if (others.length) st.pendingRecruits.splice(st.pendingRecruits.indexOf(others[0]), 1);
     }
+    if (awOn()) { delete p.awk; assignAwk(st, [p]); }   // 作った主人公にも、同じ規則で素質とヒント
     H.id = p.id;
     H.created = true;
     H.choice = Object.assign({}, c);
@@ -648,9 +651,16 @@
     const addG = (b) => { if (b && b.starter) glog.push({ outs: b.starter.outs, st: b.starter.stamina, me: b.starter.id === h.id }); };
     for (const c of mev.cards || []) if (c.type === 'tournament' && c.games) for (const g of c.games) addG(g.box);
     for (const g of mev.practice || []) addG(g.box);
+    // 覚醒(H1.6b):年度の最初(4月)に人数と対象と月を決め、その月の終わりに能力を伸ばす(このモード専用の乱数)
+    const awNow = awOn() ? awakeMonth(st, sv) : [];
     // 球種の内訳(全員)。主人公が新しい球種を覚えたら、物語にする
     const learned = trng(st, (r) => { let l = null; for (const p of st.players) { const n = syncPitches(r, p); if (p === h && n) l = n; } return l; });
     trng(st, (r) => {
+      // 覚醒の物語:主人公(止まる)、気になる選手(止まらない)。他の部員は名簿の印だけ
+      for (const a of awNow) {
+        if (a.id === h.id) addStory(st, r, out, 'awaken', STORY.awaken.hero, Object.assign({ detail: a.detail }, vars), 4);
+        else if ((H.watch || []).indexOf(a.id) >= 0) addStory(st, r, out, 'awakenWatch', STORY.awaken.watch, Object.assign({ w: a.name }, vars), 2);
+      }
       // 引退
       if (h.retired) {
         if (!H.retiredTold) { H.retiredTold = true; addStory(st, r, out, 'retire', STORY.retire, vars); }
@@ -1113,6 +1123,90 @@
     });
   }
 
+  // ---------- 覚醒とヒント(H1.6b) ----------
+  const AW = () => HM().awakening || {};
+  const awOn = () => !!AW().enabled;
+  const arng = (st, fn) => hrng(st, fn, 'arng');
+  // 覚醒の素質(隠れた値)とヒントの一言を、まだ決まっていない選手に決める(id の順。入学時に呼ぶ)
+  function assignAwk(st, list) {
+    const A = AW();
+    const L = list.filter((p) => p && !p.awk && !p.helper).sort((a, b) => a.id - b.id);
+    if (!L.length) return;
+    arng(st, (r) => {
+      for (const p of L) {
+        const t = r.chance(A.talentRate);
+        const hint = r.chance(t ? A.hintRateTalent : A.hintRateNone);
+        p.awk = { t: t, h: hint ? r.pick(A.hints) : null };
+      }
+    });
+  }
+  // 覚醒の月の処理。年度の最初の月(4月)に、その年度の対象と月を決める。戻り値:この月に覚醒した選手 [{ id, name, detail }]
+  function awakeMonth(st, sv) {
+    const H = st.hero;
+    const A = AW();
+    const cal = HighSchool.CALENDAR[st.month].month;
+    if (cal === 4 && H.awYear !== st.year) {
+      H.awYear = st.year;
+      const cands = st.players.filter((p) => !p.helper && !p.retired && !p.awoken);
+      assignAwk(st, cands);
+      H.awPlan = arng(st, (r) => {
+        const n = r.weighted(A.countWeights);
+        const pool = cands.slice().sort((a, b) => a.id - b.id);
+        const plan = [];
+        for (let i = 0; i < n && pool.length; i++) {
+          const k = r.weighted(pool.map((p) => (p.awk && p.awk.t ? A.talentWeight : 1)));
+          const p = pool.splice(k, 1)[0];
+          const last = p.grade >= 3 ? 3 : 11;   // 3年生は、3年の7月までに
+          plan.push({ id: p.id, s: HighSchool.monthSerial(st.year, r.int(0, last)) });
+        }
+        return plan;
+      });
+      (H.awLog = H.awLog || []).push({ y: st.year, n: H.awPlan.length });
+    }
+    const out = [];
+    for (const e of (H.awPlan || []).filter((x) => x.s === sv)) {
+      const p = st.players.find((q) => q.id === e.id);
+      if (!p || p.awoken || p.helper) continue;
+      out.push(awaken(st, p, sv));
+    }
+    return out;
+  }
+  // 覚醒:見える能力をそれぞれ伸ばす(下がらない。項目の上限まで)。球速は km/h、変化球は総変化量で幅を決める
+  //   成長の限界(隠れた値)は、伸びを鈍らせるだけで、能力を下げないので、そのままにする
+  function awaken(st, p, sv) {
+    const A = AW();
+    const before = Object.assign({}, p.abilities);
+    const gains = arng(st, (r) => {
+      const g = {};
+      for (const k of Core.visibleKeys(p)) {
+        const cur = p.abilities[k];
+        let nv;
+        if (k === 'velocity') {
+          const want = toKmh(cur) + r.int(A.kmhMin, A.kmhMax);
+          nv = cur;
+          for (let i = 0; i < 600 && toKmh(nv) < want && nv < p.statCap; i++) nv += 0.1;
+        } else if (k === 'breaking') {
+          nv = cur + A.brkGain / HM().display.breakRatio;
+        } else nv = cur + r.float(A.gainMin, A.gainMax);
+        p.abilities[k] = Math.min(p.statCap, Math.max(cur, nv));
+        g[k] = p.abilities[k] - cur;
+      }
+      return g;
+    });
+    // 月ごとの記録(この月の値)にも反映する
+    if (p.mlog && p.mlog.a.length && p.mlog.s + p.mlog.a.length - 1 === sv) p.mlog.a[p.mlog.a.length - 1] = HighSchool.packAbilities(p.abilities);
+    p.awoken = { s: sv, y: st.year, m: HighSchool.CALENDAR[st.month].month, g: p.grade };
+    // ひとことの詳細:伸びの大きい順に detailMax 項目
+    const items = Object.keys(gains).filter((k) => gains[k] > 0).map((k) => {
+      if (k === 'velocity') return { w: 99, t: '球速が +' + (toKmh(p.abilities.velocity) - toKmh(before.velocity)) + 'km/h' };
+      if (k === 'breaking') return { w: 98, t: '変化球の変化量が +' + (breakTotal(p) - Math.round(before.breaking * HM().display.breakRatio)) };
+      return { w: gains[k], t: Core.ABILITY_LABEL[k] + 'が +' + Math.round(gains[k]) };
+    }).sort((a, b) => b.w - a.w);
+    const shown = items.slice(0, A.detailMax).map((x) => x.t).join('、');
+    const detail = shown + (items.length > A.detailMax ? '、ほか' + (items.length - A.detailMax) + '項目も' : '');
+    return { id: p.id, name: p.name, detail: detail };
+  }
+
   // ---------- ライバルの今月の出場と成績(既存の簡易成績 = 試合の記録 box から。新しい計算はしない) ----------
   //   大会のある月は大会の試合、ない月は練習試合を合計する。戻り値:{ label, text } か null(試合のない月)
   function playerMonthLine(st, p) {
@@ -1226,6 +1320,7 @@
       if (st.awaiting) {
         if (st.policyContext === 'review') { HighSchool.resolveReviewAuto(st); continue; }
         // 2年目・3年目の4月:新年度の画面のために止まる(先輩の進路と、今年の新入生)
+        if (awOn()) assignAwk(st, st.pendingRecruits);   // 新入生の覚醒の素質(入学時に決める)
         const ny = newYearInfo(st);
         HighSchool.confirmPolicies(st, HighSchool.autoPolicies(st));
         trng(st, (r) => { for (const p of st.players) syncPitches(r, p); });
@@ -2279,6 +2374,7 @@
     autoRival: autoRival, getValueAt: getValueAt, gamePeak: gamePeak, monthAppearance: monthAppearance, lineText: lineText, emptyLine: emptyLine, addLine: addLine, toggleWatch: toggleWatch, swapWatch: swapWatch, addWatch: addWatch, diffSentence: diffSentence, getRank: getRank, toKmh: toKmh, breakTotal: breakTotal, syncPitches: syncPitches, pitchCountFor: pitchCountFor, closeNewYear: closeNewYear, rosterList: rosterList, makeHeroPlayer: makeHeroPlayer, contestOf: contestOf, convertEligible: convertEligible, heroOf: heroOf, rivalOf: rivalOf, statusLabel: statusLabel,
     rivalLine: rivalLine, contestAxisNow: contestAxisNow, keys: keys, save: save, load: load, wipeKeys: wipeKeys,
     startNew: startNew, resetSameSeed: resetSameSeed, resetNewSeed: resetNewSeed, wipeAll: wipeAll, startup: startup,
+    assignAwk: assignAwk, awaken: awaken,
     subText: subText, subStatsText: subStatsText, pickable: pickable, makePickup: makePickup, goGraduate: goGraduate, summerResultLine: summerResultLine, playerMonthLine: playerMonthLine, ratingSeries: ratingSeries, autoRival: autoRival, lineupRows: lineupRows, tourneyLineupRows: tourneyLineupRows, anyPlayer: anyPlayer, statCells: statCells,
     pickText: pickText, fill: fill, typeOf: typeOf, setback: setback, tryRebound: tryRebound, hrng: hrng, serialOf: serialOf,
     mountUI: mountUI,

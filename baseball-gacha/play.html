@@ -292,7 +292,7 @@
         minPerClass: { P: 2, C: 1, IF: 0, OF: 0 },
         overlay: {
           saveVersion: 11,             // 育成監督モードの保存(部員の構成が変わるため。legacy は 10 のまま)
-          heroMode: { stamina: { base: 4.0 }, pitching: { reliefMax: 3 }, substitute: { enabled: true } },   // H1.5b:先発の投球回の基準と、救援の複数化(新入部員モードだけで使う値。legacy は 3.7 と 1)
+          heroMode: { stamina: { base: 4.0 }, pitching: { reliefMax: 3 }, substitute: { enabled: true }, awakening: { enabled: true }, rival: { display: false } },   // H1.5b:先発の投球回の基準と、救援の複数化(新入部員モードだけで使う値。legacy は 3.7 と 1)
           newcomers: { rosterCap: 45 },
           rating: { genius: { min: 200, max: 300 }, reincarnation: { min: 250, max: 350 }, geniusReincarnationMax: 350 },
           tournaments: { summer: { oppBase: 46 }, autumn: { oppBase: 37 } },
@@ -611,7 +611,7 @@
 
     // ---- 新入部員モード(hero.html / play-hero.html)。数値はすべて仮の値。育成監督モードでは使わない ----
     heroMode: {
-      saveVersion: 10,              // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5、H1.4b で 6:卒業待ち、H1.5a で 7:ピックアップ、H1.4c で 8:月ごとのスタメン、H1.5b で 9:救援、H1.6a で 10:途中出場)
+      saveVersion: 11,              // H1.6b で 11:覚醒。保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5、H1.4b で 6:卒業待ち、H1.5a で 7:ピックアップ、H1.4c で 8:月ごとのスタメン、H1.5b で 9:救援、H1.6a で 10:途中出場)
       seedSalt: 0x4e52b1d3,         // このモード専用の乱数(引き直し・主人公の作成・物語の文面・転向と再起の抽選)
       rerollMax: 2,                 // 新入部員の一覧の引き直しの回数
       stopOnStory: true,            // 主人公の山場の物語で、自動進行を止める
@@ -635,6 +635,7 @@
         maxGap: 120,                // 'chaseable':差がこれを超えても選ぶが、選ばれた理由に「差は大きい」と添える
         revealAtGraduation: true,   // 卒業のときに、ライバルの素質を明かす
         swapMonths: 2,              // 総合値の順位の入れ替わりを、物語にするまでの連続の月数
+        display: true,              // ライバルを画面と文面に出す(H1.6b。内部のライバルは残す)。roster.version 'v2' では overlay で false
       },
       contest: {
         swapStoryGap: 3,            // 「奪った・奪われた」の物語の最短間隔(月)
@@ -682,6 +683,20 @@
         sbPivot: 50, sbTryBase: 0.08, sbTryPer: 0.004, sbTryMax: 0.45,   // 盗塁の試行(塁に出たとき)= base + (走力 − pivot) × per
         sbOkBase: 0.65, sbOkPer: 0.006, sbOkMin: 0.3, sbOkMax: 0.95,     // 盗塁の成功率
         clutchHits: 3,              // 「代打の切り札」のひとこと:代打の安打数がこの回数に達したとき(1回だけ)
+      },
+      // 覚醒とヒント(H1.6b)。自校の部員が、ある月に急に伸びる。入学時に「覚醒の素質」(隠れた値)を抽選し、ヒントの一言を出す。すべて仮の値
+      awakening: {
+        enabled: false,             // false で、H1.6a-fix1 と同じ。roster.version 'v2' では overlay で true
+        countWeights: [30, 50, 20], // 年度ごとの覚醒の人数(学校全体)0人 / 1人 / 2人 の重み
+        talentRate: 0.10,           // 覚醒の素質がある選手の割合
+        talentWeight: 15,           // 素質がある選手の、覚醒の抽選の重み(素質なしは1)
+        hintRateTalent: 0.8,        // 素質がある選手に、ヒントが出る割合
+        hintRateNone: 0.03,         // 素質がない選手に、ヒントが出る割合(外れ)
+        gainMin: 6, gainMax: 14,    // 覚醒で伸びる量(各能力)
+        kmhMin: 3, kmhMax: 7,       // 球速は km/h で(内部の値に換算して足す)
+        brkGain: 1,                 // 変化球は、総変化量で
+        detailMax: 3,               // ひとことに書く項目の数(伸びの大きい順。残りは「ほか○項目」)
+        hints: ['どこか底が見えない。', 'ふとした瞬間に、目を引く。', 'まだ何かを隠している気がする。', '時々、別人のような動きをする。', '伸びしろの見当がつかない。', '本人も、自分の力に気づいていない様子だ。'],
       },
       totals: { minAb: 20, minOuts: 27 },   // 卒業の通算成績:打数・アウト数がこれ未満なら「参考」と添える
       // スタメン表・部員名簿の指標と、主人公の打順の変化のひとこと
@@ -1090,6 +1105,17 @@
     ['heroMode.substitute.sbOkBase', 'hero', '盗塁:成功率(走力50)'],
     ['heroMode.substitute.sbOkPer', 'hero', '盗塁:走力1あたりの成功率の増え方'],
     ['heroMode.substitute.clutchHits', 'hero', '「代打の切り札」のひとこと:代打の安打数がこの回数に達したとき'],
+    ['heroMode.awakening.enabled', 'hero', '覚醒とヒント(オン/オフ。オフで H1.6a-fix1 と同じ)'],
+    ['heroMode.awakening.talentRate', 'hero', '覚醒の素質がある選手の割合'],
+    ['heroMode.awakening.talentWeight', 'hero', '素質がある選手の、覚醒の抽選の重み'],
+    ['heroMode.awakening.hintRateTalent', 'hero', '素質がある選手に、ヒントが出る割合'],
+    ['heroMode.awakening.hintRateNone', 'hero', '素質がない選手に、ヒントが出る割合(外れ)'],
+    ['heroMode.awakening.gainMin', 'hero', '覚醒で伸びる量の下限(各能力)'],
+    ['heroMode.awakening.gainMax', 'hero', '覚醒で伸びる量の上限(各能力)'],
+    ['heroMode.awakening.kmhMin', 'hero', '覚醒で伸びる球速の下限(km/h)'],
+    ['heroMode.awakening.kmhMax', 'hero', '覚醒で伸びる球速の上限(km/h)'],
+    ['heroMode.awakening.brkGain', 'hero', '覚醒で伸びる変化球(総変化量)'],
+    ['heroMode.rival.display', 'hero', 'ライバルを画面と文面に出す(オン/オフ。内部のライバルは残す)'],
     ['heroMode.totals.minAb', 'hero', '卒業の通算成績:打数がこれ未満なら打率に「参考」と添える'],
     ['heroMode.totals.minOuts', 'hero', '卒業の通算成績:アウト数がこれ未満なら防御率に「参考」と添える'],
     ['heroMode.rival.revealAtGraduation', 'hero', '卒業のときに、ライバルの素質を明かす(オン/オフ)'],
@@ -4248,6 +4274,7 @@
     monthSerial: monthSerial,
     serialLabel: serialLabel,
     abilitiesAt: abilitiesAt,
+    packAbilities: packAbilities,
     monthDelta: monthDelta,
     unpackAbilities: unpackAbilities,
     compressAlumniLogs: compressAlumniLogs,
