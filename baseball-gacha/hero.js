@@ -1243,6 +1243,38 @@
     };
   }
 
+  // ---------- H1.7b:入口の見せ場(表示だけ。乱数は使わない) ----------
+  const LABEL_ORDER = ['有望', '逸材', '怪物級', '規格外'];
+  // 入口のピックアップの、画面の並び(renderSelect と同じ)
+  function entryList(st) {
+    const H = st.hero;
+    return pickable(st).slice().sort((a, b) => (H.pickup ? Core.rating(b) - Core.rating(a) || a.id - b.id : 0));
+  }
+  const entryRank = (p) => Generation.getGenerationRank(p, 1, 4);   // 入学時(1年4月)の同世代の順位
+  // 見せ場の対象:総合値の高い順に count 人まで(ラベルが minLabel 以上の選手だけ。同点は一覧の順で先の選手)
+  function spotlightPicks(st, list) {
+    const S = (HM().fx && HM().fx.entry && HM().fx.entry.spotlight) || {};
+    const L = list || entryList(st);
+    const min = LABEL_ORDER.indexOf(S.minLabel || '逸材');
+    const ok = L.map((p, i) => ({ p: p, i: i, r: Core.rating(p), lab: (entryRank(p) || {}).label }))
+      .filter((x) => LABEL_ORDER.indexOf(x.lab) >= min && min >= 0);
+    ok.sort((a, b) => b.r - a.r || a.i - b.i);
+    return ok.slice(0, S.count == null ? 1 : S.count).map((x) => x.p);
+  }
+  // 見せ場に出す数値(実際の能力値から)。items:[{ k, label, value, unit, rank }](球速は km/h、変化球は総変化量)
+  function spotlightData(st, p) {
+    const rk = entryRank(p) || {};
+    const keys = twoWayKnown(p) ? Core.PITCH_KEYS.concat(Core.BAT_KEYS) : Core.sideKeys(Core.sideOf(p.position));
+    const items = keys.map((k) => {
+      const v = p.abilities[k];
+      if (k === 'velocity') return { k: k, label: '球速', value: toKmh(v), unit: 'km/h', rank: null };
+      if (k === 'breaking') return { k: k, label: '変化球', value: breakTotal(p), unit: '', rank: null };
+      return { k: k, label: Core.ABILITY_LABEL[k], value: Math.round(v), unit: '', rank: getRank(v) };
+    });
+    return { id: p.id, name: p.name, pos: POS_LABEL[p.position], label: rk.label || null, top: rk.top, rating: Core.rating(p),
+      sides: twoWayKnown(p) ? Core.ratingSides(p) : null, items: items, hint: awOn() && p.awk && p.awk.h ? p.awk.h : null };
+  }
+
   // ---------- ライバルの今月の出場と成績(既存の簡易成績 = 試合の記録 box から。新しい計算はしない) ----------
   //   大会のある月は大会の試合、ない月は練習試合を合計する。戻り値:{ label, text } か null(試合のない月)
   function playerMonthLine(st, p) {
@@ -1917,65 +1949,234 @@
       const r = rankOf(p);
       const l = r && r.label;
       const g = l === '規格外' || l === '怪物級' ? ' fx-g3' : l === '逸材' ? ' fx-g2' : l === '有望' ? ' fx-g1' : '';
-      const h = awOn() && p.awk && p.awk.h ? ' fx-hint' : '';
+      const h = awOn() && p.awk && p.awk.h ? ' fx-hint' + (spotOn() && LABEL_ORDER.indexOf(l) < LABEL_ORDER.indexOf(SPOT().minLabel || '逸材') ? ' fx-hint2' : '') : '';
       return g || h ? ' fxc' + g + h : '';
     }
-    function endEntryFx() {
+    const SPOT = () => (FX().entry || {}).spotlight || {};
+    const spotOn = () => fxOn() && !!SPOT().enabled;
+    const wait = (sec) => new Promise((res) => setTimeout(res, Math.max(0, sec) * 1000));
+    // 自動スクロール(rAF 1本。easeOutCubic)。見える範囲は、上の見出しと下の固定バーを除いた部分
+    function viewBox() {
+      const hd = doc.querySelector('header');
+      const bar = doc.querySelector('.pbar-bottom');
+      const top = hd ? hd.getBoundingClientRect().bottom : 0;
+      const bot = window.innerHeight - (bar ? bar.getBoundingClientRect().height : 0);
+      return { top: Math.max(0, top), bot: bot };
+    }
+    function scrollToY(y, sec) {
+      const E = entryFx;
+      const max = Math.max(0, doc.documentElement.scrollHeight - window.innerHeight);
+      const to = Math.max(0, Math.min(max, y)), from = window.scrollY;
+      if (E && E.scrollRaf) cancelAnimationFrame(E.scrollRaf);
+      if (Math.abs(to - from) < 1 || sec <= 0) { window.scrollTo(0, to); return; }
+      const t0 = performance.now();
+      const tick = (now) => {
+        if (entryFx !== E && E) return;
+        const k = Math.min(1, (now - t0) / (sec * 1000));
+        window.scrollTo(0, from + (to - from) * (1 - Math.pow(1 - k, 3)));
+        if (k < 1) { if (E) E.scrollRaf = requestAnimationFrame(tick); else requestAnimationFrame(tick); }
+      };
+      const id = requestAnimationFrame(tick);
+      if (E) E.scrollRaf = id;
+    }
+    function centerY(el) {
+      const v = viewBox();
+      const r = el.getBoundingClientRect();
+      // カードが見える範囲より高いときは、カードの上端を見える範囲の上に合わせる
+      const off = r.height >= v.bot - v.top ? r.top - v.top - 8 : r.top + r.height / 2 - (v.top + v.bot) / 2;
+      return window.scrollY + off;
+    }
+    function listTopY() {
+      const el = doc.getElementById('hEntryList');
+      return el ? window.scrollY + el.getBoundingClientRect().top - viewBox().top - 6 : 0;
+    }
+    function revealCard(el, sec) {
+      el.classList.remove('fx-pre');
+      el.style.animationDuration = sec.toFixed(3) + 's';
+      el.classList.add('fx-in');
+      if (el.classList.contains('fx-g3') && entryFx && !entryFx.flashed) {   // 怪物級以上が出たときに1回だけ
+        entryFx.flashed = true;
+        const f = doc.createElement('div');
+        f.className = 'fx-flash';
+        f.style.animationDuration = (((FX().entry || {}).flashSec || 0.5) * entryFx.scale).toFixed(3) + 's';
+        doc.body.appendChild(f); entryFx.extra.push(f);
+      }
+    }
+    // 片付け(スキップ・終了・描き直し)。残りのカードを一気に出し、自動スクロールを止める
+    function endEntryFx(skipped) {
       const E = entryFx;
       if (!E) return;
       entryFx = null;
-      clearTimeout(E.timer);
-      for (const el of E.els) { el.classList.remove('fx-in'); el.style.animationDelay = ''; el.style.animationDuration = ''; }
+      E.dead = true;
+      if (E.scrollRaf) cancelAnimationFrame(E.scrollRaf);
+      for (const el of E.els) { el.classList.remove('fx-pre', 'fx-in'); el.style.animationDuration = ''; }
       for (const el of E.extra) if (el.parentNode) el.parentNode.removeChild(el);
+      closeSpot();
       doc.body.style.overflow = '';
+      doc.removeEventListener('keydown', E.onKey, true);
+      if (DEV) { E.log.end = performance.now(); E.log.skipped = !!skipped; lastEntryLog = E.log; }
     }
-    // 入口の登場演出:ピックアップのカードを上から順に出す(総時間の上限に収める)。画面を押すと、残りを一気に出す
+    // 入口の登場演出(H1.7b):カードを上から順に出し、登場中のカードを画面の中ほどへ自動でスクロールする。
+    //   強い選手の前では間を取り、見せ場の選手の位置で全画面の見せ場を割り込ませる。画面を押す・手でスクロールすると、残りを一気に出す
     function startEntryFx(scale) {
       endEntryFx();
-      const E = FX().entry || {};
+      const E0 = FX().entry || {};
       const els = Array.prototype.slice.call(doc.querySelectorAll('#main .player'));
       if (!els.length) return;
       const n = els.length;
-      const card = (E.cardSec || 0.45) * scale;
-      const step = Math.max(0, Math.min(E.stepSec || 0.3, ((E.totalMaxSec || 3) - (E.cardSec || 0.45)) / Math.max(1, n - 1))) * scale;
-      const G = E.glow || {};
-      const extra = [];
-      let flashAt = -1;
-      els.forEach((el, i) => {
-        el.style.animationDelay = (i * step).toFixed(3) + 's';
-        el.style.animationDuration = card.toFixed(3) + 's';
-        el.classList.add('fx-in');
-        if (flashAt < 0 && el.classList.contains('fx-g3')) flashAt = i * step;
-      });
+      const card = (E0.cardSec || 0.45) * scale;
+      const minVis = E0.minVisibleSec == null ? 0.15 : E0.minVisibleSec;
+      // 間隔:総時間の上限に収める。ただし、1枚が見えている最短の時間を優先する
+      const step = Math.max(minVis, Math.min(E0.stepSec || 0.3, ((E0.totalMaxSec || 3) - (E0.cardSec || 0.45)) / Math.max(1, n - 1))) * scale;
+      const pause = (E0.strongPauseSec || 0) * scale;
+      const scr = Math.min((E0.scrollSec || 0.35) * scale, step);
+      const G = E0.glow || {};
       const m = doc.getElementById('main');
-      m.style.setProperty('--gl1', (G.promising || 8) + 'px'); m.style.setProperty('--gl2', (G.excellent || 14) + 'px'); m.style.setProperty('--gl3', (G.monster || 22) + 'px'); m.style.setProperty('--glh', (G.hint || 12) + 'px');
-      if (flashAt >= 0) {   // 怪物級以上が出たときに1回だけ
-        const f = doc.createElement('div');
-        f.className = 'fx-flash';
-        f.style.animationDelay = flashAt.toFixed(3) + 's';
-        f.style.animationDuration = ((E.flashSec || 0.5) * scale).toFixed(3) + 's';
-        doc.body.appendChild(f); extra.push(f);
-      }
+      m.style.setProperty('--gl1', (G.promising || 8) + 'px'); m.style.setProperty('--gl2', (G.excellent || 14) + 'px'); m.style.setProperty('--gl3', (G.monster || 22) + 'px');
+      m.style.setProperty('--glh', (G.hint || 12) + 'px'); m.style.setProperty('--glh2', (G.hintStrong || 18) + 'px');
+      const list = entryList(st);
+      const spotIds = spotOn() && (entryIsFirst || SPOT().onReroll !== false) ? spotlightPicks(st, list).map((p) => p.id) : [];
+      els.forEach((el) => el.classList.add('fx-pre'));
       const sk = doc.createElement('div');
       sk.className = 'fx-skip';
       sk.innerHTML = '<span>画面を押すとスキップ</span>';
-      const skip = (e) => { if (e) e.preventDefault(); endEntryFx(); };
+      const E = entryFx = { els: els, extra: [sk], scale: scale, flashed: false, scrollRaf: null, log: { t0: performance.now(), n: n, step: step, spots: spotIds.length } };
+      const skip = (e) => { if (e && e.cancelable) e.preventDefault(); endEntryFx(true); };
       sk.addEventListener('click', skip);
-      sk.addEventListener('touchstart', skip, { passive: false });
-      sk.addEventListener('wheel', (e) => e.preventDefault(), { passive: false });
-      doc.body.appendChild(sk); extra.push(sk);
+      sk.addEventListener('touchstart', skip, { passive: false });   // 指でのスクロールも、スキップと同じ
+      sk.addEventListener('wheel', skip, { passive: false });        // ホイールも
+      E.onKey = (e) => { if (/^(Arrow|Page|Home|End| |Escape|Enter)/.test(e.key)) skip(e); };
+      doc.addEventListener('keydown', E.onKey, true);
+      doc.body.appendChild(sk);
       doc.body.style.overflow = 'hidden';
-      entryFx = { els: els, extra: extra, timer: setTimeout(endEntryFx, ((n - 1) * step + card) * 1000 + 80) };
+      (async () => {
+        for (let i = 0; i < n; i++) {
+          if (E.dead) return;
+          const el = els[i];
+          const pid = list[i] && list[i].id;
+          const strong = /fx-g2|fx-g3|fx-hint/.test(el.className);
+          scrollToY(centerY(el), scr);
+          // 光る演出は、カードが画面内に入ってから(強い選手は、少し間を取る)
+          await wait(strong ? scr + pause : scr * 0.6);
+          if (E.dead) return;
+          if (spotIds.indexOf(pid) >= 0) {
+            await showSpot(E, list[i], scale);
+            if (E.dead) return;
+            revealCard(el, 0.001);
+            el.classList.remove('fx-in');
+            await wait(Math.max(step - scr * 0.6, minVis * scale));
+            continue;
+          }
+          revealCard(el, card);
+          await wait(Math.max(0, step - (strong ? scr + pause : scr * 0.6)));
+        }
+        if (E.dead) return;
+        await wait(card);
+        if (E.dead) return;
+        // 戻る位置(一覧の先頭 / 見せ場の選手)
+        const back = E0.returnTo === 'spotlight' && spotIds.length ? els[list.findIndex((p) => p.id === spotIds[0])] : null;
+        const y = back ? centerY(back) : listTopY();
+        endEntryFx(false);
+        scrollToY(y, (E0.scrollSec || 0.35) * 1.5);
+      })();
     }
+    // ---- 見せ場(全画面。覚醒の演出と同じ部品)----
+    let spot = null;   // { d, final, done(resolve), raf, timer }
+    function spotHtml(d, final) {
+      const S = SPOT(), sc = spot ? spot.scale : 1;
+      const rs = (S.ratingSec || 0.8) * sc, is = (S.itemStepSec || 0.25) * sc;
+      const t1 = 0.9 * sc, tItems = t1 + rs;
+      const late = (t) => (final ? '' : ' style="animation-delay:' + t.toFixed(2) + 's"');
+      const heads = (S.heads || {})[d.label] || [''];
+      const head = fill(heads[d.id % heads.length] || '', { n: d.name });
+      const items = d.items.map((x, i) => '<div class="awfx-it awfx-late"' + late(tItems + i * is) + '><div class="lb">' + esc(x.label) + '</div>'
+        + (x.rank ? '<div class="rk">' + x.rank + '</div>' : '') + '<div class="nv">' + x.value + (x.unit ? '<small>' + x.unit + '</small>' : '') + '</div></div>').join('');
+      const tTop = tItems + d.items.length * is;
+      const rt = d.sides ? '投' + d.sides.pitch + ' / 打' + d.sides.bat : null;
+      return '<div class="awfx spfx' + (final ? ' final' : '') + ' sp-' + LABEL_ORDER.indexOf(d.label) + '" id="spfx"><div class="awfx-in"><div class="awfx-frame">'
+        + '<div class="awfx-title sp-title">' + esc(d.label) + '</div><div class="awfx-name">' + esc(d.name) + '</div><div class="small" style="color:#cdbdf5">' + esc(d.pos) + '・新入生</div>'
+        + '<div class="awfx-head awfx-late"' + late(0.5 * sc) + '>' + esc(head) + '</div></div>'
+        + '<div class="awfx-sum awfx-late"' + late(t1) + '>総合値 <b class="sp-rt" data-to="' + d.rating + '" data-t="' + t1.toFixed(2) + '">' + (final ? d.rating : 0) + '</b>' + (rt ? '<div>' + rt + '</div>' : '') + '</div>'
+        + '<div class="awfx-items">' + items + '</div>'
+        + '<div class="awfx-sum awfx-late"' + late(tTop) + '>同世代 <b style="font-size:20px">上位' + (d.top == null ? '50%より下' : Generation.formatTop(d.top)) + '</b></div>'
+        + (d.hint ? '<div class="awfx-hint awfx-late sp-hint"' + (final ? '' : ' style="animation-delay:' + (tTop + 0.4 * sc).toFixed(2) + 's;animation-duration:' + ((S.hintSec || 1.2) * sc).toFixed(2) + 's"') + '><div class="ht">✦ ' + esc(d.hint) + '</div></div>' : '') + '</div>'
+        + '<div class="awfx-bar"><div class="pbar-in">' + (final ? '<button class="btn" id="hSpotOk">続ける</button>' : '<div class="skiphint">画面を押すとスキップ</div>') + '</div></div></div>';
+    }
+    function spotTotal(d, sc) {
+      const S = SPOT();
+      return (0.9 + (S.ratingSec || 0.8) + d.items.length * (S.itemStepSec || 0.25) + (d.hint ? 0.4 + (S.hintSec || 1.2) : 0) + 0.3) * sc;
+    }
+    function drawSpot() {
+      if (!spot) return;
+      if (spot.raf) cancelAnimationFrame(spot.raf);
+      clearTimeout(spot.timer);
+      let box = doc.getElementById('spwrap');
+      if (!box) { box = doc.createElement('div'); box.id = 'spwrap'; doc.body.appendChild(box); box.addEventListener('click', onSpotClick); }
+      box.innerHTML = spotHtml(spot.d, spot.final);
+      if (spot.final) return;
+      // 総合値を 0 から上げる
+      const el = box.querySelector('.sp-rt');
+      const t0 = performance.now(), to = spot.d.rating, ts = Number(el.dataset.t) * 1000, dur = (SPOT().ratingSec || 0.8) * spot.scale * 1000;
+      const tick = (now) => {
+        const k = Math.max(0, Math.min(1, (now - t0 - ts) / dur));
+        el.textContent = String(Math.round(to * k));
+        if (k < 1) spot.raf = requestAnimationFrame(tick);
+      };
+      spot.raf = requestAnimationFrame(tick);
+      spot.timer = setTimeout(() => { if (spot && !spot.final) { spot.final = true; drawSpot(); } }, spotTotal(spot.d, spot.scale) * 1000);
+    }
+    function onSpotClick(e) {
+      if (!spot) return;
+      if (e.target.closest('#hSpotOk')) { const r = spot.done; closeSpot(); if (r) r(); return; }
+      if (!spot.final) { spot.final = true; drawSpot(); }   // スキップ:最終の表示にする
+    }
+    function closeSpot() {
+      if (!spot) return;
+      if (spot.raf) cancelAnimationFrame(spot.raf);
+      clearTimeout(spot.timer);
+      const box = doc.getElementById('spwrap');
+      if (box && box.parentNode) box.parentNode.removeChild(box);
+      const dim = doc.querySelector('.fx-dim');
+      if (dim && dim.parentNode) dim.parentNode.removeChild(dim);
+      spot = null;
+    }
+    // 見せ場を出して、「続ける」まで待つ(溜め → 全画面)。動きを減らす設定では、最終の表示を静止して出す
+    function showSpot(E, p, scale, still) {
+      return new Promise((res) => {
+        const d = spotlightData(st, p);
+        const go = () => {
+          if (E && E.dead) { res(); return; }
+          spot = { d: d, final: !!still, done: res, scale: scale, raf: null, timer: null };
+          if (E) E.log.spotAt = performance.now();
+          drawSpot();
+        };
+        if (still) { go(); return; }
+        const dim = doc.createElement('div');
+        dim.className = 'fx-dim';
+        dim.style.animationDuration = ((SPOT().dimSec || 0.4) * scale).toFixed(3) + 's';
+        doc.body.appendChild(dim);
+        setTimeout(go, (SPOT().dimSec || 0.4) * scale * 1000);
+      });
+    }
+    let entryIsFirst = true;   // 最初の表示か(引き直しでない)
+    let lastEntryLog = null;   // ?dev=1:直近の入口の演出の実測
     // 描画のあと:入口の一覧が新しくなったら、演出を出す(最初の表示と、引き直し)
     function afterRenderFx(isSelect) {
       if (!isSelect) { entryScale = 1; return; }
       const key = pickable(st).map((p) => p.id).join(',');
       if (key === entryKey) return;
+      const first = entryKey === null;
       entryKey = key;
       const sc = entryScale;
       entryScale = 1;
-      if (fxOn() && !reduceMotion()) startEntryFx(sc);
+      entryIsFirst = first;
+      if (!fxOn()) return;
+      if (reduceMotion()) {   // 自動スクロールも登場もなし。見せ場は、最終の表示を静止して出す
+        const sp = spotOn() && (first || SPOT().onReroll !== false) ? spotlightPicks(st)[0] : null;
+        if (sp) showSpot(null, sp, 1, true);
+        return;
+      }
+      startEntryFx(sc);
     }
     // 覚醒の瞬間:主人公が覚醒した月のあとに1回だけ(見たかどうかは表示の設定に記録する。止まる回数は変えない)
     function checkAwakenFx() {
@@ -2054,7 +2255,7 @@
         + renderCollapsible('seniors', '先輩たち', () => seniorsTop(5)) + '</div>';
       const picks = pickable(st);
       const rest = st.pendingRecruits.filter((p) => picks.indexOf(p) < 0).sort((a, b) => Core.rating(b) - Core.rating(a) || a.id - b.id);
-      html += '<div class="card">' + (rest.length ? '<div class="small">ピックアップ(' + picks.length + '人)。主人公に選べるのは、この中の1人です。</div>' : '') + picks.slice().sort((a, b) => H.pickup ? Core.rating(b) - Core.rating(a) || a.id - b.id : 0).map((p) => {
+      html += '<div class="card"' + (fxOn() ? ' id="hEntryList"' : '') + '>' + (rest.length ? '<div class="small">ピックアップ(' + picks.length + '人)。主人公に選べるのは、この中の1人です。</div>' : '') + entryList(st).map((p) => {
         let c = '<div class="player' + fxGlow(p) + '">' + starBtn(p) + '<span class="pname">' + esc(p.name) + '</span>' + posTag(p.position) + extraTags(p) + ' <span class="small">' + ratingHtml(p) + '</span>'
           + '<div class="impress">' + esc(impression(p)) + '</div>' + hintLine(p) + boxes(p);
         if (p.reincarnation && p.reincarnationRevealed) c += '<div class="reveal">……!? この新入生、ただ者ではない。<br>【' + esc(Core.reincarnationName(p.reincarnation)) + '】の転生者だ!</div>';
@@ -2462,6 +2663,7 @@
         + '<br>軸 ' + (H.axisList.join('・') || 'なし') + ' / 主軸 ' + (H.mainAxis || '-') + ' / 挫折 ' + H.setbacks + '(物語 ' + H.setbackStories + ')'
         + ' / 再起の期間 ' + (H.rebound ? (H.rebound.done ? '終了(' + (H.rebound.result || '') + ')' : H.rebound.start + 'から') : 'なし') + ' / 転向 ' + H.converts
         + ' / 後押し ' + H.boostsUsed + '<br>争いの状態 ' + esc(JSON.stringify(H.axes))
+        + (lastEntryLog ? '<br>直近の入口の演出:' + lastEntryLog.n + '枚 間隔 ' + lastEntryLog.step.toFixed(2) + '秒 / 総時間 ' + ((lastEntryLog.end - lastEntryLog.t0) / 1000).toFixed(2) + '秒(見せ場の待ちを含む)' + (lastEntryLog.skipped ? '・スキップ' : '') + ' / 見せ場 ' + lastEntryLog.spots : '')
         + '<br>演出(heroMode.fx。仮の値):' + esc(JSON.stringify(FX())) + ' / 動きを減らす ' + (reduceMotion() ? 'オン' : 'オフ') + '</div>';
     }
     function renderModal() {
@@ -2581,7 +2783,7 @@
     autoRival: autoRival, getValueAt: getValueAt, gamePeak: gamePeak, monthAppearance: monthAppearance, lineText: lineText, emptyLine: emptyLine, addLine: addLine, toggleWatch: toggleWatch, swapWatch: swapWatch, addWatch: addWatch, diffSentence: diffSentence, getRank: getRank, toKmh: toKmh, breakTotal: breakTotal, syncPitches: syncPitches, pitchCountFor: pitchCountFor, closeNewYear: closeNewYear, rosterList: rosterList, makeHeroPlayer: makeHeroPlayer, contestOf: contestOf, convertEligible: convertEligible, heroOf: heroOf, rivalOf: rivalOf, statusLabel: statusLabel,
     rivalLine: rivalLine, contestAxisNow: contestAxisNow, keys: keys, save: save, load: load, wipeKeys: wipeKeys,
     startNew: startNew, resetSameSeed: resetSameSeed, resetNewSeed: resetNewSeed, wipeAll: wipeAll, startup: startup,
-    assignAwk: assignAwk, awaken: awaken, awakenFxData: awakenFxData,
+    assignAwk: assignAwk, awaken: awaken, awakenFxData: awakenFxData, entryList: entryList, spotlightPicks: spotlightPicks, spotlightData: spotlightData,
     subText: subText, subStatsText: subStatsText, pickable: pickable, makePickup: makePickup, goGraduate: goGraduate, summerResultLine: summerResultLine, playerMonthLine: playerMonthLine, ratingSeries: ratingSeries, autoRival: autoRival, lineupRows: lineupRows, tourneyLineupRows: tourneyLineupRows, anyPlayer: anyPlayer, statCells: statCells,
     pickText: pickText, fill: fill, typeOf: typeOf, setback: setback, tryRebound: tryRebound, hrng: hrng, serialOf: serialOf,
     mountUI: mountUI,

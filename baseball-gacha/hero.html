@@ -146,6 +146,18 @@
   .fxc.fx-g2 { box-shadow: 0 0 0 2px #d4a017, 0 0 var(--gl2, 14px) rgba(212,160,23,.7); background: #fffaf0; }
   .fxc.fx-g3 { box-shadow: 0 0 0 2px #e05a2b, 0 0 0 4px #ffd84d, 0 0 var(--gl3, 22px) rgba(255,190,60,.9); background: #fff8ec; }
   .fxc.fx-hint::after { content: ''; position: absolute; inset: -3px; border-radius: 10px; pointer-events: none; box-shadow: 0 0 0 1px rgba(138,43,226,.6), 0 0 var(--glh, 12px) rgba(138,43,226,.55); }
+  .fx-pre { opacity: 0; }
+  .fxc.fx-hint2::after { box-shadow: 0 0 0 2px rgba(138,43,226,.7), 0 0 var(--glh2, 18px) rgba(138,43,226,.7); }
+  .fx-dim { position: fixed; inset: 0; z-index: 62; background: #000; pointer-events: none; opacity: 0; animation: fxDim .4s ease-in both; }
+  @keyframes fxDim { from { opacity: 0; } to { opacity: .55; } }
+  /* 見せ場(H1.7b。覚醒の演出の部品を使う) */
+  .spfx .sp-title { font-size: 48px; letter-spacing: .12em; }
+  .spfx.sp-1 .awfx-frame { border-color: #d4a017; }
+  .spfx.sp-2 .sp-title { color: #ffd0a8; text-shadow: 0 0 14px #ff6a3d, 0 0 28px #ffcc33; }
+  .spfx.sp-3 .sp-title { color: #fff; text-shadow: 0 0 14px #ffd84d, 0 0 30px #b16cff, 0 0 44px #ff6a3d; }
+  .spfx .sp-rt { font-size: 44px; color: #ffe27a; }
+  .sp-hint { animation-name: fxSlow; }
+  @keyframes fxSlow { from { opacity: 0; letter-spacing: .3em; } to { opacity: 1; letter-spacing: normal; } }
   .fx-in { opacity: 0; animation-name: fxIn; animation-timing-function: ease-out; animation-fill-mode: both; }
   .fx-in.fx-g2, .fx-in.fx-g3 { animation-name: fxBounce; }
   @keyframes fxIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
@@ -187,8 +199,8 @@
   .awfx.final, .awfx.final * { animation: none !important; }
   .awfx.final .awfx-late { opacity: 1; }
   @media (prefers-reduced-motion: reduce) {
-    .fx-in, .awfx, .awfx *, .fx-flash { animation: none !important; opacity: 1; transform: none; }
-    .fx-flash { display: none; }
+    .fx-in, .awfx, .awfx *, .fx-flash, .fx-dim { animation: none !important; opacity: 1; transform: none; }
+    .fx-flash, .fx-dim { display: none; }
   }
 </style>
 </head>

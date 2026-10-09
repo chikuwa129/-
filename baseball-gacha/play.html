@@ -679,9 +679,29 @@
           stepSec: 0.3,             // 入口:新入生のカードが1人ずつ出る間隔(秒)
           totalMaxSec: 3,           // 入口:演出の総時間の上限(秒。人数が多いときは間隔を縮める)
           cardSec: 0.45,            // 入口:1枚のカードが現れる時間(秒)
-          rerollScale: 0.5,         // 引き直しの演出の速さの倍率(間隔・総時間に掛ける。1.0 で最初と同じ)
+          rerollScale: 1.0,         // 引き直しの演出の速さの倍率(間隔・総時間・見せ場に掛ける。1.0 で最初と同じ。H1.7 は 0.5)
+          minVisibleSec: 0.15,      // 1枚が見えている最短の時間(秒。総時間の上限より優先する)
+          strongPauseSec: 0.3,      // 強い選手(逸材以上・✦)のカードの前で、スクロールをゆるめて取る間(秒)
+          scrollSec: 0.35,          // 自動スクロールの1回の時間(秒。間隔より長いときは間隔に合わせる)
+          returnTo: 'top',          // 演出が終わったあとに戻る位置:'top' 一覧の先頭 / 'spotlight' 見せ場の選手
           flashSec: 0.5,            // 怪物級以上が出たときの、画面全体の白い光の時間(秒)
-          glow: { promising: 8, excellent: 14, monster: 22, hint: 12 },   // 光の強さ(ぼかしの px)
+          glow: { promising: 8, excellent: 14, monster: 22, hint: 12, hintStrong: 18 },   // 光の強さ(ぼかしの px)。hintStrong は、見せ場が有効なときの、逸材未満の✦付き
+          // 見せ場(H1.7b):一覧の中で総合値が最大の選手(逸材以上)を、全画面で大きく見せる
+          spotlight: {
+            enabled: true,          // false で、見せ場を出さない(それ以外は同じ)
+            count: 1,               // 見せ場の人数
+            minLabel: '逸材',       // このラベル以上のときだけ(有望 / 逸材 / 怪物級 / 規格外)
+            onReroll: true,         // 引き直しのときも出す
+            dimSec: 0.4,            // 見せ場の直前の溜め(画面が少し暗くなる。秒)
+            ratingSec: 0.8,         // 総合値が 0 から上がる時間(秒)
+            itemStepSec: 0.25,      // 能力の数字が出る間隔(秒)
+            hintSec: 1.2,           // ✦の一言が、ゆっくり出る時間(秒)
+            heads: {
+              '逸材': ['逸材が、ここにいる。', '一目で分かる。この新入生は、ものが違う。', '今年の一番星は、この選手だ。'],
+              '怪物級': ['怪物級の新入生が、現れた。', '空気が変わった。怪物級の一年生だ。', 'この学年に、怪物がいる。', '同世代の誰もが、この名前を覚えることになる。'],
+              '規格外': ['規格外の新入生が、現れた。', '測る物差しが、足りない。規格外だ。', '同世代の上位0.1%。規格外の一年生。', '常識の外から、新入生がやって来た。'],
+            },
+          },
         },
         awaken: {
           stepSec: 0.35,            // 覚醒:上がった項目の数字が、順に上がり始める間隔(秒)
@@ -1141,6 +1161,19 @@
     ['heroMode.fx.entry.cardSec', 'hero', '入口の演出:1枚が現れる時間(秒)', true],
     ['heroMode.fx.entry.rerollScale', 'hero', '引き直しの演出の速さの倍率(1.0 で最初と同じ)', true],
     ['heroMode.fx.entry.flashSec', 'hero', '怪物級以上のときの白い光の時間(秒)', true],
+    ['heroMode.fx.entry.minVisibleSec', 'hero', '入口の演出:1枚が見えている最短の時間(秒。総時間の上限より優先)', true],
+    ['heroMode.fx.entry.strongPauseSec', 'hero', '入口の演出:強い選手の前で取る間(秒)', true],
+    ['heroMode.fx.entry.scrollSec', 'hero', '入口の演出:自動スクロールの1回の時間(秒)', true],
+    ['heroMode.fx.entry.returnTo', 'hero', '入口の演出:終わったあとに戻る位置', true, ['top', 'spotlight']],
+    ['heroMode.fx.entry.glow.hintStrong', 'hero', '光の強さ:逸材未満の✦付き(見せ場が有効なとき。px)', true],
+    ['heroMode.fx.entry.spotlight.enabled', 'hero', '見せ場(最も強い新入生の全画面の演出)のオン/オフ', true],
+    ['heroMode.fx.entry.spotlight.count', 'hero', '見せ場の人数', true],
+    ['heroMode.fx.entry.spotlight.minLabel', 'hero', '見せ場:このラベル以上のときだけ', true, ['有望', '逸材', '怪物級', '規格外']],
+    ['heroMode.fx.entry.spotlight.onReroll', 'hero', '見せ場:引き直しのときも出す', true],
+    ['heroMode.fx.entry.spotlight.dimSec', 'hero', '見せ場:直前の溜め(秒)', true],
+    ['heroMode.fx.entry.spotlight.ratingSec', 'hero', '見せ場:総合値が上がる時間(秒)', true],
+    ['heroMode.fx.entry.spotlight.itemStepSec', 'hero', '見せ場:能力の数字が出る間隔(秒)', true],
+    ['heroMode.fx.entry.spotlight.hintSec', 'hero', '見せ場:✦の一言が出る時間(秒)', true],
     ['heroMode.fx.entry.glow.promising', 'hero', '光の強さ:有望(px)', true],
     ['heroMode.fx.entry.glow.excellent', 'hero', '光の強さ:逸材(px)', true],
     ['heroMode.fx.entry.glow.monster', 'hero', '光の強さ:怪物級・規格外(px)', true],
