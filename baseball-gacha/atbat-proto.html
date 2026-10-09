@@ -244,11 +244,11 @@
       maxKeys: 2,          // 1試合の介入の上限(先の2つで止まる。以降は「通常」で自動)
       priorN: 300,         // 事前勝率の見積もり:同じ編成で、自動の試合を priorN 回(別系統の乱数)。引き分けは 0.5 勝
       jitter: 10,          // 編成の能力のばらつき(±)
-      // チームの強さのプリセット(打者9人の基準、先発投手、守備・肩)
+      // チームの強さのプリセット(打者9人の基準、先発投手、守備・肩)。強いと弱いの差は、事前勝率の多くが 30〜80% に入る程度(T1e で調整)
       teams: {
-        strong: { bat: { contact: 64, power: 60, speed: 58 }, pit: { velocity: 66, control: 64, breaking: 62, quick: 55 }, def: 60 },
+        strong: { bat: { contact: 57, power: 56, speed: 55 }, pit: { velocity: 58, control: 57, breaking: 56, quick: 53 }, def: 55 },
         normal: { bat: { contact: 50, power: 50, speed: 50 }, pit: { velocity: 50, control: 50, breaking: 50, quick: 50 }, def: 50 },
-        weak:   { bat: { contact: 37, power: 35, speed: 42 }, pit: { velocity: 36, control: 38, breaking: 36, quick: 45 }, def: 40 },
+        weak:   { bat: { contact: 43, power: 44, speed: 45 }, pit: { velocity: 42, control: 43, breaking: 44, quick: 47 }, def: 45 },
       },
       // 介入場面の条件(isKeyScene の形)。野手のモードは自分の打席すべて、投手のモードは7回以降のピンチ(得点圏・点差3以内)
       key: { bat: { who: 'all', minInning: 1, chance: false }, pitch: { pinch: true, maxDiff: 3, minInning: 7 }, winRange: [0.3, 0.8] },
@@ -1189,7 +1189,7 @@
     const s = result ? { outs: Math.min(2, result.outs), bases: result.outs >= 3 ? [null, null, null] : result.bases, my: result.my, op: result.op } : { outs: sc.outs, bases: sc.bases, my: sc.my, op: sc.op };
     const b = s.bases;
     const lab = A.strengthLabel(sc.winP);
-    const wp = result ? result.w1 : A.gameWinProb(sc);
+    const wp = result ? result.w1 : S.mode === 'game' && GM.G && GM.G.done ? A.gameWin(GM.G) : A.gameWinProb(sc);
     const st = '<div class="pane st"><span class="inn">' + sc.inning + '回' + (sc.half === 'bottom' ? '裏' : '表') + '</span>'
       + '<div class="dia"><i class="b2' + (b[1] != null ? ' on' : '') + '"></i><i class="b3' + (b[2] != null ? ' on' : '') + '"></i><i class="b1' + (b[0] != null ? ' on' : '') + '"></i></div>'
       + '<div class="lamps">アウト<span class="' + (s.outs >= 1 ? 'on' : '') + '"></span><span class="' + (s.outs >= 2 ? 'on' : '') + '"></span>' + (result && result.outs >= 3 ? ' <b style="color:#b03a2e">チェンジ</b>' : '') + '</div>'
@@ -1292,7 +1292,8 @@
     clearTimeout(GM.tick); GM.tick = null;
     GM.G = A.newGame(Object.assign({}, GM.cfg, { winP: gamePreview().winP }));
     S.seed = GM.cfg.seed; result = null; GM.newCell = null;
-    if (plain) { A.finishPlain(GM.G); GM.phase = 'end'; } else { GM.phase = 'run'; gameSync(); }
+    if (plain) { A.finishPlain(GM.G); GM.phase = 'end'; } else GM.phase = 'run';
+    gameSync();
   }
   // 画面の場面を、試合の状態から作る(打者・投手・点差・スコア)
   function gameSync() {
@@ -1313,7 +1314,7 @@
     } while (reduce() && e.type === 'half');
     if (e.type === 'key') GM.phase = 'key';
     else if (e.type === 'end') GM.phase = 'end';
-    if (!G.done) gameSync();
+    gameSync();
     render();
   }
   function gameSchedule() {
@@ -1336,7 +1337,7 @@
   function gameResume() {
     result = null;
     GM.phase = GM.G.done ? 'end' : 'run';
-    if (!GM.G.done) gameSync();
+    gameSync();
   }
   // スコアボード(主役):1〜9回、R、H。いまの回を枠で強調。介入場面は点滅。点が入った回は太字と印
   function scoreboardHtml() {
@@ -1440,7 +1441,7 @@
     if (b.id === 'gseedSet') { const v = Number(document.getElementById('gseed').value); GM.cfg.seed = (Number.isFinite(v) ? Math.floor(v) : 1) >>> 0; render(); return true; }
     if (b.id === 'gstart') { gameStart(false); render(); return true; }
     if (b.id === 'gplain0') { gameStart(true); render(); return true; }
-    if (b.id === 'gplain') { clearTimeout(GM.tick); GM.tick = null; A.finishPlain(GM.G); GM.phase = 'end'; result = null; render(); return true; }
+    if (b.id === 'gplain') { clearTimeout(GM.tick); GM.tick = null; A.finishPlain(GM.G); GM.phase = 'end'; result = null; gameSync(); render(); return true; }
     if (b.id === 'gagain') { gameStart(false); render(); return true; }
     if (b.id === 'gnew') { GM.cfg.seed = (GM.cfg.seed + 1) >>> 0; gameStart(false); render(); return true; }
     if (b.id === 'gback') { GM.G = null; GM.phase = 'start'; render(); return true; }
