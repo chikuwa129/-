@@ -735,6 +735,19 @@
       if (!H.ms.win && c.w > 0) { H.ms.win = true; addStory(st, r, out, 'firstWin', STORY.firstWin, vars); }
       if (!H.ms.pstart && c.pg > 0 && c.outs > 0) { H.ms.pstart = true; addStory(st, r, out, 'firstPitchStart', STORY.firstPitchStart, vars); }
       if ((HM().pitching.reliefMax || 1) > 1 && !H.ms.relief && H.appear.some((e) => e.s === sv && e.pit && !e.pit.start)) { H.ms.relief = true; addStory(st, r, out, 'firstRelief', STORY.firstRelief, vars, 3); }   // 初登板(救援)
+      // H1.6a:途中出場の節目(重要度2。止まらない)。その月の試合の記録から
+      if (HM().substitute && HM().substitute.enabled) {
+        const subsNow = H.appear.filter((e) => e.s === sv && e.sub);
+        const SS = STORY.subst;
+        for (const e of subsNow) {
+          const k = e.sub.role;
+          if (!H.ms['sub_' + k]) { H.ms['sub_' + k] = true; addStory(st, r, out, 'subFirst', SS[k === 'ph' ? 'firstPH' : k === 'pr' ? 'firstPR' : 'firstDef'], vars, 2); }
+        }
+        if (!H.ms.phHit && subsNow.some((e) => e.sub.role === 'ph' && e.sub.h > 0)) { H.ms.phHit = true; addStory(st, r, out, 'phHit', SS.phHit, vars, 2); }
+        if (!H.ms.prSB && subsNow.some((e) => e.sub.role === 'pr' && e.sub.sbS > 0)) { H.ms.prSB = true; addStory(st, r, out, 'prSB', SS.prSB, vars, 2); }
+        const sl0 = h.subStats && h.subStats.career;
+        if (!H.ms.clutch && sl0 && sl0.phH >= HM().substitute.clutchHits) { H.ms.clutch = true; addStory(st, r, out, 'clutch', SS.clutch, Object.assign({ k: sl0.phH }, vars), 2); }
+      }
       if (!H.ms.complete && (c.cg || 0) > 0) { H.ms.complete = true; addStory(st, r, out, 'firstComplete', STORY.firstComplete, vars); }
       // 大会での活躍(試合の中身の活躍選手)
       let best = null;
@@ -931,8 +944,16 @@
     if (g.heroLine && !noLine) { if (g.heroLine.outs != null) pit = { start: false, outs: g.heroLine.outs, runs: g.heroLine.runs, w: 0, l: 0 }; else bat = g.heroLine; }
     let role = kind === 'practice' ? (g.heroRole || 'sub') : (g.heroRole || (bat || pit ? 'start' : 'out'));
     if (kind === 'tourney' && role !== 'start' && (bat || pit)) role = 'sub';   // ベンチから継投で登板した(途中出場)
+    // H1.6a:代打・代走・守備固め(試合の記録 box.subs)と盗塁(box.sb)
+    const se = (b.subs || []).find((x) => x.id === h.id);
+    const sub = se ? { role: se.role, ab: se.ab || 0, h: se.h || 0, sbA: se.sbA || 0, sbS: se.sbS || 0 } : null;
+    if (sub && kind === 'tourney' && role !== 'start') role = 'sub';
+    const sbe = (b.sb || []).find((x) => x.id === h.id);
     const tkey = card ? Object.keys(CONFIG.tournaments).find((k) => card.title && card.title.indexOf(CONFIG.tournaments[k].name) >= 0) : null;
-    return { kind: kind, tkey: tkey, round: g.round || null, roundNo: g.roundNo || null, rounds: g.rounds || null, win: !!g.win, role: role, bat: bat, pit: pit };
+    const e = { kind: kind, tkey: tkey, round: g.round || null, roundNo: g.roundNo || null, rounds: g.rounds || null, win: !!g.win, role: role, bat: bat, pit: pit };
+    if (sub) e.sub = sub;
+    if (sbe) e.sb = { a: sbe.a, s: sbe.s };
+    return e;
   }
   function addLine(t, e) {
     if (e.bat) { t.ab += e.bat.ab; t.h += e.bat.h; t.hr += e.bat.hr; t.rbi += e.bat.rbi; }
@@ -973,6 +994,25 @@
     if (t.pg) parts.push(Math.floor(t.outs / 3) + '回' + t.runs + '失点' + (t.w ? ' ' + t.w + '勝' : '') + (t.l ? ' ' + t.l + '敗' : ''));
     return parts.join(' / ');
   }
+  // 途中出場の短い書き方(代打・代走・守備固めごと。盗塁は代走の分)
+  function subText(list) {
+    const ph = list.filter((e) => e.sub.role === 'ph'), pr = list.filter((e) => e.sub.role === 'pr'), df = list.filter((e) => e.sub.role === 'def');
+    const P = [];
+    if (ph.length) P.push('代打' + (ph.length > 1 ? ph.length + '試合 ' : ' ') + ph.reduce((a, e) => a + e.sub.ab, 0) + '打数' + ph.reduce((a, e) => a + e.sub.h, 0) + '安打');
+    if (pr.length) { const sa = pr.reduce((a, e) => a + e.sub.sbA, 0), ss = pr.reduce((a, e) => a + e.sub.sbS, 0); P.push('代走' + (pr.length > 1 ? pr.length + '試合' : '') + (sa ? ' 盗塁' + ss + '/' + sa : '')); }
+    if (df.length) P.push('守備固め' + (df.length > 1 ? df.length + '試合' : ''));
+    return '途中出場(' + P.join('・') + ')';
+  }
+  // 選手の途中出場・盗塁の成績の1行(なければ空文字)。line:subStats の行
+  function subStatsText(l) {
+    if (!l || (!l.subG && !l.sbA)) return '';
+    const P = [];
+    if (l.phAb) P.push('代打 ' + l.phAb + '打数' + l.phH + '安打');
+    if (l.prG) P.push('代走 ' + l.prG);
+    if (l.defG) P.push('守備固め ' + l.defG);
+    if (l.sbA) P.push('盗塁 ' + l.sbS + '/' + l.sbA);
+    return P.join(' ・ ');
+  }
   // 今月(直近の進行)の出場の要約
   function monthAppearance(st, serials) {
     const H = st.hero;
@@ -988,7 +1028,10 @@
       const t = sum(played);
       const tname = CONFIG.tournaments[T[0].tkey] ? CONFIG.tournaments[T[0].tkey].name : '大会';
       const how = (nStart ? 'スタメン' + nStart + '試合 ' : '') + (nSub ? '途中出場' + nSub + '試合 ' : '');
-      parts.push(tname + ' ' + T.length + '試合 ' + (played.length ? how + lineText(t) : T.some((e) => e.role === 'bench') ? '出番なし(ベンチ)' : '出番なし(ベンチ外)'));
+      const subs = T.filter((e) => e.sub);
+      const subTxt = subs.length ? ' ' + subText(subs) : '';
+      const playedNoSub = played.filter((e) => !e.sub || e.bat || e.pit);
+      parts.push(tname + ' ' + T.length + '試合 ' + (played.length ? (playedNoSub.length ? how + lineText(t) : '') + subTxt : T.some((e) => e.role === 'bench') ? '出番なし(ベンチ)' : '出番なし(ベンチ外)'));
     }
     if (P.length) {
       const t = sum(P.filter((e) => e.role !== 'out'));
@@ -1309,6 +1352,12 @@
       }
       const best = bestResult(st, H.enrolledYear);
       L.push(pickText(st, r, G.result, Object.assign({ stage: best, pos: a.career }, vars)));
+      // H1.6a:途中出場の通算(出場があったときだけ。乱数は使わない)
+      const sl = a.subStats && a.subStats.career;
+      if (sl && sl.subG > 0) {
+        const t = a.name + 'の途中出場は、3年間で' + sl.subG + '試合。' + subStatsText(sl).replace(/ ・ /g, '、') + '。';
+        if (L.length < 7) L.splice(L.length - 1, 0, t); else L[L.length - 2] = t;
+      }
       return L.slice(0, 7);
     });
     // ライバル:卒業時(3年夏)の値、進路(このモード専用の乱数)、素質の明かし
@@ -1353,11 +1402,17 @@
     const tline = (p) => Object.assign(Core.emptyStatLine(), (p && p.stats && p.stats.career) || {});
     const sum = (o) => { const t = emptyLine(); for (const k of Object.keys(o || {})) for (const f of Object.keys(t)) t[f] += o[k][f] || 0; return t; };
     const kind = twoWayKnown(a) ? 'both' : Core.sideOf(a.position) === 'pitch' ? 'pitch' : 'bat';
-    return {
+    const out = {
       kind: kind,
       hero: { t: tline(a), p: sum(H.pstats) },
       rival: rv ? { name: rv.name, t: tline(rv), p: Object.assign(emptyLine(), H.rpstats || {}) } : null,
     };
+    // H1.6a:途中出場と盗塁の通算(有効なときだけ。無効なら卒業画面の中身は H1.5b と同じ)
+    if (HM().substitute && HM().substitute.enabled) {
+      out.hero.s = a.subStats ? Object.assign({}, a.subStats.career) : null;
+      if (out.rival) out.rival.s = rv.subStats ? Object.assign({}, rv.subStats.career) : null;
+    }
+    return out;
   }
   // 時点を指定して能力を取る(月ごとの成長の記録から。記録より前は入学時、後は今の値)
   function getValueAt(p, serial) {
@@ -1644,13 +1699,16 @@
       const lab = p.position === 'P' ? ['', '制', 'ス'] : ['ミ', 'パ', '走'];
       return '<span class="rst">' + c.cells.map((x, i) => (x.unit ? x.v + '<i>km</i>' : lab[i] + '<b>' + x.rank + '</b>')).join(' ') + ' <span class="' + (c.stat.faint ? 'faint' : '') + '">' + (p.position === 'P' ? '防' : '') + c.stat.text + '</span></span>';
     }
+    // 名簿の途中出場の通算(H1.6a。出場や盗塁があるときだけ)
+    function subOf(p) { const t = subStatsText(p.subStats && p.subStats.career); return t ? '途中出場:' + t : ''; }
     function compactRow(p, marks, stats) {
       const r = rankOf(p);
       if (stats) {
         // 名簿:1行目に名前・守備区分・総合値・指標、2行目にラベルと印
         return '<div class="crow rrow"><div class="r1">' + starBtn(p) + '<button class="namebtn" data-pdet="' + p.id + '">' + esc(p.name) + '</button>' + posTag(p.position) + extraTags(p)
           + ' <span class="small">' + (p.helper ? '助' : p.grade + '年') + ' <b>' + (twoWayKnown(p) ? Core.ratingSides(p).pitch + '/' + Core.ratingSides(p).bat : Core.rating(p)) + '</b></span>' + stats + '</div>'
-          + ((r && r.label) || r || marks ? '<div class="r2 small">' + (r && r.label ? '<span class="rlabel">' + r.label + '</span>' : '') + (r ? '<span class="gen">上位' + Generation.formatTop(r.top) + '</span>' : '') + (marks || '') + '</div>' : '') + '</div>';
+          + ((r && r.label) || r || marks || subOf(p) ? '<div class="r2 small">' + (r && r.label ? '<span class="rlabel">' + r.label + '</span>' : '') + (r ? '<span class="gen">上位' + Generation.formatTop(r.top) + '</span>' : '') + (marks || '')
+            + (subOf(p) ? ' <span class="subst">' + esc(subOf(p)) + '</span>' : '') + '</div>' : '') + '</div>';
       }
       return '<div class="crow">' + starBtn(p) + '<button class="namebtn" data-pdet="' + p.id + '">' + esc(p.name) + '</button>' + posTag(p.position) + extraTags(p)
         + ' <span class="small">' + (p.helper ? '助' : p.grade + '年') + '・総合値 <b>' + (twoWayKnown(p) ? Core.ratingSides(p).pitch + '/' + Core.ratingSides(p).bat : Core.rating(p)) + '</b>'
@@ -1809,7 +1867,8 @@
       const pit = (l, er) => '防御率 ' + (l.outs ? (er * 27 / l.outs).toFixed(2) : '-.--') + ' ' + l.w + '勝' + l.l + '敗';
       const tour = (pitcher || tw ? pit(t, t.er) : '') + (tw ? ' / ' : '') + (!pitcher || tw ? bat(t) : '');
       const pr = (pitcher || tw ? pit(p, Math.round(p.runs * CONFIG.stats.earnedRate)) : '') + (tw ? ' / ' : '') + (!pitcher || tw ? bat(p) : '');
-      return '今年度 大会:' + tour + ' ・ 練習試合:' + pr;
+      const sub = subStatsText(h.subStats && h.subStats.byYear && h.subStats.byYear[y]);
+      return '今年度 大会:' + tour + ' ・ 練習試合:' + pr + (sub ? ' ・ 途中出場:' + sub : '');
     }
     function rivalSummary(rv) {
       if (!rv) return '';
@@ -2076,6 +2135,7 @@
       const rows = [];
       if (T.kind !== 'pitch') rows.push(['大会<br>打撃', (c) => bat(c.t)], ['練習<br>打撃', (c) => bat(c.p)]);
       if (T.kind !== 'bat') rows.push(['大会<br>投球', (c) => pit(c.t, c.t.er)], ['練習<br>投球', (c) => pit(c.p, per(c.p))]);
+      if (cols.some((c) => c.s && (c.s.subG || c.s.sbA))) rows.push(['途中<br>出場', (c) => (c.s ? (c.s.subG || 0) + '試合' + (subStatsText(c.s) ? '<br>' + esc(subStatsText(c.s)) : '') : '-')]);
       return '<div class="sublabel">通算成績</div><div class="scroll"><table class="lu tot"><tr><th></th><th>あなた</th>' + (T.rival ? '<th>' + esc(T.rival.name) + '</th>' : '') + '</tr>'
         + rows.map((r) => '<tr><td>' + r[0] + '</td>' + cols.map((c) => '<td>' + r[1](c) + '</td>').join('') + '</tr>').join('') + '</table></div>';
     }
@@ -2212,7 +2272,7 @@
     autoRival: autoRival, getValueAt: getValueAt, gamePeak: gamePeak, monthAppearance: monthAppearance, lineText: lineText, emptyLine: emptyLine, addLine: addLine, toggleWatch: toggleWatch, swapWatch: swapWatch, addWatch: addWatch, diffSentence: diffSentence, getRank: getRank, toKmh: toKmh, breakTotal: breakTotal, syncPitches: syncPitches, pitchCountFor: pitchCountFor, closeNewYear: closeNewYear, rosterList: rosterList, makeHeroPlayer: makeHeroPlayer, contestOf: contestOf, convertEligible: convertEligible, heroOf: heroOf, rivalOf: rivalOf, statusLabel: statusLabel,
     rivalLine: rivalLine, contestAxisNow: contestAxisNow, keys: keys, save: save, load: load, wipeKeys: wipeKeys,
     startNew: startNew, resetSameSeed: resetSameSeed, resetNewSeed: resetNewSeed, wipeAll: wipeAll, startup: startup,
-    pickable: pickable, makePickup: makePickup, goGraduate: goGraduate, summerResultLine: summerResultLine, playerMonthLine: playerMonthLine, ratingSeries: ratingSeries, autoRival: autoRival, lineupRows: lineupRows, tourneyLineupRows: tourneyLineupRows, anyPlayer: anyPlayer, statCells: statCells,
+    subText: subText, subStatsText: subStatsText, pickable: pickable, makePickup: makePickup, goGraduate: goGraduate, summerResultLine: summerResultLine, playerMonthLine: playerMonthLine, ratingSeries: ratingSeries, autoRival: autoRival, lineupRows: lineupRows, tourneyLineupRows: tourneyLineupRows, anyPlayer: anyPlayer, statCells: statCells,
     pickText: pickText, fill: fill, typeOf: typeOf, setback: setback, tryRebound: tryRebound, hrng: hrng, serialOf: serialOf,
     mountUI: mountUI,
   };

@@ -77,7 +77,7 @@
         minPerClass: { P: 2, C: 1, IF: 0, OF: 0 },
         overlay: {
           saveVersion: 11,             // 育成監督モードの保存(部員の構成が変わるため。legacy は 10 のまま)
-          heroMode: { stamina: { base: 4.0 }, pitching: { reliefMax: 3 } },   // H1.5b:先発の投球回の基準と、救援の複数化(新入部員モードだけで使う値。legacy は 3.7 と 1)
+          heroMode: { stamina: { base: 4.0 }, pitching: { reliefMax: 3 }, substitute: { enabled: true } },   // H1.5b:先発の投球回の基準と、救援の複数化(新入部員モードだけで使う値。legacy は 3.7 と 1)
           newcomers: { rosterCap: 45 },
           rating: { genius: { min: 200, max: 300 }, reincarnation: { min: 250, max: 350 }, geniusReincarnationMax: 350 },
           tournaments: { summer: { oppBase: 46 }, autumn: { oppBase: 37 } },
@@ -459,7 +459,7 @@
       newYearOthersOpen: 5,         // 新年度の画面:上位3人以外の新入生がこの人数を超えたら、折りたたみにする
       // 途中出場(代打・代走・守備固め)と盗塁(H1.6a)。試合結果のあとに、個人の起用と成績を割り当てる層。すべて仮の値
       substitute: {
-        enabled: true,              // false で、H1.5b と完全に同じ
+        enabled: false,             // false で、H1.5b と完全に同じ。roster.version 'v2' では overlay で true(既定は有効。legacy は H1.4b のまま)
         expMult: 0.25,              // 途中出場の試合経験値(スタメンの何倍か)
         phChance: 0.35, phProb: 0.7, phMargin: 5, phMax: 2,     // 代打:得点のない終盤の回で走者がいる確率 / 起用の確率 / 打者よりミート・パワーが何以上高いか / 1試合の上限
         prDiff: 1, prProb: 0.6, prMargin: 10, prMax: 1,           // 代走:点差がこれ以内 / 起用の確率 / 走者より走力が何以上高いか / 1試合の上限(仕様の仮値2。1人に絞る)

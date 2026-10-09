@@ -572,6 +572,8 @@ test('先発の投球回:スタミナが高いほど長く、2〜9回、失点�
 });
 
 test('先発の投球回の変更は、ゲーム本体(得点・勝敗・ゲームの乱数・能力)を変えない', () => {
+  const SUB = CONFIG.heroMode.substitute; const subPrev = SUB.enabled; SUB.enabled = false;   // H1.6a:途中出場の層は試合の記録(ラインスコア)を使うので、この確認では切る
+  try {
   const S = CONFIG.heroMode.stamina;
   for (const seed of [11, 12, 13]) {
     S.enabled = true;
@@ -582,6 +584,7 @@ test('先発の投球回の変更は、ゲーム本体(得点・勝敗・ゲー�
     const body = (st) => JSON.stringify([st.rngState, st.yearRecords, st.players.map((p) => [p.id, p.position, p.abilities]), st.alumni.map((x) => [x.id, x.finalAbilities, x.career])]);
     assert.strictEqual(body(a), body(b), 'シード' + seed);
   }
+  } finally { SUB.enabled = subPrev; }
 });
 
 test('部員名簿は、助っ人を除く全員を載せる', () => {
@@ -652,7 +655,7 @@ test('主人公の出場と成績が記録と一致し、練習試合の成績�
     let ab = 0, h = 0;
     for (const e of H.appear) {
       if (e.kind === 'tourney') {
-        if (e.role === 'start' || e.role === 'sub') assert.ok(e.bat || e.pit, 'スタメン・途中出場なら試合の記録がある');
+        if (e.role === 'start' || e.role === 'sub') assert.ok(e.bat || e.pit || e.sub, 'スタメン・途中出場なら試合の記録がある');
         else assert.ok(!e.bat && !e.pit, 'ベンチ入り(出番なし)・ベンチ外なら記録はない');
         if (e.bat) { ab += e.bat.ab; h += e.bat.h; }
       } else {
@@ -980,12 +983,14 @@ test('入口(v2):ピックアップは8人以下(上位5人を含む)。主人�
   }
 });
 
+// H1.6a より前のフェーズとの一致の確認は、途中出場の層(経験値で能力が変わる)を切って行う
+function withSubOff(fn) { const S = CONFIG.heroMode.substitute; const prev = S.enabled; S.enabled = false; try { return fn(); } finally { S.enabled = prev; } }
 // ---------- H1.4c:3年の7月の画面のスタメンと名簿 ----------
 test('H1.4c:勝敗・能力・進路・本体の乱数が H1.5a と一致する(20回)', () => {
   if (!Core.isV2()) return;
   const FP = require('./hero-fingerprint.js');
   const ref = require('./fixtures/h15a-fingerprint.json');
-  for (let i = 0; i < ref.length; i++) assert.deepStrictEqual(FP.fingerprint(i), ref[i], i + '回目');
+  withSubOff(() => { for (let i = 0; i < ref.length; i++) assert.deepStrictEqual(FP.fingerprint(i), ref[i], i + '回目'); });
 });
 
 test('3年の7月の画面:スタメン表は大会の最後の試合のスタメン(主人公と3年生を含む)。名簿には引退した3年生が残る(20回)', () => {
@@ -1042,12 +1047,14 @@ test('救援(H1.5b):reliefMax が1でも3でも、勝敗・能力・進路・本
   if (!Core.isV2()) return;
   const FP = require('./hero-fingerprint.js');
   const ref = require('./fixtures/h15a-fingerprint.json');
-  for (const n of [1, 3]) withReliefMax(n, () => { for (let i = 0; i < ref.length; i++) assert.deepStrictEqual(FP.fingerprint(i), ref[i], 'reliefMax ' + n + ':' + i + '回目'); });
-  for (let i = 0; i < 20; i++) {
-    const a = withReliefMax(1, () => gameList(7300 + i)).map((b) => [b.win, b.my, b.opp].join(':'));
-    const b = withReliefMax(3, () => gameList(7300 + i)).map((x) => [x.win, x.my, x.opp].join(':'));
-    assert.deepStrictEqual(b, a, i + '回目');
-  }
+  withSubOff(() => {
+    for (const n of [1, 3]) withReliefMax(n, () => { for (let i = 0; i < ref.length; i++) assert.deepStrictEqual(FP.fingerprint(i), ref[i], 'reliefMax ' + n + ':' + i + '回目'); });
+    for (let i = 0; i < 20; i++) {
+      const a = withReliefMax(1, () => gameList(7300 + i)).map((b) => [b.win, b.my, b.opp].join(':'));
+      const b = withReliefMax(3, () => gameList(7300 + i)).map((x) => [x.win, x.my, x.opp].join(':'));
+      assert.deepStrictEqual(b, a, i + '回目');
+    }
+  });
 });
 
 test('救援(H1.5b):人数は reliefMax まで。救援の投球回の合計 = 9 − 先発、失点の合計 = 試合の失点。控えの投手にも出番が回る(200試合以上)', () => {
@@ -1067,6 +1074,46 @@ test('救援(H1.5b):人数は reliefMax まで。救援の投球回の合計 = 9
   }
   assert.ok(n >= 200, '試合 ' + n);
   assert.ok(Object.keys(who).length >= 8, '救援に出た投手 ' + Object.keys(who).length + '人');
+});
+
+// ---------- H1.6a:途中出場 ----------
+test('途中出場(H1.6a):無効なら H1.5b と完全に一致(勝敗・能力・進路・成績・物語。10回)。有効でも経験値0倍なら勝敗・得点・失点は一致', () => {
+  if (!Core.isV2()) return;
+  const FP = require('./hero-fingerprint.js');
+  const ref = require('./fixtures/h15b-fingerprint.json');
+  withSubOff(() => { for (let i = 0; i < ref.length; i++) assert.deepStrictEqual(FP.fingerprint(i, { stories: true, stats: true, games: true }), ref[i], '無効:' + i + '回目'); });
+  const S = CONFIG.heroMode.substitute; const prev = S.expMult; S.expMult = 0;
+  try { for (let i = 0; i < ref.length; i++) { const f = FP.fingerprint(i, { games: true }); assert.deepStrictEqual(f.glog, ref[i].glog, '経験値0倍:' + i + '回目'); } } finally { S.expMult = prev; }
+});
+
+test('途中出場(H1.6a):チーム合計は変わらない(打数・安打は配分だけ)。上限・条件を守る。簡易成績と途中出場の成績が記録と一致(20回)', () => {
+  if (!Core.isV2()) return;
+  const C = CONFIG.heroMode.substitute;
+  let subs = 0;
+  const S = CONFIG.heroMode.substitute; const prev = S.expMult;
+  for (let i = 0; i < 20; i++) {
+    // 同じシードで、途中出場あり(経験値0倍:試合結果が同じ)となしを比べ、試合ごとのチームの打数・安打が同じ
+    const a = withSubOff(() => gameList(7600 + i));
+    S.expMult = 0;
+    let b;
+    try { b = gameList(7600 + i); } finally { S.expMult = prev; }
+    assert.strictEqual(a.length, b.length);
+    a.forEach((x, k) => {
+      const y = b[k];
+      const sum = (bx, f) => bx.batters.reduce((t, q) => t + q[f], 0) + (bx.subs || []).reduce((t, q) => t + (q[f] || 0), 0);
+      assert.strictEqual(sum(y, 'ab'), sum(x, 'ab'), '打数の合計');
+      assert.strictEqual(sum(y, 'h'), sum(x, 'h'), '安打の合計');
+      const R = y.subs || [];
+      subs += R.length;
+      assert.ok(R.filter((q) => q.role === 'ph').length <= C.phMax && R.filter((q) => q.role === 'pr').length <= C.prMax && R.filter((q) => q.role === 'def').length <= C.defMax, '上限');
+      if (R.some((q) => q.role === 'pr')) assert.ok(Math.abs(y.my - y.opp) <= C.prDiff, '代走は点差1以内');
+      if (R.some((q) => q.role === 'def')) assert.ok(y.win && y.my - y.opp >= 1 && y.my - y.opp <= C.defLead, '守備固めは1〜3点リード');
+      const ids = R.map((q) => q.id);
+      assert.strictEqual(new Set(ids).size, ids.length, '同じ選手は1試合1回');
+      assert.ok(R.every((q) => !y.batters.some((t) => t.id === q.id)), '途中出場はスタメン以外');
+    });
+  }
+  assert.ok(subs > 100, '途中出場 ' + subs);
 });
 
 // legacy の一致の確認(別プロセス)
