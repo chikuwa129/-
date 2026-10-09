@@ -105,6 +105,35 @@
     walkEnabled: false,
     // ランダムな場面のうち、終盤の接戦(7回以降・2点差以内)にする割合
     lateCloseShare: 0.3,
+    // 試合の通し(T1e)。自校は先攻。9回まで(延長なし。同点なら引き分け。9回裏の途中で相手が勝ち越したら、サヨナラで終了)
+    game: {
+      myOrder: 3,          // 野手のモード:自分の打順
+      maxKeys: 2,          // 1試合の介入の上限(先の2つで止まる。以降は「通常」で自動)
+      priorN: 300,         // 事前勝率の見積もり:同じ編成で、自動の試合を priorN 回(別系統の乱数)。引き分けは 0.5 勝
+      jitter: 10,          // 編成の能力のばらつき(±)
+      // チームの強さのプリセット(打者9人の基準、先発投手、守備・肩)
+      teams: {
+        strong: { bat: { contact: 64, power: 60, speed: 58 }, pit: { velocity: 66, control: 64, breaking: 62, quick: 55 }, def: 60 },
+        normal: { bat: { contact: 50, power: 50, speed: 50 }, pit: { velocity: 50, control: 50, breaking: 50, quick: 50 }, def: 50 },
+        weak:   { bat: { contact: 37, power: 35, speed: 42 }, pit: { velocity: 36, control: 38, breaking: 36, quick: 45 }, def: 40 },
+      },
+      // 介入場面の条件(isKeyScene の形)。野手のモードは自分の打席すべて、投手のモードは7回以降のピンチ(得点圏・点差3以内)
+      key: { bat: { who: 'all', minInning: 1, chance: false }, pitch: { pinch: true, maxDiff: 3, minInning: 7 }, winRange: [0.3, 0.8] },
+      halfMs: 500,         // 自動の進み:半イニングごとの間(ミリ秒)
+      holdSpeed: 2,        // 画面を押している間の速さ(倍)
+      logMode: 'highlight',   // 'highlight'(得点の回・介入場面・試合の終わり)/ 'all'(すべての半イニング)
+      // ログの文(実際の記録から作る。{h}=「5回表」、{runs}=得点、{hits}=安打、{on}=出塁、{lob}=残塁、{score}=自校-相手)。同じ文が続かないように選ぶ
+      text: {
+        my_three: ['{h} 味方の攻撃は、3人で終わった', '{h} 味方は、三者凡退', '{h} 味方は、あっさり3人で攻撃を終えた', '{h} 味方の打線は、3人で抑えられた', '{h} 味方は、塁に出られなかった'],
+        my_walk: ['{h} 味方は、四球で{on}人が出たが、無得点', '{h} 味方は、走者を出したが、点にならなかった', '{h} 味方は、四球をもらったが、続かなかった', '{h} 味方は、{lob}人を残して、無得点', '{h} 味方は、安打なしで、無得点'],
+        my_hit: ['{h} 味方は、安打{hits}本で、無得点', '{h} 味方は、安打{hits}本を打ったが、点にならなかった', '{h} 味方は、{lob}人を残して、無得点(安打{hits}本)', '{h} 味方は、チャンスを生かせなかった(安打{hits}本)', '{h} 味方は、安打{hits}本、あと一本が出なかった'],
+        my_score: ['{h} 味方が、{runs}点を取った({score})', '{h} 味方の攻撃で、{runs}点が入った({score})', '{h} 味方は、安打{hits}本で{runs}点({score})', '{h} 味方が、{runs}点を返した({score})', '{h} 味方に、{runs}点が入った({score})'],
+        op_three: ['{h} 相手の攻撃は、3人で終わった', '{h} 何事もなく終わった', '{h} 相手は、三者凡退', '{h} 相手を、3人で抑えた', '{h} 相手は、塁に出られなかった'],
+        op_walk: ['{h} 打者を{on}人出したが、抑えた', '{h} 四球を出したが、無失点', '{h} 走者を出したが、点はやらなかった', '{h} {lob}人を残して、無失点', '{h} 安打は許さず、無失点'],
+        op_hit: ['{h} 安打を打たれたが、無失点', '{h} 安打{hits}本を許したが、抑えた', '{h} {lob}人を残して、無失点(被安打{hits})', '{h} ピンチをしのいだ(被安打{hits})', '{h} 打たれながらも、0点に抑えた'],
+        op_score: ['{h} {runs}点を取られた({score})', '{h} 相手に、{runs}点が入った({score})', '{h} 安打{hits}本で、{runs}点を失った({score})', '{h} 相手が、{runs}点を取った({score})', '{h} {runs}点を許した({score})'],
+      },
+    },
     // 傾向タグ(実際の能力から。最大 max 個、偏りの大きい順。該当がなければ「平均的」)。どの能力も、結果の確率に効いている
     tags: {
       max: 3,
@@ -564,8 +593,165 @@
     return who && sc.inning >= (B.minInning || 1) && (!B.chance || risp);
   }
 
+  // ---------- 試合の通し(T1e) ----------
+  //   状態 G を持ち、advance(G) で、次の介入場面か、半イニングの終わりか、試合の終わりまで進める。choose(G, 指示) で介入場面を確定する
+  //   乱数:編成はシードから、打席は「シード × 打席の番号」から(打席ごとに独立。介入より前の打席は、選択に関係なく同じ)
+  const mix = (a, b) => { let h = Math.imul((a >>> 0) ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul((b >>> 0) + 0x632be5ab, 0xc2b2ae35); h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12; return h >>> 0; };
+  const BASE_NAME = ['一塁', '二塁', '三塁'], OUT_NAME = ['無死', '一死', '二死'];
+  function basesText(b) {
+    const on = [0, 1, 2].filter((i) => b[i] != null);
+    if (!on.length) return '走者なし';
+    if (on.length === 3) return '満塁';
+    return on.length === 1 ? BASE_NAME[on[0]] : on.map((i) => '一二三'[i]).join('') + '塁';
+  }
+  function makeTeam(lv, r, C) {
+    const G = C.game, T = G.teams[lv] || G.teams.normal, j = (o) => { const x = {}; for (const k of Object.keys(o)) x[k] = clamp(o[k] + r.int(-G.jitter, G.jitter), 1, 100); return x; };
+    const hand = () => (r.next() < C.hands.right ? 'R' : 'L');
+    const lineup = Array.from({ length: 9 }, () => Object.assign(j(T.bat), { bats: hand() }));
+    return { level: lv, lineup: lineup, pitcher: Object.assign(j(T.pit), { throws: hand() }), defense: clamp(T.def + r.int(-5, 5), 1, 100), arm: clamp(T.def + r.int(-5, 5), 1, 100) };
+  }
+  // o:{ seed, mode:'bat'|'pitch', my, op(強さ), winP(省略で見積もる) }
+  function newGame(o, cfg) {
+    const C = cfg || CONFIG, seed = (o.seed >>> 0);
+    const r = new Rng(mix(seed, 0x7e41));
+    const G = { seed: seed, mode: o.mode === 'pitch' ? 'pitch' : 'bat', myLevel: o.my || 'normal', opLevel: o.op || 'normal', my: o.teams ? o.teams.my : makeTeam(o.my || 'normal', r, C), op: o.teams ? o.teams.op : makeTeam(o.op || 'normal', r, C),
+      paSeed: o.paSeed != null ? o.paSeed : mix(seed, 1), quiet: !!o.quiet, plain: !!o.plain, C: C };
+    resetGame(G);
+    G.winP = o.winP != null ? o.winP : priorWinP(G);
+    return G;
+  }
+  function resetGame(G) {
+    Object.assign(G, { inning: 1, top: true, outs: 0, bases: [null, null, null], score: { my: 0, op: 0 }, line: { my: [], op: [] }, hits: { my: 0, op: 0 }, idx: { my: 0, op: 0 },
+      pa: 0, keysUsed: 0, keyLog: [], log: [], halfNo: 0, rec: newRec(), done: false, result: null, walkoff: false, pending: null, skipKey: false, lastTpl: {}, paLog: [] });
+  }
+  const newRec = () => ({ batters: 0, hits: 0, walks: 0, runs: 0 });
+  // 事前勝率:同じ編成で、自動の試合(別系統の乱数)を priorN 回。引き分けは 0.5
+  function priorWinP(G) {
+    const N = G.C.game.priorN;
+    let w = 0;
+    for (let i = 0; i < N; i++) {
+      const g = { seed: G.seed, mode: G.mode, my: G.my, op: G.op, paSeed: mix(G.seed ^ 0x51ed, i + 1), quiet: true, plain: true, C: G.C, winP: 0.5 };
+      resetGame(g);
+      while (!g.done) advance(g);
+      w += g.result === 'win' ? 1 : g.result === 'draw' ? 0.5 : 0;
+    }
+    return Math.round(w / N * 1000) / 1000;
+  }
+  // いまの打席の場面(自校から見た点差・攻守)
+  function curScene(G) {
+    const batMy = G.top, key = batMy ? 'my' : 'op', bt = G[key], ft = batMy ? G.op : G.my, i = G.idx[key];
+    return makeScene({ inning: G.inning, half: G.top ? 'top' : 'bottom', side: batMy ? 'bat' : 'pitch', outs: G.outs, bases: G.bases.slice(), diff: G.score.my - G.score.op,
+      batter: bt.lineup[i], pitcher: ft.pitcher, defense: ft.defense, arm: ft.arm, winP: G.winP, hero: G.mode === 'bat' && batMy && i === G.C.game.myOrder - 1, focus: false,
+      bats: bt.lineup[i].bats, throws: ft.pitcher.throws, order: i + 1, name: '' });
+  }
+  function isGameKey(G, sc) {
+    if (G.plain || G.keysUsed >= G.C.game.maxKeys) return false;
+    if ((G.mode === 'bat') !== (sc.side === 'bat')) return false;
+    return isKeyScene(sc, G.C.game.key, G.C);
+  }
+  // 試合の勝率(自校から見て)。終わっていれば 1 / 0.5 / 0
+  function gameWin(G) { return G.done ? (G.result === 'win' ? 1 : G.result === 'draw' ? 0.5 : 0) : gameWinProb(curScene(G), null, G.C); }
+  // 1打席(盗塁は、打席を消費しない)
+  function playPA(G, order) {
+    const sc = curScene(G), key = G.top ? 'my' : 'op';
+    const r = resolve(sc, order, new Rng(mix(G.paSeed, G.pa)), G.C);
+    if (!G.quiet) G.paLog.push(G.pa + ':' + r.kind + ':' + r.runs);
+    G.pa++;
+    const steal = /^st_/.test(r.kind);
+    if (!steal) { G.rec.batters++; G.idx[key] = (G.idx[key] + 1) % 9; }
+    if (r.kind === 'S' || r.kind === 'XB' || r.kind === 'HR' || r.kind === 'bunt_hit') { G.rec.hits++; G.hits[key]++; }
+    if (r.kind === 'BB') G.rec.walks++;
+    G.score[key] += r.runs; G.rec.runs += r.runs;
+    G.outs = r.outs; G.bases = r.bases.slice();
+    if (!G.top && G.inning === 9 && G.score.op > G.score.my) { G.walkoff = true; endHalf(G); }
+    else if (G.outs >= 3) endHalf(G);
+    return { sc: sc, r: r, steal: steal };
+  }
+  function endHalf(G) {
+    const key = G.top ? 'my' : 'op', rec = G.rec;
+    G.line[key][G.inning - 1] = rec.runs;
+    const lob = G.outs >= 3 || G.walkoff ? G.bases.filter((x) => x != null).length : 0;
+    if (!G.quiet) halfLog(G, key, rec, G.walkoff ? 0 : lob);
+    G.halfNo++;
+    if (G.top) {
+      if (G.inning === 9 && G.score.op > G.score.my) { G.line.op[8] = 'x'; return endGame(G); }
+      G.top = false;
+    } else {
+      if (G.walkoff || G.inning === 9) return endGame(G);
+      G.inning++; G.top = true;
+    }
+    G.outs = 0; G.bases = [null, null, null]; G.rec = newRec();
+  }
+  function endGame(G) {
+    G.done = true;
+    G.result = G.score.my > G.score.op ? 'win' : G.score.my < G.score.op ? 'lose' : 'draw';
+    if (!G.quiet) {
+      const res = G.result === 'win' ? '勝ち' : G.result === 'draw' ? '引き分け' : (G.walkoff ? 'サヨナラ負け' : '負け');
+      G.log.push({ kind: 'end', hl: true, score: [G.score.my, G.score.op], result: G.result, text: '試合終了。' + res + '(' + G.score.my + '-' + G.score.op + ')' });
+    }
+  }
+  const halfName = (inn, top) => inn + '回' + (top ? '表' : '裏');
+  // 半イニングの記録から、ログの文を作る(嘘をつかない。数字は記録から)
+  function pickText(G, cat) {
+    const L = G.C.game.text[cat];
+    let i = mix(G.seed, G.halfNo * 31 + cat.length) % L.length;
+    if (G.lastTpl[cat] === i) i = (i + 1) % L.length;
+    G.lastTpl[cat] = i;
+    return L[i];
+  }
+  function fill(t, d) { return t.replace(/\{(\w+)\}/g, (m, k) => (d[k] != null ? d[k] : m)); }
+  function halfLog(G, key, rec, lob) {
+    const on = rec.hits + rec.walks;
+    const cat = key + '_' + (rec.runs > 0 ? 'score' : rec.batters <= 3 && on === 0 ? 'three' : rec.hits > 0 ? 'hit' : on > 0 ? 'walk' : 'three');
+    const d = { h: halfName(G.inning, G.top), runs: rec.runs, hits: rec.hits, on: on, lob: lob, score: G.score.my + '-' + G.score.op };
+    G.log.push({ kind: 'half', team: key, inn: G.inning, top: G.top, cat: cat, hl: rec.runs > 0, runs: rec.runs, hits: rec.hits, walks: rec.walks, batters: rec.batters, lob: lob, score: [G.score.my, G.score.op], text: fill(pickText(G, cat), d) });
+  }
+  // 次の介入場面・半イニングの終わり・試合の終わりまで進める
+  function advance(G) {
+    if (G.done) return { type: 'end' };
+    if (G.pending) return { type: 'key', sc: G.pending.sc, ev: G.pending.ev };
+    const h = G.halfNo;
+    while (!G.done && G.halfNo === h) {
+      const sc = curScene(G);
+      if (!G.skipKey && isGameKey(G, sc)) { G.pending = { sc: sc, ev: evaluate(sc, G.C), w0: gameWin(G) }; return { type: 'key', sc: sc, ev: G.pending.ev }; }
+      G.skipKey = false;
+      playPA(G, 'normal');
+    }
+    return { type: G.done ? 'end' : 'half' };
+  }
+  // 介入場面の確定:指示 order で、その打席を進める。ログ(介入場面の結果)と、ふりかえりの記録を残す
+  function choose(G, order) {
+    const P = G.pending;
+    if (!P) return null;
+    G.pending = null; G.keysUsed++;
+    const sc = P.sc, row = P.ev.rows.find((x) => x.order === order) || P.ev.rows[0], at = G.log.length;
+    const inn = G.inning, top = G.top;
+    const out = playPA(G, row.order);
+    if (out.steal) G.skipKey = true;   // 盗塁のあとの同じ打者の打席は、自動
+    const w1 = gameWin(G), r = out.r, bat = sc.side === 'bat';
+    const sit = (bat ? '自分の打席' : 'ピンチ') + '(' + OUT_NAME[sc.outs] + basesText(sc.bases) + ')';
+    const res = r.label + (r.runs ? '、' + r.runs + '点' + (bat ? '' : 'を取られた') : (bat ? '' : '、無失点'));
+    const pc = (v) => Math.round(v * 100) + '%';
+    const item = { kind: 'key', hl: true, inn: inn, top: top, order: row.order, label: row.label, rating: row.rating, result: r.label, runs: r.runs, w0: P.w0, w1: w1, sit: sit, score: [G.score.my, G.score.op],
+      text: halfName(inn, top) + ' ' + sit + '。『' + row.label + '』を選んだ。' + res + '(勝率 ' + pc(P.w0) + '→' + pc(w1) + ')' };
+    G.log.splice(at, 0, item);
+    G.keyLog.push(item);
+    return { r: r, row: row, item: item };
+  }
+  // 結果だけ見る:以降の介入場面を、すべて「通常」で、最後まで
+  function finishPlain(G) {
+    if (G.pending) choose(G, 'normal');
+    G.plain = true;
+    while (!G.done) advance(G);
+  }
+  // 方針 policy(sc, ev) → 指示 で、最後まで(検証用)
+  function playGame(G, policy) {
+    while (!G.done) { const e = advance(G); if (e.type === 'key') choose(G, policy ? policy(e.sc, e.ev) : 'normal'); }
+    return G;
+  }
+
   return {
-    CONFIG: CONFIG, OUTCOMES: OUTCOMES, OUTCOME_LABEL: OUTCOME_LABEL, ORDER_LABEL: ORDER_LABEL, PRESETS: PRESETS, SCENES: SCENES,
+    CONFIG: CONFIG, newGame: newGame, advance: advance, choose: choose, finishPlain: finishPlain, playGame: playGame, gameWin: gameWin, curScene: curScene, priorWinP: priorWinP, basesText: basesText, mixSeed: mix, OUTCOMES: OUTCOMES, OUTCOME_LABEL: OUTCOME_LABEL, ORDER_LABEL: ORDER_LABEL, PRESETS: PRESETS, SCENES: SCENES,
     Rng: Rng, probs: probs, orderBranches: orderBranches, legalOrders: legalOrders, reTable: reTable, reOf: reOf, p1Table: p1Table, p1Of: p1Of, expectOrderP1: expectOrderP1, expectOrder: expectOrder,
     evaluate: evaluate, ratingOf: ratingOf, featureOf: featureOf, twoChoice: twoChoice, cardsOf: cardsOf, resolve: resolve, goodBadOf: goodBadOf, gameWinProb: gameWinProb, strengthLabel: strengthLabel, inWinRange: inWinRange, makeScene: makeScene, randomScene: randomScene, handsOf: handsOf, tagsOf: tagsOf, uiStep: uiStep, isKeyScene: isKeyScene,
     buntP: buntP, squeezeP: squeezeP, stealP: stealP, rankOf: rankOf, kmh: kmh, breakTotal: breakTotal,
