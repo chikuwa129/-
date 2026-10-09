@@ -57,7 +57,10 @@ test('指示が使える条件(バント・スクイズ・盗塁・敬遠)', () 
   assert.ok(L({ outs: 0, bases: [50, null, null] }).indexOf('bunt') >= 0 && L({ outs: 2, bases: [50, null, null] }).indexOf('bunt') < 0 && L({ outs: 0, bases: [50, null, 50] }).indexOf('bunt') < 0);
   assert.ok(L({ outs: 1, bases: [null, null, 50] }).indexOf('squeeze') >= 0 && L({ outs: 1, bases: [50, null, null] }).indexOf('squeeze') < 0);
   assert.ok(L({ bases: [50, null, null] }).indexOf('steal') >= 0 && L({ bases: [50, 50, null] }).indexOf('steal') < 0);
-  assert.ok(L({ side: 'pitch', bases: [null, 50, null] }).indexOf('walk') >= 0 && L({ side: 'pitch', bases: [50, null, null] }).indexOf('walk') < 0);
+  // 敬遠は、既定では出さない(walkEnabled で戻せる)
+  assert.ok(L({ side: 'pitch', bases: [null, 50, null] }).indexOf('walk') < 0, '敬遠は出さない');
+  A.CONFIG.walkEnabled = true;
+  try { assert.ok(L({ side: 'pitch', bases: [null, 50, null] }).indexOf('walk') >= 0 && L({ side: 'pitch', bases: [50, null, null] }).indexOf('walk') < 0); } finally { A.CONFIG.walkEnabled = false; }
 });
 
 test('isKeyScene:プリセットごとの判定', () => {
@@ -116,6 +119,67 @@ test('試合の勝率:事前勝率で始まり、点を取ると上がり、失�
   assert.ok(A.gameWinProb(sc, { outs: 1, bases: [null, null, null], diff: 1 }) > A.gameWinProb(sc));
   const d = A.makeScene({ side: 'pitch', inning: 6, outs: 1, bases: [null, 50, null] });
   assert.ok(A.gameWinProb(d, { outs: 2, bases: [null, 50, null], diff: 0 }) > A.gameWinProb(d), '守備でアウトを取る');
+});
+
+// ---------- T1c ----------
+const ART = require('../atbat-art.js');
+test('線画の部品が単独で動き、左右の反転が正しい(右と左で、同じ形の鏡像)', () => {
+  for (const mode of ['bat', 'pitch']) {
+    const rr = ART.draw({ mode: mode, bats: 'R', throws: 'R' }), ll = ART.draw({ mode: mode, bats: 'L', throws: 'L' });
+    assert.ok(/^<svg[^>]*viewBox="0 0 200 120"/.test(rr), 'SVG');
+    const part = (svg, name) => { const m = svg.match(new RegExp('<g data-part="' + name + '" data-flip="(\\d)"( transform="([^"]*)")?>(.*?)</g>')); return m && { flip: m[1], tf: m[3] || '', body: m[4] }; };
+    for (const name of ['batter', 'pitcher']) {
+      const a = part(rr, name), b = part(ll, name);
+      assert.ok(a && b, mode + ' ' + name);
+      assert.strictEqual(a.flip, '0'); assert.strictEqual(a.tf, '');
+      assert.strictEqual(b.flip, '1'); assert.ok(/scale\(-1,1\)/.test(b.tf), '左は反転');
+      assert.strictEqual(a.body, b.body, '同じ形(鏡像)');
+    }
+    // 打席と投げは、別々に反転する
+    const rl = ART.draw({ mode: mode, bats: 'R', throws: 'L' });
+    assert.strictEqual(part(rl, 'batter').flip, '0'); assert.strictEqual(part(rl, 'pitcher').flip, '1');
+    assert.ok(/data-mode="/.test(rr) && (rr.match(/<path/g) || []).length <= 20, 'パスの数を抑える');
+  }
+  const c = ART.draw({ mode: 'bat', color: '#123456', bg: '#abcdef' });
+  assert.ok(c.indexOf('stroke="#123456"') >= 0 && c.indexOf('fill="#abcdef"') >= 0, '色の指定');
+});
+
+test('左右:同じシードで同じ割り当て。右の割合は設定どおり。確率の計算には使われない', () => {
+  assert.deepStrictEqual(A.handsOf(77), A.handsOf(77));
+  assert.deepStrictEqual({ bats: A.randomScene(77).bats, throws: A.randomScene(77).throws }, A.handsOf(77));
+  let r = 0; const N = 4000;
+  for (let i = 0; i < N; i++) { const h = A.handsOf(i); r += (h.bats === 'R') + (h.throws === 'R'); }
+  assert.ok(Math.abs(r / (2 * N) - A.CONFIG.hands.right) < 0.03, '右の割合 ' + (r / (2 * N)).toFixed(3));
+  for (let i = 0; i < 50; i++) {
+    const sc = A.randomScene(i);
+    for (const o of A.legalOrders(sc)) {
+      const x = A.orderBranches(Object.assign({}, sc, { bats: 'R', throws: 'R' }), o), y = A.orderBranches(Object.assign({}, sc, { bats: 'L', throws: 'L' }), o);
+      assert.deepStrictEqual(x, y, '左右で確率が変わらない');
+    }
+  }
+});
+
+test('傾向タグは、実際の能力から作られる(能力を変えるとタグが変わる。最大3つ。該当がなければ「平均的」)', () => {
+  assert.deepStrictEqual(A.tagsOf('batter', { contact: 50, power: 50, speed: 50 }), ['平均的']);
+  assert.deepStrictEqual(A.tagsOf('batter', { contact: 90, power: 50, speed: 50 }), ['巧打']);
+  assert.deepStrictEqual(A.tagsOf('batter', { contact: 50, power: 10, speed: 50 }), ['非力']);
+  assert.ok(A.tagsOf('batter', { contact: 90, power: 10, speed: 95 }).length <= 3);
+  assert.deepStrictEqual(A.tagsOf('pitcher', { velocity: 85, control: 20, breaking: 50 }), ['速球派', '制球が荒い']);
+  // タグの能力は、確率に効いている(速球派 → 三振が増える、制球が荒い → 四球が増える)
+  const base = A.probs(A.makeScene({}), 'normal');
+  assert.ok(A.probs(A.makeScene({ pitcher: { velocity: 85, control: 50, breaking: 50, quick: 50 } }), 'normal').K > base.K);
+  assert.ok(A.probs(A.makeScene({ pitcher: { velocity: 50, control: 20, breaking: 50, quick: 50 } }), 'normal').BB > base.BB);
+});
+
+test('2段階の選び方:カードを押しただけでは進まず、「決定」で初めて結果になる', () => {
+  let s = A.uiStep(null, 'next');
+  s = A.uiStep(s, 'confirm'); assert.strictEqual(s.result, null, '選ぶ前の決定は無効');
+  s = A.uiStep(s, 'select', 'power'); assert.strictEqual(s.result, null); assert.strictEqual(s.sel, 'power');
+  s = A.uiStep(s, 'select', 'contact'); assert.strictEqual(s.result, null); assert.strictEqual(s.sel, 'contact');
+  s = A.uiStep(s, 'confirm'); assert.deepStrictEqual(s.result, { order: 'contact' });
+  s = A.uiStep(s, 'select', 'power'); assert.strictEqual(s.result.order, 'contact', '結果のあとは選び直せない');
+  assert.deepStrictEqual(A.uiStep(s, 'next'), { sel: null, result: null });
+  assert.deepStrictEqual(A.uiStep(A.uiStep(null, 'next'), 'auto').result, { order: 'normal', auto: true }, '勝負にならない試合');
 });
 
 // 本編のファイルが、試作の前後で変わっていない(タグ v-before-T1 と比べる)

@@ -102,7 +102,7 @@ node sim.js 200 42 random
 - [x] フェーズH1.7b:入口の演出の強化(自動スクロール、見せ場の全画面演出 heroMode.fx.entry.spotlight、引き直しを等速に)
 - [x] フェーズH1.8:同期の答え合わせ(卒業画面。heroMode.cohortReview。入学時と卒業時、選ばなかった選手たち。保存 v13)
 - [x] フェーズH1.9:ホームの進行ボタンを1つに(「次へ」= 止まる月まで進む。heroMode.ui.nextLabel)、同期の答え合わせを1枚に(「見送った」の印)
-- [x] T1(試作):打席の試作の単体ページ atbat-proto.html(計算は atbat-engine.js、検証は node tools/atbat-sim.js、テストは node tests/atbat.test.js。本編とは別。設計メモは docs/design_game_engine.md)
+- [x] T1(試作):打席の試作の単体ページ atbat-proto.html(計算は atbat-engine.js、線画は atbat-art.js(T1c)、検証は node tools/atbat-sim.js、テストは node tests/atbat.test.js。本編とは別。設計メモは docs/design_game_engine.md)
 - [ ] フェーズ2:大会と国際大会
 - [ ] フェーズ3:スカウトと「逃した魚」
 - [ ] フェーズ4:対戦成績と因縁
