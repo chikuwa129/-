@@ -204,23 +204,14 @@
     return '<div class="ev">' + esc(C.ui.ratingLabel) + ' <b>' + x.rating + '</b> ・成功 ' + pc(x.good) + ' ・' + what + ' ' + v(x) + ds + '</div>';
   }
   // ---------- 下:カード(押すと、すぐ結果) ----------
-  function cardHtml(r, opt) {
-    opt = opt || {};
-    const mode = S.card, showRt = mode !== 'prob-only';
-    const sel = result && result.order === r.order;
-    return '<button class="cd' + (opt.two ? ' two' : '') + (sel ? ' sel' : '') + (DEV && lastEval && r.order === lastEval.best ? ' best' : '') + '" data-order="' + r.order + '"' + (opt.as ? ' data-as="' + opt.as + '"' : '') + (result ? ' disabled' : '') + '>'
-      + '<span class="nm">' + esc(opt.two ? C.ui.two[opt.as] : r.label) + '</span>' + (opt.two ? '<span class="od">' + esc(r.label) + '</span>' : '')
-      + '<span class="ft">' + esc(r.feature.text) + '</span>'
-      + '<span class="nums"><span class="pr">成功<b>' + pc(r.good) + '</b></span>' + (showRt ? '<span class="rt">' + esc(C.ui.ratingLabel) + '<b class="r' + r.rating + 'c">' + r.rating + '</b></span>' : '') + '</span></button>';
+  function cardHtml(c) {
+    const sel = result && result.order === c.order;
+    return '<button class="cd' + (c.as ? ' two' : '') + (sel ? ' sel' : '') + (DEV && lastEval && c.order === lastEval.best ? ' best' : '') + '" data-order="' + c.order + '"' + (c.as ? ' data-as="' + c.as + '"' : '') + (result ? ' disabled' : '') + '>'
+      + '<span class="nm">' + esc(c.name) + '</span>' + (c.sub ? '<span class="od">' + esc(c.sub) + '</span>' : '')
+      + '<span class="ft">' + esc(c.feature) + '</span>'
+      + '<span class="nums"><span class="pr">成功<b>' + pc(c.good) + '</b></span>' + (c.rating != null ? '<span class="rt">' + esc(C.ui.ratingLabel) + '<b class="r' + c.rating + 'c">' + c.rating + '</b></span>' : '') + '</span></button>';
   }
-  function cardsHtml() {
-    const rows = lastEval.rows.filter((r) => r.good != null);
-    if (S.card === 'two-choice') {
-      const t = A.twoChoice(lastEval);
-      return cardHtml(t.attack, { two: true, as: 'attack' }) + (t.safe ? cardHtml(t.safe, { two: true, as: 'safe' }) : '');
-    }
-    return rows.map((r) => cardHtml(r)).join('');
-  }
+  const cardsHtml = () => A.cardsOf(lastEval, S.card).map(cardHtml).join('');
   function barHtml() {
     const gear = '<button class="gear" id="gear" aria-label="設定">⚙</button>';
     if (result) {

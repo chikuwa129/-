@@ -87,20 +87,76 @@ test('得点期待値:走者が多いほど、アウトが少ないほど高い'
   for (let o = 0; o < 3; o++) { assert.ok(re[o * 8 + 7] > re[o * 8 + 1] && re[o * 8 + 1] > re[o * 8]); if (o < 2) assert.ok(re[o * 8] > re[(o + 1) * 8]); }
 });
 
-test('上限と下限:良い結果の確率は 90% を超えず、悪い結果の確率は 5% を下回らない(極端な能力でも)', () => {
+test('成功と失敗は補数(合計 1)。成功確率は 5〜90% に収まる(全場面×全指示。極端な能力を含む)', () => {
   const C = A.CONFIG.cap;
   const ext = [0, 150];
-  for (const side of ['bat', 'pitch']) for (const c of ext) for (const pw of ext) for (const v of ext) for (const ct of ext) for (const d of ext) {
-    const sc = A.makeScene({ side: side, outs: 1, bases: [50, null, 50], batter: { contact: c, power: pw, speed: c }, pitcher: { velocity: v, control: ct, breaking: v, quick: ct }, defense: d, arm: d });
+  const check = (sc, tag) => {
     for (const o of A.legalOrders(sc)) {
       const gb = A.goodBadOf(sc, o);
       if (!gb) continue;
-      assert.ok(gb.good <= C.goodMax + 1e-9, side + ' ' + o + ' 良 ' + gb.good);
-      assert.ok(gb.bad >= C.badMin - 1e-9, side + ' ' + o + ' 悪 ' + gb.bad);
+      assert.ok(Math.abs(gb.good + gb.bad - 1) < 1e-12, tag + ' ' + o + ' 補数');
+      assert.ok(gb.good <= C.max + 1e-9 && gb.good >= C.min - 1e-9, tag + ' ' + o + ' 成功 ' + gb.good);
+    }
+  };
+  for (const side of ['bat', 'pitch']) for (const c of ext) for (const pw of ext) for (const v of ext) for (const ct of ext) for (const d of ext) {
+    for (const bases of [[50, null, 50], [50, null, null], [null, 50, null]]) check(A.makeScene({ side: side, outs: 1, bases: bases, batter: { contact: c, power: pw, speed: c }, pitcher: { velocity: v, control: ct, breaking: v, quick: ct }, defense: d, arm: d }), side);
+  }
+  for (let i = 0; i < 300; i++) check(A.randomScene(i), 'seed' + i);
+  // 定義:打者は出塁が成功、投手はアウトが成功(単打は、投手の失敗)
+  assert.deepStrictEqual(A.CONFIG.goodBad.pitch.bad.slice().sort(), ['BB', 'HR', 'S', 'XB']);
+  for (const side of ['bat', 'pitch']) { const G = A.CONFIG.goodBad[side]; assert.deepStrictEqual(G.good.concat(G.bad).sort(), A.OUTCOMES.slice().sort(), side + ' 7つの結果を必ずどちらかに'); }
+});
+
+test('評価の写像(1〜7):通常が 4。得なら大きく、損なら小さく。範囲外は 1・7。投手は失点が小さいほど高い', () => {
+  const R = A.CONFIG.rating, st = R.step.ev;
+  assert.strictEqual(A.ratingOf(0, 'ev'), 4);
+  assert.strictEqual(A.ratingOf(st, 'ev'), 5); assert.strictEqual(A.ratingOf(2 * st, 'ev'), 6); assert.strictEqual(A.ratingOf(-st, 'ev'), 3);
+  assert.strictEqual(A.ratingOf(99, 'ev'), 7); assert.strictEqual(A.ratingOf(-99, 'ev'), 1);
+  assert.strictEqual(A.ratingOf(R.step.p1, 'p1'), 5);
+  for (let i = 0; i < 200; i++) {
+    const e = A.evaluate(A.randomScene(i)), n = e.rows.find((r) => r.order === 'normal');
+    assert.strictEqual(n.rating, 4, '通常は 4');
+    for (const r of e.rows) {
+      const better = e.rows[0] && (A.randomScene(i).side === 'pitch' ? r[e.metric] < n[e.metric] : r[e.metric] > n[e.metric]);
+      if (r.rating > 4) assert.ok(better, '得なのに 5 以上でない');
+      if (r.rating < 4) assert.ok(!better, '損なのに 3 以下でない');
     }
   }
 });
 
+test('表示の切り替えで、カードの内容が変わる(2択は、攻めと堅実が定義どおり)', () => {
+  for (let i = 0; i < 200; i++) {
+    const e = A.evaluate(A.randomScene(i)), rows = e.rows.filter((r) => r.good != null);
+    const ra = A.cardsOf(e, 'rating'), po = A.cardsOf(e, 'prob-only'), tw = A.cardsOf(e, 'two-choice');
+    assert.strictEqual(ra.length, rows.length); assert.ok(ra.every((c) => c.rating >= 1 && c.rating <= 7 && c.good != null && c.feature));
+    assert.strictEqual(po.length, rows.length); assert.ok(po.every((c) => c.rating == null), '成功確率だけ');
+    assert.strictEqual(tw.length, 2); assert.deepStrictEqual(tw.map((c) => c.as), ['attack', 'safe']);
+    assert.ok(tw.every((c) => c.sub && c.name !== c.sub), '実際の指示の名前');
+    const maxR = Math.max.apply(null, rows.map((r) => r.rating));
+    const att = rows.filter((r) => r.rating === maxR).reduce((a, b) => (b.good < a.good ? b : a));
+    assert.strictEqual(tw[0].order, att.order, '攻め=評価が最も高い(同じなら成功確率が低いほう)');
+    const safe = rows.filter((r) => r.order !== att.order).reduce((a, b) => (b.good > a.good ? b : a));
+    assert.strictEqual(tw[1].order, safe.order, '堅実=攻めを除いて成功確率が最も高い');
+  }
+});
+
+test('特徴の一言は、実際の確率の変化から作られる(確率を変えると、矢印が変わる)', () => {
+  const sc = A.makeScene({});
+  const f = (o) => A.evaluate(sc).rows.find((r) => r.order === o).feature;
+  assert.strictEqual(f('normal').text, A.CONFIG.feature.normal);
+  assert.ok(f('power').up.indexOf('K') >= 0 && f('contact').down.indexOf('K') >= 0, '長打狙いは三振↑、短打狙いは三振↓');
+  const keep = A.CONFIG.orders.bat.power;
+  try {
+    A.CONFIG.orders.bat.power = { BB: { m: 1 }, K: { m: -1 } };
+    const g = A.evaluate(A.makeScene({})).rows.find((r) => r.order === 'power').feature;
+    assert.ok(g.up.indexOf('BB') >= 0 && g.down.indexOf('K') >= 0 && /四球↑/.test(g.text) && /三振↓/.test(g.text), g.text);
+    A.CONFIG.orders.bat.power = {};
+    assert.strictEqual(A.evaluate(A.makeScene({})).rows.find((r) => r.order === 'power').feature.text, A.CONFIG.feature.flat, '変化がなければ「ほぼ同じ」');
+  } finally { A.CONFIG.orders.bat.power = keep; }
+  assert.ok(f('power').up.length <= A.CONFIG.feature.maxEach && f('power').down.length <= A.CONFIG.feature.maxEach);
+  const b = A.evaluate(A.makeScene({ outs: 0, bases: [50, null, null] })).rows.find((r) => r.order === 'bunt').feature;
+  assert.strictEqual(b.text, A.CONFIG.feature.mech.bunt, 'バントは仕組みの文');
+});
 test('事前勝率が範囲の外なら isKeyScene は false(勝負にならない試合)。戦力差のラベル', () => {
   const R = A.CONFIG.keyScene.success.winRange;
   const base = { inning: 8, hero: true, focus: true, bases: [null, 50, null], diff: 0 };
@@ -138,10 +194,25 @@ test('線画の部品が単独で動き、左右の反転が正しい(右と左�
     // 打席と投げは、別々に反転する
     const rl = ART.draw({ mode: mode, bats: 'R', throws: 'L' });
     assert.strictEqual(part(rl, 'batter').flip, '0'); assert.strictEqual(part(rl, 'pitcher').flip, '1');
-    assert.ok(/data-mode="/.test(rr) && (rr.match(/<path/g) || []).length <= 20, 'パスの数を抑える');
+    assert.ok(/data-mode="/.test(rr), 'data-mode');
+    for (const name of ['batter', 'pitcher']) { const n = (part(rr, name).body.match(/<path/g) || []).length; assert.ok(n <= 40, name + ' のパスの数 ' + n); }
   }
   const c = ART.draw({ mode: 'bat', color: '#123456', bg: '#abcdef' });
   assert.ok(c.indexOf('stroke="#123456"') >= 0 && c.indexOf('fill="#abcdef"') >= 0, '色の指定');
+});
+
+test('線画:人の形の要素(頭・首・胴・腕・脚・手・靴、帽子かヘルメット、道具)がそろう', () => {
+  const els = (svg, name) => { const m = svg.match(new RegExp('<g data-part="' + name + '"[^>]*>(.*?)</g>')); return new Set((m[1].match(/data-el="(\w+)"/g) || []).map((x) => x.slice(9, -1))); };
+  const need = (set, list, tag) => { for (const k of list) assert.ok(set.has(k), tag + ' に ' + k + ' がない'); };
+  const human = ['head', 'neck', 'torso', 'uniform', 'arm', 'leg', 'hand', 'shoe'];
+  const bat = ART.draw({ mode: 'bat' }), pit = ART.draw({ mode: 'pitch' });
+  need(els(bat, 'batter'), human.concat(['helmet', 'bat']), '打者(手前)');
+  need(els(bat, 'pitcher'), human.concat(['cap', 'glove', 'ball']), '投手(奥)');
+  need(els(pit, 'batter'), human.concat(['helmet', 'bat']), '打者(奥)');
+  need(els(pit, 'plate'), ['head', 'torso', 'leg', 'mask', 'mitt', 'plate'], '捕手');
+  need(els(pit, 'pitcher'), ['cap', 'uniform', 'arm', 'hand', 'ball', 'glove'], '自分の投手(手前。腕とグラブ)');
+  assert.ok(!/<circle|<line /.test(bat + pit), '輪郭は閉じた形(棒と丸だけで描かない)');
+  assert.notStrictEqual(ART.draw({ mode: 'bat', heads: 5 }), bat, '頭身の設定');
 });
 
 test('左右:同じシードで同じ割り当て。右の割合は設定どおり。確率の計算には使われない', () => {
@@ -171,15 +242,16 @@ test('傾向タグは、実際の能力から作られる(能力を変えると�
   assert.ok(A.probs(A.makeScene({ pitcher: { velocity: 50, control: 20, breaking: 50, quick: 50 } }), 'normal').BB > base.BB);
 });
 
-test('2段階の選び方:カードを押しただけでは進まず、「決定」で初めて結果になる', () => {
+test('1タップで確定:カードを押すと、すぐ結果(決定ボタンがない)。結果が出るまでは次へ進まない', () => {
   let s = A.uiStep(null, 'next');
-  s = A.uiStep(s, 'confirm'); assert.strictEqual(s.result, null, '選ぶ前の決定は無効');
-  s = A.uiStep(s, 'select', 'power'); assert.strictEqual(s.result, null); assert.strictEqual(s.sel, 'power');
-  s = A.uiStep(s, 'select', 'contact'); assert.strictEqual(s.result, null); assert.strictEqual(s.sel, 'contact');
-  s = A.uiStep(s, 'confirm'); assert.deepStrictEqual(s.result, { order: 'contact' });
-  s = A.uiStep(s, 'select', 'power'); assert.strictEqual(s.result.order, 'contact', '結果のあとは選び直せない');
+  assert.deepStrictEqual(A.uiStep(s, 'next'), s, '選ぶ前は進まない');
+  s = A.uiStep(s, 'pick', 'power'); assert.deepStrictEqual(s.result, { order: 'power' });
+  s = A.uiStep(s, 'pick', 'contact'); assert.strictEqual(s.result.order, 'power', '結果のあとは選び直せない');
   assert.deepStrictEqual(A.uiStep(s, 'next'), { sel: null, result: null });
   assert.deepStrictEqual(A.uiStep(A.uiStep(null, 'next'), 'auto').result, { order: 'normal', auto: true }, '勝負にならない試合');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'atbat.html'), 'utf8');
+  assert.ok(!/id="ok"|>決定</.test(html), '決定ボタンがない');
+  assert.ok(/resultMs/.test(html) && /setTimeout/.test(html), '結果のあと、自動で次へ');
 });
 
 // 本編のファイルが、試作の前後で変わっていない(タグ v-before-T1 と比べる)
@@ -189,9 +261,12 @@ test('本編の出力(play.html・play-hero.html)が、試作の前と一致す�
   let tagOk = true;
   try { cp.execFileSync('git', ['rev-parse', '-q', '--verify', 'refs/tags/v-before-T1'], { cwd: root, stdio: 'ignore' }); } catch (e) { tagOk = false; }
   if (!tagOk) { console.log('   (タグ v-before-T1 がないので、比較を省略)'); return; }
-  for (const f of ['play.html', 'play-hero.html']) {
-    const before = cp.execFileSync('git', ['show', 'v-before-T1:baseball-gacha/' + f], { cwd: root, encoding: 'utf8', maxBuffer: 64 << 20 });
-    assert.ok(before === fs.readFileSync(path.join(root, f), 'utf8'), f + ' が変わっている');
+  for (const tag of ['v-before-T1', 'v-before-T1d']) {
+    try { cp.execFileSync('git', ['rev-parse', '-q', '--verify', 'refs/tags/' + tag], { cwd: root, stdio: 'ignore' }); } catch (e) { console.log('   (タグ ' + tag + ' がないので、比較を省略)'); continue; }
+    for (const f of ['play.html', 'play-hero.html']) {
+      const before = cp.execFileSync('git', ['show', tag + ':baseball-gacha/' + f], { cwd: root, encoding: 'utf8', maxBuffer: 64 << 20 });
+      assert.ok(before === fs.readFileSync(path.join(root, f), 'utf8'), f + ' が ' + tag + ' から変わっている');
+    }
   }
 });
 

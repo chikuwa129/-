@@ -15,7 +15,7 @@ const pct = (v) => (v * 100).toFixed(1) + '%';
 // 1. 確率の健全性(極端な能力を含む)
 {
   const r = new A.Rng(7);
-  let bad = 0, n = 0, gMax = 0, bMin = 1;
+  let bad = 0, n = 0, gMax = 0, gMin = 1, notComp = 0;
   const vals = [0, 1, 50, 100, 150];
   for (let i = 0; i < 3000; i++) {
     const pick = () => (r.chance(0.3) ? vals[r.int(0, vals.length - 1)] : r.int(0, 150));
@@ -30,10 +30,10 @@ const pct = (v) => (v * 100).toFixed(1) + '%';
       if (['bunt', 'squeeze', 'steal'].indexOf(o) < 0) { const P = A.probs(sc, o); const s = A.OUTCOMES.reduce((a, k) => a + P[k], 0); okP = Math.abs(s - 1) < 1e-9 && A.OUTCOMES.every((k) => P[k] >= 0 && P[k] <= 1 && Number.isFinite(P[k])); }
       if (!okQ || !okP) bad++;
       const gb = A.goodBadOf(sc, o);
-      if (gb) { gMax = Math.max(gMax, gb.good); bMin = Math.min(bMin, gb.bad); }
+      if (gb) { gMax = Math.max(gMax, gb.good); gMin = Math.min(gMin, gb.good); if (Math.abs(gb.good + gb.bad - 1) > 1e-12) notComp++; }
     }
   }
-  global.__cap = { gMax: gMax, bMin: bMin, n: n };
+  global.__cap = { gMax: gMax, gMin: gMin, n: n, notComp: notComp };
   log('## 1. 確率の健全性\n' + n + ' 通り(能力 0〜150 の極端な値を含む)。0〜1 の外、または合計が 1 でないもの:' + bad + ' 件');
   sum.push('1. 確率の健全性:' + (bad ? '✕ ' + bad + '件' : '✓') + '(' + n + '通り)');
 }
@@ -43,6 +43,7 @@ const pct = (v) => (v * 100).toFixed(1) + '%';
   const scenes = A.SCENES.concat(Array.from({ length: 200 }, (_, i) => A.randomScene(1000 + i)));
   const res = { bat: {}, pitch: {} }, resEv = { bat: {}, pitch: {} }, tot = { bat: 0, pitch: 0 }, legal = { bat: {}, pitch: {} };
   let inRange = 0, inN = 0, gbBest = 0;
+  const rDist = {}, rTop = { bat: {}, pitch: {} }, rTopF = { bat: {}, pitch: {} }; let rN = 0, tie = 0, dom = 0, sMin = 1, sMax = 0;
   const lines = [];
   for (const sc of scenes) {
     const e = A.evaluate(sc);
@@ -53,6 +54,12 @@ const pct = (v) => (v * 100).toFixed(1) + '%';
     // 7:良い結果の確率が 20〜80% に入るか(指示ごと)/ 9:良い結果の確率が最も高い指示が、最善でもあるか
     const def = e.rows.filter((r) => r.good != null);
     for (const r of def) { inN++; if (r.good >= 0.2 && r.good <= 0.8) inRange++; }
+    for (const r of def) { rDist[r.rating] = (rDist[r.rating] || 0) + 1; rN++; sMin = Math.min(sMin, r.good); sMax = Math.max(sMax, r.good); }
+    // 評価が最も高い指示(同じ評価が複数なら、それぞれ数える)。2択の「堅実」が、攻めに劣る場面
+    const mx = Math.max.apply(null, def.map((r) => r.rating)), tops = def.filter((r) => r.rating === mx);
+    if (tops.length > 1) tie++;
+    for (const r of tops) { rTop[s][r.order] = (rTop[s][r.order] || 0) + 1; rTopF[s][r.order] = (rTopF[s][r.order] || 0) + 1 / tops.length; }
+    if (A.twoChoice(e).dominated) dom++;
     const topGood = def.reduce((a, b) => (b.good > a.good ? b : a), def[0]);
     if (topGood && topGood.order === e.best) gbBest++;
     const pick = s === 'pitch' ? (a, b) => (b.ev < a.ev ? b : a) : (a, b) => (b.ev > a.ev ? b : a);
@@ -76,6 +83,21 @@ const pct = (v) => (v * 100).toFixed(1) + '%';
   }
   const all = tot.bat + tot.pitch;
   global.__g = { inRange: inRange / inN, gbBest: gbBest / all };
+  // T1d:評価(1〜7)
+  const dist = [1, 2, 3, 4, 5, 6, 7].map((k) => k + ':' + pct((rDist[k] || 0) / rN)).join(' ');
+  const four = (rDist[4] || 0) / rN;
+  log('## 10. 評価(1〜7)の分布(場面×指示 ' + rN + ' 通り。通常の指示を含む):' + dist + '。4 の割合 ' + pct(four) + (four <= 0.5 ? ' ✓' : ' ✕') + '(段階:得点期待値 ' + A.CONFIG.rating.step.ev + '点、1点以上の確率 ' + (A.CONFIG.rating.step.p1 * 100) + 'ポイント)');
+  sum.push('10. 評価の分布:' + dist + '。4 が ' + pct(four) + (four <= 0.5 ? ' ✓' : ' ✕'));
+  for (const s of ['bat', 'pitch']) {
+    const t = Object.keys(legal[s]).map((k) => { const v = (rTopF[s][k] || 0) / legal[s][k]; return k + ' ' + pct(v) + (v >= 0.1 && v <= 0.4 ? '✓' : '✕'); });
+    const t2 = Object.keys(legal[s]).map((k) => k + ' ' + pct((rTop[s][k] || 0) / legal[s][k]));
+    log('11. 評価が最も高い指示の割合(' + s + '・使える場面のうち。同じ評価が n 個なら 1/n ずつ数える。目標 10〜40%):' + t.join('、') + '\n  参考:同じ評価を、それぞれ 1 と数えた場合:' + t2.join('、'));
+    sum.push('11. 評価が最高の指示(' + (s === 'bat' ? '野手' : '投手') + '):' + t.join('、'));
+  }
+  log('12. 評価が最高の指示が、複数ある場面:' + pct(tie / all) + '(' + tie + '/' + all + '。報告のみ)');
+  log('13. 2択で「堅実」が、成功確率でも評価でも「攻め」を上回らない場面:' + pct(dom / all) + '(' + dom + '/' + all + '。報告のみ)');
+  log('14. カードの成功確率の範囲:' + pct(sMin) + '〜' + pct(sMax) + '(5〜90% に収める)');
+  sum.push('12. 評価が最高の指示が複数ある場面:' + pct(tie / all) + ' / 13. 2択で堅実が攻めに劣る場面:' + pct(dom / all) + ' / 14. 成功確率の範囲:' + pct(sMin) + '〜' + pct(sMax));
   log('### 場面の一覧(最善の指示と、指示ごとの得点期待値 / 1点以上の確率%)\n' + lines.join('\n'));
 }
 
@@ -129,15 +151,16 @@ const pct = (v) => (v * 100).toFixed(1) + '%';
   sum.push('5. 中位どうし1000打席:' + t + '。9回あたり約 ' + (re[0] * 9).toFixed(2) + '点');
 }
 
-// 7〜9. 良い結果・悪い結果の確率
+// 7〜9. 成功確率(T1d:成功と失敗は補数。投手の失敗に単打を入れた)。T1c の値(旧定義)と並べる
 {
-  const g = global.__g, c = global.__cap;
-  log('## 7. 良い結果の確率が 20〜80% に入る割合(場面×指示):' + pct(g.inRange) + (g.inRange >= 0.6 ? ' ✓' : ' ✕'));
-  log('## 8. 良い結果の確率の最大 ' + pct(c.gMax) + '(上限 ' + pct(A.CONFIG.cap.goodMax) + ')、悪い結果の確率の最小 ' + pct(c.bMin) + '(下限 ' + pct(A.CONFIG.cap.badMin) + ')。' + c.n + '通り(極端な能力を含む)');
-  log('## 9. 良い結果の確率が最も高い指示が、最善でもある場面の割合:' + pct(g.gbBest) + (g.gbBest <= 0.6 ? ' ✓' : ' ✕'));
-  sum.push('7. 良い結果の確率が20〜80%:' + pct(g.inRange) + (g.inRange >= 0.6 ? ' ✓' : ' ✕'));
-  sum.push('8. 上限と下限:良い結果の最大 ' + pct(c.gMax) + '、悪い結果の最小 ' + pct(c.bMin) + (c.gMax <= A.CONFIG.cap.goodMax + 1e-9 && c.bMin >= A.CONFIG.cap.badMin - 1e-9 ? ' ✓' : ' ✕'));
-  sum.push('9. 良い結果の確率が最も高い指示=最善:' + pct(g.gbBest) + (g.gbBest <= 0.6 ? ' ✓' : ' ✕'));
+  const g = global.__g, c = global.__cap, old = { r7: '88.3%', r8: '良い結果の最大 90.0%、悪い結果の最小 5.0%', r9: '51.2%' };
+  const ok8 = c.gMax <= A.CONFIG.cap.max + 1e-9 && c.gMin >= A.CONFIG.cap.min - 1e-9 && !c.notComp;
+  log('## 7. 成功確率が 20〜80% に入る割合(場面×指示):' + pct(g.inRange) + (g.inRange >= 0.6 ? ' ✓' : ' ✕') + '(T1c:' + old.r7 + ')');
+  log('## 8. 成功確率の最大 ' + pct(c.gMax) + '、最小 ' + pct(c.gMin) + '(範囲 ' + pct(A.CONFIG.cap.min) + '〜' + pct(A.CONFIG.cap.max) + ')。補数でないもの ' + c.notComp + ' 件。' + c.n + '通り(極端な能力を含む)(T1c:' + old.r8 + ')');
+  log('## 9. 成功確率が最も高い指示が、最善でもある場面の割合:' + pct(g.gbBest) + (g.gbBest <= 0.6 ? ' ✓' : ' ✕') + '(T1c:' + old.r9 + ')');
+  sum.push('7. 成功確率が20〜80%:' + pct(g.inRange) + (g.inRange >= 0.6 ? ' ✓' : ' ✕') + '(T1c ' + old.r7 + ')');
+  sum.push('8. 成功確率の範囲:最大 ' + pct(c.gMax) + '、最小 ' + pct(c.gMin) + '、補数 ' + (c.notComp ? '✕' : '✓') + (ok8 ? ' ✓' : ' ✕') + '(T1c ' + old.r8 + ')');
+  sum.push('9. 成功確率が最も高い指示=最善:' + pct(g.gbBest) + (g.gbBest <= 0.6 ? ' ✓' : ' ✕') + '(T1c ' + old.r9 + ')');
 }
 
 // 6. 同じシードで同じ結果
@@ -156,6 +179,6 @@ const pct = (v) => (v * 100).toFixed(1) + '%';
 }
 
 const file = path.join(__dirname, 'atbat-sim-result.txt');
-fs.writeFileSync(file, '# 打席の試作(T1)の検証の出力\n\n## 要約\n' + sum.join('\n') + '\n\n' + out.join('\n\n') + '\n');
+fs.writeFileSync(file, '# 打席の試作(T1〜T1d)の検証の出力\n\n## 要約\n' + sum.join('\n') + '\n\n' + out.join('\n\n') + '\n');
 console.log(sum.join('\n'));
 console.log('全出力:' + path.relative(process.cwd(), file));

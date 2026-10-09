@@ -488,6 +488,14 @@
     const out = hit.slice(0, T.max).map((t) => t.word);
     return out.length ? out : ['平均的'];
   }
+  // カードの中身(表示の切り替え):mode は 'rating' | 'prob-only' | 'two-choice'。
+  //   戻り値:[{ order, name, sub(2択のときの実際の指示の名前), feature, good(成功確率), rating(prob-only は null), as('attack'|'safe') }]
+  function cardsOf(ev, mode, cfg) {
+    const C = cfg || CONFIG;
+    const card = (r, as) => ({ order: r.order, name: as ? C.ui.two[as] : r.label, sub: as ? r.label : null, feature: r.feature.text, good: r.good, rating: mode === 'prob-only' ? null : r.rating, as: as || null });
+    if (mode === 'two-choice') { const t = twoChoice(ev); return [card(t.attack, 'attack')].concat(t.safe ? [card(t.safe, 'safe')] : []); }
+    return ev.rows.filter((r) => r.good != null).map((r) => card(r));
+  }
   // 画面の手順(1タップで確定):pick でカードを押すと、すぐ結果。auto は勝負にならない試合(通常)。next で次へ(結果が出るまでは進まない)
   function uiStep(st, action, arg) {
     const s = Object.assign({ sel: null, result: null }, st);
@@ -549,7 +557,7 @@
   return {
     CONFIG: CONFIG, OUTCOMES: OUTCOMES, OUTCOME_LABEL: OUTCOME_LABEL, ORDER_LABEL: ORDER_LABEL, PRESETS: PRESETS, SCENES: SCENES,
     Rng: Rng, probs: probs, orderBranches: orderBranches, legalOrders: legalOrders, reTable: reTable, reOf: reOf, p1Table: p1Table, p1Of: p1Of, expectOrderP1: expectOrderP1, expectOrder: expectOrder,
-    evaluate: evaluate, ratingOf: ratingOf, featureOf: featureOf, twoChoice: twoChoice, resolve: resolve, goodBadOf: goodBadOf, gameWinProb: gameWinProb, strengthLabel: strengthLabel, inWinRange: inWinRange, makeScene: makeScene, randomScene: randomScene, handsOf: handsOf, tagsOf: tagsOf, uiStep: uiStep, isKeyScene: isKeyScene,
+    evaluate: evaluate, ratingOf: ratingOf, featureOf: featureOf, twoChoice: twoChoice, cardsOf: cardsOf, resolve: resolve, goodBadOf: goodBadOf, gameWinProb: gameWinProb, strengthLabel: strengthLabel, inWinRange: inWinRange, makeScene: makeScene, randomScene: randomScene, handsOf: handsOf, tagsOf: tagsOf, uiStep: uiStep, isKeyScene: isKeyScene,
     buntP: buntP, squeezeP: squeezeP, stealP: stealP, rankOf: rankOf, kmh: kmh, breakTotal: breakTotal,
   };
 });
