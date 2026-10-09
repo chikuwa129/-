@@ -111,11 +111,11 @@
       maxKeys: 2,          // 1試合の介入の上限(先の2つで止まる。以降は「通常」で自動)
       priorN: 300,         // 事前勝率の見積もり:同じ編成で、自動の試合を priorN 回(別系統の乱数)。引き分けは 0.5 勝
       jitter: 10,          // 編成の能力のばらつき(±)
-      // チームの強さのプリセット(打者9人の基準、先発投手、守備・肩)
+      // チームの強さのプリセット(打者9人の基準、先発投手、守備・肩)。強いと弱いの差は、事前勝率の多くが 30〜80% に入る程度(T1e で調整)
       teams: {
-        strong: { bat: { contact: 64, power: 60, speed: 58 }, pit: { velocity: 66, control: 64, breaking: 62, quick: 55 }, def: 60 },
+        strong: { bat: { contact: 57, power: 56, speed: 55 }, pit: { velocity: 58, control: 57, breaking: 56, quick: 53 }, def: 55 },
         normal: { bat: { contact: 50, power: 50, speed: 50 }, pit: { velocity: 50, control: 50, breaking: 50, quick: 50 }, def: 50 },
-        weak:   { bat: { contact: 37, power: 35, speed: 42 }, pit: { velocity: 36, control: 38, breaking: 36, quick: 45 }, def: 40 },
+        weak:   { bat: { contact: 43, power: 44, speed: 45 }, pit: { velocity: 42, control: 43, breaking: 44, quick: 47 }, def: 45 },
       },
       // 介入場面の条件(isKeyScene の形)。野手のモードは自分の打席すべて、投手のモードは7回以降のピンチ(得点圏・点差3以内)
       key: { bat: { who: 'all', minInning: 1, chance: false }, pitch: { pinch: true, maxDiff: 3, minInning: 7 }, winRange: [0.3, 0.8] },
