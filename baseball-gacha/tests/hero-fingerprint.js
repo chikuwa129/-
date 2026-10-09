@@ -3,6 +3,7 @@
 //   node tests/hero-fingerprint.js > tests/fixtures/h12-fingerprint.json で、基準を作り直せる(H1.2 の時点で作成済み)
 //   node tests/hero-fingerprint.js stories > tests/fixtures/h13-fingerprint.json は、物語の文面も含める(H1.3 の時点で作成済み。
 //   H1.4 のライバルの旧方式 'strongest' が、H1.3 と完全に一致することの確認用)
+//   node tests/hero-fingerprint.js stories+stats+games 10 > tests/fixtures/h15b-fingerprint.json は、H1.6a の途中出場を無効にしたときの一致の確認用(H1.5b の時点で作成済み)
 //   node tests/hero-fingerprint.js stories 20 > tests/fixtures/h14b-fingerprint.json は、H1.5a の roster.version 'legacy' の確認用(H1.4b の時点で作成済み)
 const path = require('path');
 const Logic = require(path.join(__dirname, '..', 'logic.js'));
@@ -32,10 +33,11 @@ function fingerprint(i, opts) {
   }
   Hero.startPlay(st);
   const games = [];
+  const glog = [];   // opts.games:試合ごとの「年:勝敗:得点:失点」(H1.6a の確認用)
   for (let guard = 0; st.hero.phase === 'play' && guard < 200; guard++) {
     Hero.advance(st, 'event');
     for (const m of st.lastEvents || []) {
-      for (const c of m.cards || []) if (c.type === 'tournament' && c.games) for (const g of c.games) games.push((g.win ? 'W' : 'L') + (g.box ? g.box.my : ''));
+      for (const c of m.cards || []) if (c.type === 'tournament' && c.games) for (const g of c.games) { games.push((g.win ? 'W' : 'L') + (g.box ? g.box.my : '')); if (g.box) glog.push(m.year + ':' + (g.win ? 'W' : 'L') + ':' + g.box.my + ':' + g.box.opp); }
       for (const g of m.practice || []) games.push((g.win ? 'w' : 'l') + (g.box ? g.box.my : ''));
     }
   }
@@ -45,6 +47,8 @@ function fingerprint(i, opts) {
     people: hash(people.sort().join('|')),
     rng: st.rngState, heroRng: st.hero.rng, phase: st.hero.phase,
   };
+  if (opts.stats) out.stats = hash(st.players.concat(st.alumni || []).map((p) => p.id + ':' + JSON.stringify((p.stats && p.stats.career) || {})).sort().join('|'));
+  if (opts.games) out.glog = glog;
   if (opts.stories) {
     const H = st.hero;
     out.rivalId = H.rivalId;
@@ -56,7 +60,8 @@ function fingerprint(i, opts) {
 if (require.main === module) {
   const out = [];
   const n = Number(process.argv[3] || 100);
-  for (let i = 0; i < n; i++) out.push(fingerprint(i, { stories: process.argv[2] === 'stories' }));
+  const mode = process.argv[2] || '';
+  for (let i = 0; i < n; i++) out.push(fingerprint(i, { stories: /stories/.test(mode), stats: /stats/.test(mode), games: /games/.test(mode) }));
   console.log(JSON.stringify(out));
 }
 module.exports = { fingerprint: fingerprint, N: 100 };

@@ -396,7 +396,7 @@
 
     // ---- 新入部員モード(hero.html / play-hero.html)。数値はすべて仮の値。育成監督モードでは使わない ----
     heroMode: {
-      saveVersion: 9,               // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5、H1.4b で 6:卒業待ち、H1.5a で 7:ピックアップ、H1.4c で 8:月ごとのスタメン、H1.5b で 9:救援)
+      saveVersion: 10,              // 保存キー bbgacha_hero_v{saveVersion}_*(H1.1 で 2、H1.2 で 3、H1.4 で 4、H1.3b で 5、H1.4b で 6:卒業待ち、H1.5a で 7:ピックアップ、H1.4c で 8:月ごとのスタメン、H1.5b で 9:救援、H1.6a で 10:途中出場)
       seedSalt: 0x4e52b1d3,         // このモード専用の乱数(引き直し・主人公の作成・物語の文面・転向と再起の抽選)
       rerollMax: 2,                 // 新入部員の一覧の引き直しの回数
       stopOnStory: true,            // 主人公の山場の物語で、自動進行を止める
@@ -457,6 +457,17 @@
       entrancePickTop: 5,           // ピックアップのうち、総合値の上位から選ぶ人数(残りは無作為)
       ui: { progressBar: 'bottom' },   // 進行ボタンのバー:'bottom' 下に固定 / 'top' 上に固定 / 'inline' 固定しない(H1.4b の表示)
       newYearOthersOpen: 5,         // 新年度の画面:上位3人以外の新入生がこの人数を超えたら、折りたたみにする
+      // 途中出場(代打・代走・守備固め)と盗塁(H1.6a)。試合結果のあとに、個人の起用と成績を割り当てる層。すべて仮の値
+      substitute: {
+        enabled: true,              // false で、H1.5b と完全に同じ
+        expMult: 0.25,              // 途中出場の試合経験値(スタメンの何倍か)
+        phChance: 0.35, phProb: 0.7, phMargin: 5, phMax: 2,     // 代打:得点のない終盤の回で走者がいる確率 / 起用の確率 / 打者よりミート・パワーが何以上高いか / 1試合の上限
+        prDiff: 1, prProb: 0.6, prMargin: 10, prMax: 1,           // 代走:点差がこれ以内 / 起用の確率 / 走者より走力が何以上高いか / 1試合の上限(仕様の仮値2。1人に絞る)
+        defLead: 3, defProb: 0.7, defMargin: 8, defMax: 2,        // 守備固め:リードがこれ以内 / 起用の確率 / 適性が何以上高いか / 1試合の上限
+        sbPivot: 50, sbTryBase: 0.08, sbTryPer: 0.004, sbTryMax: 0.45,   // 盗塁の試行(塁に出たとき)= base + (走力 − pivot) × per
+        sbOkBase: 0.65, sbOkPer: 0.006, sbOkMin: 0.3, sbOkMax: 0.95,     // 盗塁の成功率
+        clutchHits: 3,              // 「代打の切り札」のひとこと:代打の安打数がこの回数に達したとき(1回だけ)
+      },
       totals: { minAb: 20, minOuts: 27 },   // 卒業の通算成績:打数・アウト数がこれ未満なら「参考」と添える
       // スタメン表・部員名簿の指標と、主人公の打順の変化のひとこと
       lineup: {
@@ -846,6 +857,24 @@
     ['heroMode.lineup.orderChangeMin', 'hero', '主人公の打順の変化:これ以上動いた月だけ、ひとことにする'],
     ['heroMode.lineup.orderChangeMax', 'hero', '主人公の打順の変化のひとこと:1年あたりの上限'],
     ['heroMode.lineup.reasonMonths', 'hero', '打順が上がった理由(ランクの上昇)を、記録で確かめる期間(か月)'],
+    ['heroMode.substitute.enabled', 'hero', '途中出場(代打・代走・守備固め)と盗塁(オン/オフ。オフで H1.5b と同じ)'],
+    ['heroMode.substitute.expMult', 'hero', '途中出場の試合経験値(スタメンの何倍か)'],
+    ['heroMode.substitute.phChance', 'hero', '代打:得点のない終盤の回で、走者がいる場面になる確率'],
+    ['heroMode.substitute.phProb', 'hero', '代打:条件を満たしたときに起用する確率'],
+    ['heroMode.substitute.phMargin', 'hero', '代打:控えのミート・パワーが打者より何以上高いか'],
+    ['heroMode.substitute.phMax', 'hero', '代打:1試合の上限'],
+    ['heroMode.substitute.prDiff', 'hero', '代走:点差がこれ以内のとき'],
+    ['heroMode.substitute.prProb', 'hero', '代走:起用する確率'],
+    ['heroMode.substitute.prMargin', 'hero', '代走:控えの走力が走者より何以上高いか'],
+    ['heroMode.substitute.defLead', 'hero', '守備固め:リードがこれ以内のとき'],
+    ['heroMode.substitute.defProb', 'hero', '守備固め:起用する確率'],
+    ['heroMode.substitute.defMargin', 'hero', '守備固め:控えの適性が守っている選手より何以上高いか'],
+    ['heroMode.substitute.defMax', 'hero', '守備固め:1試合の上限'],
+    ['heroMode.substitute.sbTryBase', 'hero', '盗塁:塁に出たときの試行の確率(走力50)'],
+    ['heroMode.substitute.sbTryPer', 'hero', '盗塁:走力1あたりの試行の確率の増え方'],
+    ['heroMode.substitute.sbOkBase', 'hero', '盗塁:成功率(走力50)'],
+    ['heroMode.substitute.sbOkPer', 'hero', '盗塁:走力1あたりの成功率の増え方'],
+    ['heroMode.substitute.clutchHits', 'hero', '「代打の切り札」のひとこと:代打の安打数がこの回数に達したとき'],
     ['heroMode.totals.minAb', 'hero', '卒業の通算成績:打数がこれ未満なら打率に「参考」と添える'],
     ['heroMode.totals.minOuts', 'hero', '卒業の通算成績:アウト数がこれ未満なら防御率に「参考」と添える'],
     ['heroMode.rival.revealAtGraduation', 'hero', '卒業のときに、ライバルの素質を明かす(オン/オフ)'],

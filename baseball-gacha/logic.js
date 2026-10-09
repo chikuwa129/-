@@ -1194,7 +1194,8 @@
       my: result.my, opp: result2.opp, win: result.win,
       line: hp ? hp.line : { my: spread(result.my), opp: spread(result2.opp) },
       unearned: unearned,
-      batters: bat.filter((b) => b.pos !== 'P' || b.g.pa > 0).map((b) => ({ id: b.p.id, name: b.p.name, num: b.num, pos: b.pos, ab: b.g.ab, h: b.g.h, hr: b.g.hr, rbi: b.g.rbi })),
+      batters: bat.filter((b) => b.pos !== 'P' || b.g.pa > 0).map((b) => (opts && opts.withBB ? { id: b.p.id, name: b.p.name, num: b.num, pos: b.pos, ab: b.g.ab, h: b.g.h, hr: b.g.hr, rbi: b.g.rbi, bb: b.g.bb }
+        : { id: b.p.id, name: b.p.name, num: b.num, pos: b.pos, ab: b.g.ab, h: b.g.h, hr: b.g.hr, rbi: b.g.rbi })),
       pitcher: pit ? { id: pit.p.id, name: pit.p.name, outs: pit.g.outs, runs: result2.opp, win: result.win } : null,
     };
     if (result2 !== result) { box.oppBase = result.opp; box.shift = result.opp - result2.opp; }
@@ -1362,6 +1363,106 @@
       legacyReliefId: ip < 9 ? ((o.bench || []).find((p) => p && p.id !== pit.p.id && p.position === 'P') || { id: null }).id : null,
     };
   }
+  // ---------- H1.6a:途中出場の起用(新入部員モードの大会だけ) ----------
+  //   試合結果(勝敗・得点・失点)は先に決まっている。その結果に合わせて、終盤の代打・代走・守備固めと盗塁を割り当てる「後付けの層」
+  //   チーム合計は変えない:代打の打数・安打は、交代した打者の記録から移す(安打は、代打の能力で抽選し、移せる安打がないときは凡打)
+  //   乱数は専用(state.hero.subRng)。経験値は、途中出場した選手にスタメンの expMult 倍(expBase = その試合のスタメンの経験値)
+  function emptySubLine() { return { subG: 0, phAb: 0, phH: 0, prG: 0, defG: 0, sbA: 0, sbS: 0 }; }
+  function subLinesFor(p, year) {
+    if (!p.subStats) p.subStats = { career: emptySubLine(), byYear: {} };
+    if (!p.subStats.byYear[year]) p.subStats.byYear[year] = emptySubLine();
+    return [p.subStats.career, p.subStats.byYear[year]];
+  }
+  function substituteLayer(state, box, bench, expBase) {
+    const C = CONFIG.heroMode.substitute;
+    const H = state.hero;
+    const rr = new Rng(H.subRng != null ? H.subRng : hashSeed(state.seed ^ 0x1d872b41, 0x5bd1e995));
+    const year = state.year;
+    const byId_ = (id) => state.players.find((p) => p.id === id);
+    const batters = (box.batters || []).map((b) => ({ b: b, p: byId_(b.id) })).filter((x) => x.p);
+    const used = new Set();
+    const pool = (bench || []).filter((p) => !p.retired && !used.has(p.id));
+    const free = () => pool.filter((p) => !used.has(p.id));
+    const subs = [];
+    const addLine = (p, f) => { for (const l of subLinesFor(p, year)) f(l); };
+    const bat = (p) => (effAbility(p.abilities.contact) + effAbility(p.abilities.power)) / 2;
+    const spd = (p) => effAbility(p.abilities.speed);
+    const sbTry = (p) => clamp(C.sbTryBase + (spd(p) - C.sbPivot) * C.sbTryPer, 0, C.sbTryMax);
+    const sbOk = (p) => clamp(C.sbOkBase + (spd(p) - C.sbPivot) * C.sbOkPer, C.sbOkMin, C.sbOkMax);
+    const lineMy = (box.line && box.line.my) || [];
+    const diff = box.my - box.opp;
+    // 代打:7〜9回の各回、走者がいる場面(その回に得点があれば必ず、なければ phChance)で、下位打線(6〜9番)の打者に回る
+    for (let inn = 6; inn < 9 && subs.filter((x) => x.role === 'ph').length < C.phMax; inn++) {
+      if (!(lineMy[inn] > 0 || rr.chance(C.phChance))) continue;
+      const cands = batters.filter((x) => x.b.num >= 6 && x.b.ab > 0 && !used.has(x.b.id));
+      if (!cands.length) continue;
+      const t = cands[Math.floor(rr.next() * cands.length)];
+      const best = free().filter((p) => p.position !== 'P' || isTwoWayKnown(p)).sort((a, b) => bat(b) - bat(a) || a.id - b.id)[0];
+      if (!best || bat(best) < bat(t.p) + C.phMargin || !rr.chance(C.phProb)) continue;
+      // 1打席を移す:安打は代打の能力で抽選(移せる安打がないときは凡打)。凡打を移せないときは安打を移す
+      const pHit = clamp(CONFIG.stats.hit.base + (effAbility(best.abilities.contact) - CONFIG.stats.hit.pivot) * CONFIG.stats.hit.perContact, CONFIG.stats.hit.min, CONFIG.stats.hit.max);
+      let hit = rr.chance(pHit) && t.b.h > t.b.hr;
+      if (!hit && t.b.ab - t.b.h <= 0) hit = true;
+      if (hit && t.b.h - t.b.hr <= 0 && t.b.ab - t.b.h > 0) hit = false;
+      if (hit && t.b.h - t.b.hr <= 0) continue;   // 移せる単打も凡打もない
+      t.b.ab--; if (hit) t.b.h--;
+      for (const l of statLinesFor(t.p, year)) { l.ab--; l.pa--; if (hit) l.h--; }
+      used.add(best.id); used.add(t.b.id);
+      addLine(best, (l) => { l.subG++; l.phAb++; if (hit) l.phH++; });
+      subs.push({ id: best.id, name: best.name, role: 'ph', inn: inn + 1, for: t.b.id, ab: 1, h: hit ? 1 : 0 });
+    }
+    // 代走:7回以降、点差1点以内。塁に出た打者のうち、いちばん足の遅い選手に
+    let prFor = null;
+    if (Math.abs(diff) <= C.prDiff && rr.chance(C.prProb)) {
+      const onb = batters.filter((x) => x.b.pos !== 'P' && (x.b.h + (x.b.bb || 0)) > 0 && !used.has(x.b.id)).sort((a, b) => spd(a.p) - spd(b.p) || a.b.id - b.b.id)[0];
+      const best = onb ? free().sort((a, b) => spd(b) - spd(a) || a.id - b.id)[0] : null;
+      if (onb && best && spd(best) >= spd(onb.p) + C.prMargin) {
+        used.add(best.id); used.add(onb.b.id);
+        prFor = { runner: best, from: onb.b.id };
+        addLine(best, (l) => { l.subG++; l.prG++; });
+        subs.push({ id: best.id, name: best.name, role: 'pr', inn: 7 + Math.floor(rr.next() * 3), for: onb.b.id, sbA: 0, sbS: 0 });
+      }
+    }
+    // 守備固め:8回以降、自校が 1〜defLead 点リード(勝った試合)。そのポジションの適性が、守っている選手より defMargin 以上高い控え
+    for (let k = 0; k < C.defMax && box.win && diff >= 1 && diff <= C.defLead && rr.chance(C.defProb); k++) {
+      let pick = null;
+      for (const x of batters) {
+        if (x.b.pos === 'P' || used.has(x.b.id)) continue;
+        const cur = aptitude(x.p, x.b.pos);
+        for (const p of free()) {
+          if (p.position === 'P' && !isTwoWayKnown(p)) continue;
+          const gain = aptitude(p, x.b.pos) - cur;
+          if (gain >= C.defMargin && (!pick || gain > pick.gain || (gain === pick.gain && p.id < pick.p.id))) pick = { p: p, x: x, gain: gain };
+        }
+      }
+      if (!pick) break;
+      used.add(pick.p.id); used.add(pick.x.b.id);
+      addLine(pick.p, (l) => { l.subG++; l.defG++; });
+      subs.push({ id: pick.p.id, name: pick.p.name, role: 'def', inn: 8 + Math.floor(rr.next() * 2), for: pick.x.b.id, pos: pick.x.b.pos });
+    }
+    // 盗塁:塁に出た回数(安打 − 本塁打 + 四球)ごとに、走力で試行と成功を決める。代走が出たら、その1回は代走の選手
+    const sb = [];
+    const steal = (p, n) => { let a = 0, ok = 0; for (let i = 0; i < n; i++) if (rr.chance(sbTry(p))) { a++; if (rr.chance(sbOk(p))) ok++; } return { a: a, s: ok }; };
+    for (const x of batters) {
+      let n = x.b.h - x.b.hr + (x.b.bb || 0);
+      if (prFor && prFor.from === x.b.id && n > 0) n--;
+      if (n <= 0) continue;
+      const r = steal(x.p, n);
+      if (r.a) { sb.push({ id: x.b.id, a: r.a, s: r.s }); addLine(x.p, (l) => { l.sbA += r.a; l.sbS += r.s; }); }
+    }
+    if (prFor) {
+      const r = steal(prFor.runner, 1);
+      const e = subs.find((x) => x.role === 'pr');
+      e.sbA = r.a; e.sbS = r.s;
+      if (r.a) { sb.push({ id: prFor.runner.id, a: r.a, s: r.s }); addLine(prFor.runner, (l) => { l.sbA += r.a; l.sbS += r.s; }); }
+    }
+    // 経験値(途中出場した選手。スタメンの経験値 × expMult)
+    if (C.expMult > 0) for (const e of subs) { const p = byId_(e.id); if (p) gainExp(p, expBase * C.expMult, 1); }
+    box.subs = subs;
+    box.sb = sb;
+    H.subRng = rr.s;
+  }
+
   // 新入部員モード:先発の投球回と救援の候補(控えの本職の投手を総合値の高い順。reliefMax > 1 なら、ベンチ入りの二刀流も)
   //   practiceRot:練習試合の救援の順番({ i })。省くと大会(重みの抽選)
   function heroPitchOpts(state, starters, final, practiceRot) {
@@ -1544,6 +1645,7 @@
     heroInnings: heroInnings,
     heroRunsAllowed: heroRunsAllowed,
     isV2: isV2,
+    emptySubLine: emptySubLine,
     drawInitialRating: drawInitialRating,
     rosterCap: () => CONFIG.newcomers.rosterCap,
   };
@@ -2615,7 +2717,9 @@
       // 簡易成績(成績専用の乱数を使う)
       const before = members_.map((p) => statLinesFor(p, state.year)[1]).map((l) => [l.ab, l.h]);
       const hpo = heroPitchOpts(state, members_, r === T.rounds);
-      const rg = recordGameStats(srng, state.year, slots, order, res, hpo ? { heroPitch: hpo } : undefined);
+      const subOn = !!(state.hero && CONFIG.heroMode.substitute && CONFIG.heroMode.substitute.enabled);
+      const rg = recordGameStats(srng, state.year, slots, order, res, hpo ? (subOn ? { heroPitch: hpo, withBB: true } : { heroPitch: hpo }) : undefined);
+      if (subOn) substituteLayer(state, rg.box, bench, X.starter * mult);   // H1.6a:途中出場(代打・代走・守備固め)と盗塁の、個人への配分の層
       if (rg.box.opp !== res.opp) games[games.length - 1].text = games[games.length - 1].text.replace(' ' + res.my + '対' + res.opp + 'で', ' ' + res.my + '対' + rg.box.opp + 'で');   // 新入部員モード:組み直した失点
       const paByOrder = rg.paByOrder;
       games[games.length - 1].box = rg.box;
