@@ -900,13 +900,16 @@ test('3年の7月は卒業画面へ自動で進まず(卒業待ち)、「卒業�
 test('卒業画面の中身は H1.3b と一致する(20回。legacy)', () => {
   const G = require('./hero-graduation.js');
   const ref = require('./fixtures/h13b-graduation.json');
-  for (let i = 0; i < G.N; i++) assert.strictEqual(G.run(i).grad, ref[i], i + '回目');
+  // H1.6a-fix1 で、読み物の試合の呼び名(初戦 → 1回戦 など)が変わったので、読み物の文(lines)は比べない
+  const noLines = (j) => { const o = JSON.parse(j); delete o.lines; return JSON.stringify(o); };
+  for (let i = 0; i < G.N; i++) assert.strictEqual(noLines(G.run(i).grad), noLines(ref[i]), i + '回目');
 }, { legacy: true });
 
 test("roster.version 'legacy' は H1.4b と完全に一致する(勝敗・能力・進路・本体の乱数・物語。20回)", () => {
   const FP = require('./hero-fingerprint.js');
   const ref = require('./fixtures/h14b-fingerprint.json');
-  for (let i = 0; i < ref.length; i++) assert.deepStrictEqual(FP.fingerprint(i, { stories: true }), ref[i], i + '回目');
+  const noText = (o) => { const x = Object.assign({}, o); delete x.stories; delete x.trng; return x; };   // H1.6a-fix1 で物語の文面が変わったため、文面は比べない
+  for (let i = 0; i < ref.length; i++) assert.deepStrictEqual(noText(FP.fingerprint(i, { stories: true })), noText(ref[i]), i + '回目');
 }, { legacy: true });
 
 // ---------- H1.5a:部員の構成(v2) ----------
@@ -1081,7 +1084,9 @@ test('途中出場(H1.6a):無効なら H1.5b と完全に一致(勝敗・能力�
   if (!Core.isV2()) return;
   const FP = require('./hero-fingerprint.js');
   const ref = require('./fixtures/h15b-fingerprint.json');
-  withSubOff(() => { for (let i = 0; i < ref.length; i++) assert.deepStrictEqual(FP.fingerprint(i, { stories: true, stats: true, games: true }), ref[i], '無効:' + i + '回目'); });
+  // H1.6a-fix1 で、ひとことの文(大会での活躍の書き分け)と試合の呼び名が変わったので、物語の文面(stories・trng)は比べない
+  const noText = (o) => { const x = Object.assign({}, o); delete x.stories; delete x.trng; return x; };
+  withSubOff(() => { for (let i = 0; i < ref.length; i++) assert.deepStrictEqual(noText(FP.fingerprint(i, { stories: true, stats: true, games: true })), noText(ref[i]), '無効:' + i + '回目'); });
   const S = CONFIG.heroMode.substitute; const prev = S.expMult; S.expMult = 0;
   try { for (let i = 0; i < ref.length; i++) { const f = FP.fingerprint(i, { games: true }); assert.deepStrictEqual(f.glog, ref[i].glog, '経験値0倍:' + i + '回目'); } } finally { S.expMult = prev; }
 });
@@ -1114,6 +1119,39 @@ test('途中出場(H1.6a):チーム合計は変わらない(打数・安打は�
     });
   }
   assert.ok(subs > 100, '途中出場 ' + subs);
+});
+
+// ---------- H1.6a-fix1:ひとことと、同じ月の大会結果・試合の呼び名 ----------
+test('ひとこと(大会での活躍)は、同じ月の最後の試合の結果と矛盾しない。試合の呼び名は1か所の規則で、どの画面でも同じ(60回)', () => {
+  const seen = { semi_win_champ: 0, semi_win_finalLoss: 0, semi_loss: 0 };
+  const allStar = [].concat.apply([], Object.keys(STORY.tourneyStar).map((k) => STORY.tourneyStar[k].map((t) => [k, t])));
+  for (let s = 1; s <= 60; s++) {
+    const st = Hero.newHeroGame(s);
+    Hero.pickHero(st, Hero.pickable(st)[0].id);
+    Hero.startPlay(st);
+    for (let i = 0; i < 200 && st.hero.phase === 'play'; i++) {
+      Hero.advance(st, 'event');
+      const cards = [].concat.apply([], (st.lastEvents || []).map((m) => (m.cards || []).filter((c) => c.type === 'tournament' && c.games)));
+      for (const c of cards) c.games.forEach((g) => {
+        assert.strictEqual(g.round, Core.roundLabel(g.roundNo, g.rounds), '今月の試合の呼び名');
+        assert.ok(g.text.indexOf(g.round + ' ') === 0, '試合の文の呼び名:' + g.text);
+      });
+      for (const x of st.hero.lastStories || []) {
+        if (x.kind !== 'tourneyStar') continue;
+        const card = cards[cards.length - 1];
+        const last = card.games[card.games.length - 1];
+        const finalPlayed = last.roundNo === last.rounds;
+        assert.ok(!/決勝が待っている|決勝へ進む/.test(x.text), '決勝が終わっているのに、これからのように書かない:' + x.text);
+        const k = (allStar.find((a) => Hero.fill(a[1], { n: Hero.heroOf(st) ? Hero.heroOf(st).name : '', stage: '' }).replace(/\s/g, '') === x.text.replace(/\s/g, '')) || allStar.find((a) => x.text.indexOf(a[1].split('{n}')[1] ? a[1].split('{n}')[1].slice(0, 6) : '@@') >= 0) || [null])[0];
+        if (k === 'semi_win') assert.ok(!finalPlayed, '準決勝の勝ち(決勝の前)の文は、決勝がまだのときだけ');
+        if (k === 'semi_win_champ') { assert.ok(finalPlayed && last.win, '優勝'); seen[k]++; }
+        if (k === 'semi_win_finalLoss') { assert.ok(finalPlayed && !last.win, '決勝で敗退'); seen[k]++; }
+        if (k === 'semi_loss') seen[k]++;
+      }
+    }
+    if (st.hero.phase === 'graduate') assert.ok(/^夏の地区大会:(優勝|出場なし|(1回戦|2回戦|準々決勝|準決勝|決勝)で敗退)/.test(Hero.summerResultLine(st)), '7月の画面の呼び名:' + Hero.summerResultLine(st));
+  }
+  assert.ok(seen.semi_win_champ + seen.semi_win_finalLoss > 0, JSON.stringify(seen));
 });
 
 // legacy の一致の確認(別プロセス)

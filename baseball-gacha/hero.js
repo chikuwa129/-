@@ -597,9 +597,11 @@
   function stageOf(card, gi, g) {
     const key = Object.keys(CONFIG.tournaments).find((k) => card.title && card.title.indexOf(CONFIG.tournaments[k].name) >= 0);
     const rounds = key ? CONFIG.tournaments[key].rounds : 0;
-    if (g.round === '決勝') return { key: 'final', label: '決勝', w: 3 };
-    if (rounds && g.round === (rounds - 1) + '回戦') return { key: 'semi', label: '準決勝', w: 2 };
-    return { key: 'early', label: gi === 0 ? '初戦' : g.round, w: 1 };
+    const no = g.roundNo || gi + 1;
+    const label = rounds ? Core.roundLabel(no, rounds) : g.round;
+    if (rounds && no === rounds) return { key: 'final', label: label, w: 3 };
+    if (rounds && no === rounds - 1) return { key: 'semi', label: label, w: 2 };
+    return { key: 'early', label: label, w: 1 };
   }
   function boxScore(box, id) {
     let sc = 0;
@@ -760,7 +762,7 @@
           if (!g.box) return;
           const stg = stageOf(card, gi, g);
           const sc = boxScore(g.box, h.id);
-          if (sc >= CONFIG.visual.highlightMinScore && (!best || stg.w > best.stage.w || (stg.w === best.stage.w && sc > best.sc))) best = { sc: sc, stage: stg, win: g.win, title: card.title };
+          if (sc >= CONFIG.visual.highlightMinScore && (!best || stg.w > best.stage.w || (stg.w === best.stage.w && sc > best.sc))) best = { sc: sc, stage: stg, win: g.win, title: card.title, card: card };
           if (sc >= CONFIG.visual.highlightMinScore) {
             const tk = Object.keys(CONFIG.tournaments).find((k) => card.title && card.title.indexOf(CONFIG.tournaments[k].name) >= 0);
             H.heroGames.push({ s: sv, y: year, grade: h.grade, tkey: tk, roundNo: g.roundNo || gi + 1, rounds: g.rounds || CONFIG.tournaments[tk].rounds, win: !!g.win, sc: sc });
@@ -772,7 +774,12 @@
         });
       }
       if (best) {
-        addStory(st, r, out, 'tourneyStar', STORY.tourneyStar[best.stage.key + '_' + (best.win ? 'win' : 'loss')], Object.assign({ stage: best.stage.label }, vars));
+        // 文は、その月の最後の試合の結果に合わせる(大会は1か月で決勝まで行う。準決勝の勝ちは、同じ月の決勝の結果で書き分ける)
+        let tk = best.stage.key + '_' + (best.win ? 'win' : 'loss');
+        const lastG = best.card.games[best.card.games.length - 1];
+        const T0 = Object.keys(CONFIG.tournaments).map((k) => CONFIG.tournaments[k]).find((T) => best.title.indexOf(T.name) >= 0);
+        if (tk === 'semi_win' && T0 && lastG && (lastG.roundNo || best.card.games.length) === T0.rounds) tk = lastG.win ? 'semi_win_champ' : 'semi_win_finalLoss';
+        addStory(st, r, out, 'tourneyStar', STORY.tourneyStar[tk], Object.assign({ stage: best.stage.label }, vars));
         const score = best.stage.w * 10 + (best.win ? 5 : 0) + best.sc;
         if (!H.bestGame || score > H.bestGame.score) H.bestGame = { score: score, label: best.title.replace(/^\S+ /, '') + 'の' + best.stage.label + (best.win ? '(勝利)' : '(敗戦)') };
       }
@@ -1281,7 +1288,7 @@
     const r = last.roundNo || games.length;
     const rec = games.length > 1 ? '(' + w + '勝' + l + '敗)' : '';
     if (!l) return T.name + ':優勝' + rec;
-    const where = r === 1 ? '初戦' : r === T.rounds ? '決勝' : r === T.rounds - 1 ? '準決勝' : r + '回戦';
+    const where = Core.roundLabel(r, T.rounds);
     return T.name + ':' + where + 'で敗退' + rec;
   }
   function closeNewYear(st) { if (st.hero.newYear) st.hero.newYear.closed = true; }
@@ -1447,7 +1454,7 @@
     const g = L[0];
     if (!g) return null;
     const T = CONFIG.tournaments[g.tkey];
-    const roundLabel = g.roundNo === g.rounds ? '決勝' : g.roundNo === g.rounds - 1 ? '準決勝' : g.roundNo === 1 ? '初戦' : g.roundNo + '回戦';
+    const roundLabel = Core.roundLabel(g.roundNo, g.rounds);
     return Object.assign({ when: g.grade + '年' + T.name, roundLabel: roundLabel }, g);
   }
   function gradSide(p, axis) {

@@ -1468,6 +1468,13 @@
     H.subRecent = subs.map((x) => x.id);
   }
 
+  // 大会の試合の呼び名(新入部員モードの、ひとこと・今月の試合・7月の画面・卒業の読み物で共通):1回戦 … 準々決勝・準決勝・決勝
+  function roundLabel(r, rounds) {
+    if (r === rounds) return '決勝';
+    if (r === rounds - 1) return '準決勝';
+    if (r === rounds - 2 && rounds >= 4) return '準々決勝';
+    return r + '回戦';
+  }
   // 新入部員モード:先発の投球回と救援の候補(控えの本職の投手を総合値の高い順。reliefMax > 1 なら、ベンチ入りの二刀流も)
   //   practiceRot:練習試合の救援の順番({ i })。省くと大会(重みの抽選)
   function heroPitchOpts(state, starters, final, practiceRot) {
@@ -1650,6 +1657,7 @@
     heroInnings: heroInnings,
     heroRunsAllowed: heroRunsAllowed,
     isV2: isV2,
+    roundLabel: roundLabel,
     emptySubLine: emptySubLine,
     drawInitialRating: drawInitialRating,
     rosterCap: () => CONFIG.newcomers.rosterCap,
@@ -2693,7 +2701,7 @@
       const evr = evaluateLineup(slots, { gameNo: r, close: close });
       const pred = winProbability(evr.strength, oppStrength);   // 試合の勝敗と同じ関数(乱数は使わない)
       const res = playMatch(rng, evr.strength, oppStrength);
-      const roundName = r === T.rounds ? '決勝' : r + '回戦';
+      const roundName = state.hero ? roundLabel(r, T.rounds) : r === T.rounds ? '決勝' : r + '回戦';   // 新入部員モードは、呼び名の規則を1か所に(育成監督モードは従来どおり)
       const tag = noteGameResult(state, pred, res.win);
       games.push({
         text: roundName + ' 対' + opp + '高校 '
