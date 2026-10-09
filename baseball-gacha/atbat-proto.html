@@ -202,7 +202,9 @@
       // バント・スクイズ・盗塁(・敬遠)は、仕組みを短く(自作の文)
       mech: { bunt: '走者を進める。打者はアウト', squeeze: '三塁走者を返す。失敗すると走者がアウト', steal: '走者を進める。失敗すると走者がアウト', walk: '打者を歩かせる' } },
     // 画面:カードの表示(rating:成功確率と評価 / prob-only:成功確率だけ / two-choice:攻めと堅実の2枚)、結果の表示時間、誤タップよけ
-    ui: { cardMode: 'rating', resultMs: 1500, tapGuardMs: 300, ratingLabel: '期待', two: { attack: '攻め', safe: '堅実' } },
+    ui: { cardMode: 'rating', resultMs: 1500, tapGuardMs: 300, ratingLabel: '期待', two: { attack: '攻め', safe: '堅実', tactic: '作戦' },
+      // 2択の組み方(T1f):攻めと堅実は、同じ種類(打者は打撃系、投手は配球系)から選ぶ。作戦系は、評価が tacticMin 以上のときだけ3枚目に出す
+      twoGroups: { bat: ['normal', 'power', 'contact'], pitch: ['normal', 'fast', 'breaking', 'outside', 'inside'] }, tacticMin: 5 },
     // 試合の事前勝率と戦力差:事前勝率が under 以下なら「格上」(相手が強い)、over 以上なら「格下」、その間は「同格」
     strength: { under: 0.4, over: 0.6 },
     // 試合の勝率の推定(簡易):半イニングの得点の分散 v(仮)。残りイニングの得点は、得点期待値 μ(無死走者なし)と、事前勝率から逆算した力の差で見込む
@@ -508,7 +510,7 @@
       r.rating = ratingOf(r.dm, metric, C);
       r.feature = featureOf(r, C);
     }
-    return { re: now, p1: p1Of(sc.outs, sc.bases, C), metric: metric, rows: rows, best: rows.reduce(pick).order };
+    return { side: sc.side === 'pitch' ? 'pitch' : 'bat', re: now, p1: p1Of(sc.outs, sc.bases, C), metric: metric, rows: rows, best: rows.reduce(pick).order };
   }
   // 期待値の評価(1〜7)。dm:通常との差(得をする向きが正)
   function ratingOf(dm, metric, cfg) {
@@ -528,15 +530,20 @@
     const text = up.map((k) => F.label[k] + '↑').concat(down.map((k) => F.label[k] + '↓')).join(' ');
     return { up: up, down: down, text: text || F.flat };
   }
-  // 2択の表示:攻め=評価が最も高い指示(同じなら成功確率が低いほう)、堅実=攻めを除いて成功確率が最も高い指示
-  //   dominated:堅実が、成功確率でも評価でも、攻めを上回らない(選ぶ意味がない)
-  function twoChoice(ev) {
-    const rows = ev.rows.filter((r) => r.good != null);
+  // 2択の表示(T1f):攻めと堅実は、同じ種類の指示(ui.twoGroups)から選ぶ
+  //   攻め=その種類で評価が最も高い指示(同じなら成功確率が低いほう)、堅実=攻めを除いて成功確率が最も高い指示(候補がなければ null)
+  //   作戦(バント・スクイズ・盗塁)は2択に入れず、評価が tacticMin 以上のものがあるときだけ、評価が最高の1つを tactic に
+  //   dominated:堅実が、成功確率でも評価でも、攻めを上回らない。gap:攻めと堅実の評価の差
+  function twoChoice(ev, cfg) {
+    const U = (cfg || CONFIG).ui;
+    const grp = U.twoGroups[ev.side];
+    const rows = ev.rows.filter((r) => r.good != null && grp.indexOf(r.order) >= 0);
     const attack = rows.reduce((a, b) => (b.rating > a.rating || (b.rating === a.rating && b.good < a.good) ? b : a));
     const rest = rows.filter((r) => r !== attack);
-    if (!rest.length) return { attack: attack, safe: null, dominated: false };
-    const safe = rest.reduce((a, b) => (b.good > a.good ? b : a));
-    return { attack: attack, safe: safe, dominated: safe.good <= attack.good && safe.rating <= attack.rating };
+    const safe = rest.length ? rest.reduce((a, b) => (b.good > a.good ? b : a)) : null;
+    const tac = ev.rows.filter((r) => r.good != null && grp.indexOf(r.order) < 0 && r.rating >= U.tacticMin);
+    const tactic = tac.length ? tac.reduce((a, b) => (b.rating > a.rating || (b.rating === a.rating && b.good > a.good) ? b : a)) : null;
+    return { attack: attack, safe: safe, tactic: tactic, dominated: !!safe && safe.good <= attack.good && safe.rating <= attack.rating, gap: safe ? attack.rating - safe.rating : null };
   }
 
   // ---------- 抽選と結果 ----------
@@ -555,8 +562,11 @@
   // ---------- 場面 ----------
   // 場面:{ inning, side:'bat'|'pitch', outs, bases:[走力|null ×3], diff(自校−相手), batter, pitcher, defense, arm, hero, focus }
   function makeScene(o) {
-    return Object.assign({ inning: 1, half: 'top', winP: 0.5, bats: 'R', throws: 'R', side: 'bat', outs: 0, bases: [null, null, null], diff: 0, batter: Object.assign({}, PRESETS.batter.normal), pitcher: Object.assign({}, PRESETS.pitcher.normal),
+    // 表と裏(T1f):自校は先攻。攻撃(bat)は表、守備(pitch)は裏(half を指定したときは、それに従う)
+    const s = Object.assign({ inning: 1, winP: 0.5, bats: 'R', throws: 'R', side: 'bat', outs: 0, bases: [null, null, null], diff: 0, batter: Object.assign({}, PRESETS.batter.normal), pitcher: Object.assign({}, PRESETS.pitcher.normal),
       defense: 50, arm: 50, hero: true, focus: false }, o);
+    if (s.half == null) s.half = s.side === 'pitch' ? 'bottom' : 'top';
+    return s;
   }
   const R = 50;
   const SCENES = [
@@ -580,7 +590,7 @@
     const bases = [0, 1, 2].map(() => (r.chance(0.4) ? r.int(30, 80) : null));
     const winP = Math.round((0.15 + r.next() * 0.75) * 100) / 100;   // 事前勝率 15〜90%
     const late = r.chance(CONFIG.lateCloseShare);   // 終盤の接戦
-    const sc = makeScene({ name: 'シード ' + seed, inning: late ? r.int(7, 9) : r.int(1, 9), half: r.chance(0.5) ? 'top' : 'bottom', winP: winP, side: r.chance(0.5) ? 'bat' : 'pitch', outs: r.int(0, 2), bases: bases, diff: late ? r.int(-2, 2) : r.int(-4, 4),
+    const sc = makeScene({ name: 'シード ' + seed, inning: late ? r.int(7, 9) : r.int(1, 9), half: (r.next(), null), winP: winP, side: r.chance(0.5) ? 'bat' : 'pitch', outs: r.int(0, 2), bases: bases, diff: late ? r.int(-2, 2) : r.int(-4, 4),
       batter: jit(pick(PRESETS.batter)), pitcher: jit(pick(PRESETS.pitcher)), defense: r.int(30, 70), arm: r.int(30, 70), hero: r.chance(0.6), focus: r.chance(0.3) });
     return Object.assign(sc, handsOf(seed));
   }
@@ -599,11 +609,11 @@
     return out.length ? out : ['平均的'];
   }
   // カードの中身(表示の切り替え):mode は 'rating' | 'prob-only' | 'two-choice'。
-  //   戻り値:[{ order, name, sub(2択のときの実際の指示の名前), feature, good(成功確率), rating(prob-only は null), as('attack'|'safe') }]
+  //   戻り値:[{ order, name, sub(2択のときの実際の指示の名前), feature, good(成功確率), rating(prob-only は null), as('attack'|'safe'|'tactic') }]
   function cardsOf(ev, mode, cfg) {
     const C = cfg || CONFIG;
     const card = (r, as) => ({ order: r.order, name: as ? C.ui.two[as] : r.label, sub: as ? r.label : null, feature: r.feature.text, good: r.good, rating: mode === 'prob-only' ? null : r.rating, as: as || null });
-    if (mode === 'two-choice') { const t = twoChoice(ev); return [card(t.attack, 'attack')].concat(t.safe ? [card(t.safe, 'safe')] : []); }
+    if (mode === 'two-choice') { const t = twoChoice(ev, C); return [card(t.attack, 'attack')].concat(t.safe ? [card(t.safe, 'safe')] : [], t.tactic ? [card(t.tactic, 'tactic')] : []); }
     return ev.rows.filter((r) => r.good != null).map((r) => card(r));
   }
   // 画面の手順(1タップで確定):pick でカードを押すと、すぐ結果。auto は勝負にならない試合(通常)。next で次へ(結果が出るまでは進まない)
@@ -847,6 +857,7 @@
   function newScene(fromSeed) {
     sc = fromSeed || S.presetIdx < 0 ? A.randomScene(S.seed) : Object.assign(A.makeScene(Object.assign({}, A.SCENES[S.presetIdx])), A.handsOf(S.seed));
     sc.side = S.mode;
+    sc.half = S.mode === 'pitch' ? 'bottom' : 'top';   // 自校は先攻(攻撃は表、守備は裏)
     applyPresets(sc);
     if (S.bats) sc.bats = S.bats;
     if (S.throws) sc.throws = S.throws;
@@ -893,7 +904,8 @@
       + '<div class="dia"><i class="b2' + (b[1] != null ? ' on' : '') + '"></i><i class="b3' + (b[2] != null ? ' on' : '') + '"></i><i class="b1' + (b[0] != null ? ' on' : '') + '"></i></div>'
       + '<div class="lamps">アウト<span class="' + (s.outs >= 1 ? 'on' : '') + '"></span><span class="' + (s.outs >= 2 ? 'on' : '') + '"></span>' + (result && result.outs >= 3 ? ' <b style="color:#b03a2e">チェンジ</b>' : '') + '</div>'
       + '<div class="score">自校 <b>' + s.my + '</b> − <b>' + s.op + '</b> 相手</div></div>';
-    const band = '<div class="pane band">試合の勝率 <b>' + pc(wp) + '</b> ・ <span class="str ' + (lab === '格上' ? 'up' : lab === '格下' ? 'dn' : '') + '">相手は' + lab + '</span></div>';
+    // 戦力(試合の前の強さの差)と、いまの勝率を、別のラベルで
+    const band = '<div class="pane band">戦力:<span class="str ' + (lab === '格上' ? 'up' : lab === '格下' ? 'dn' : '') + '">相手は' + lab + '</span> ・ いまの勝率:<b>' + pc(wp) + '</b></div>';
     const oppAb = bat ? sc.pitcher : sc.batter;
     const opp = '<div class="pane opp"><div class="who">' + (bat ? '相手の投手' : '相手の打者') + ' <b>' + esc(nameOf(1)) + '</b>(' + hand(bat ? sc.throws : sc.bats, !bat) + ')</div>'
       + (bat ? pitRanks(oppAb) : batRanks(oppAb)) + '<div class="tags">' + A.tagsOf(bat ? 'pitcher' : 'batter', oppAb).map((t) => '<span class="tag">' + esc(t) + '</span>').join('') + '</div></div>';

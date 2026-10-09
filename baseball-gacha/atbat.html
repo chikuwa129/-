@@ -126,6 +126,7 @@
   function newScene(fromSeed) {
     sc = fromSeed || S.presetIdx < 0 ? A.randomScene(S.seed) : Object.assign(A.makeScene(Object.assign({}, A.SCENES[S.presetIdx])), A.handsOf(S.seed));
     sc.side = S.mode;
+    sc.half = S.mode === 'pitch' ? 'bottom' : 'top';   // 自校は先攻(攻撃は表、守備は裏)
     applyPresets(sc);
     if (S.bats) sc.bats = S.bats;
     if (S.throws) sc.throws = S.throws;
@@ -172,7 +173,8 @@
       + '<div class="dia"><i class="b2' + (b[1] != null ? ' on' : '') + '"></i><i class="b3' + (b[2] != null ? ' on' : '') + '"></i><i class="b1' + (b[0] != null ? ' on' : '') + '"></i></div>'
       + '<div class="lamps">アウト<span class="' + (s.outs >= 1 ? 'on' : '') + '"></span><span class="' + (s.outs >= 2 ? 'on' : '') + '"></span>' + (result && result.outs >= 3 ? ' <b style="color:#b03a2e">チェンジ</b>' : '') + '</div>'
       + '<div class="score">自校 <b>' + s.my + '</b> − <b>' + s.op + '</b> 相手</div></div>';
-    const band = '<div class="pane band">試合の勝率 <b>' + pc(wp) + '</b> ・ <span class="str ' + (lab === '格上' ? 'up' : lab === '格下' ? 'dn' : '') + '">相手は' + lab + '</span></div>';
+    // 戦力(試合の前の強さの差)と、いまの勝率を、別のラベルで
+    const band = '<div class="pane band">戦力:<span class="str ' + (lab === '格上' ? 'up' : lab === '格下' ? 'dn' : '') + '">相手は' + lab + '</span> ・ いまの勝率:<b>' + pc(wp) + '</b></div>';
     const oppAb = bat ? sc.pitcher : sc.batter;
     const opp = '<div class="pane opp"><div class="who">' + (bat ? '相手の投手' : '相手の打者') + ' <b>' + esc(nameOf(1)) + '</b>(' + hand(bat ? sc.throws : sc.bats, !bat) + ')</div>'
       + (bat ? pitRanks(oppAb) : batRanks(oppAb)) + '<div class="tags">' + A.tagsOf(bat ? 'pitcher' : 'batter', oppAb).map((t) => '<span class="tag">' + esc(t) + '</span>').join('') + '</div></div>';
