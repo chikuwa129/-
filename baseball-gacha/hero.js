@@ -1303,7 +1303,9 @@
     if (!C || !C.fin) return null;
     const fin = new Map(C.fin.map((f) => [f.id, f]));
     const rows = C.mates.filter((m) => fin.get(m.id) && !fin.get(m.id).gone).map((m) => {
-      const p = anyPlayer(st, m.id), f = fin.get(m.id);
+      const p = anyPlayer(st, m.id);
+      // 主人公は、卒業画面と同じ値
+      const f = m.id === H.id && H.graduation && H.graduation.fin ? { r: H.graduation.fin.rating, top: H.graduation.fin.top } : fin.get(m.id);
       return { id: m.id, name: p.name, pos: p.position, hero: m.id === H.id, init: { r: m.r, top: m.top, label: m.label }, fin: { r: f.r, top: f.top },
         hint: awOn() && m.hint, talent: awOn() && m.t, awoken: awOn() && p.awoken ? { g: p.awoken.g, m: p.awoken.m } : null, entry: C.entry.indexOf(m.id) >= 0 };
     });
@@ -2669,8 +2671,48 @@
         + '<div class="arrow">→</div><div><div class="small">卒業時(3年夏)</div>' + num(sides(G.fin)) + '<div class="small">' + (G.fin.top != null ? '同世代 上位' + Generation.formatTop(G.fin.top) : '同世代 上位50%より下') + '</div></div></div>'
         + (a && abil ? boxes(Object.assign({}, a, { abilities: abil, pitches: st.hero.finalPitches || [] }), null, abil) : '')
         + gradTotals(G.totals) + (rivalShown() ? gradRival(G.rival) : '') + (G.watch && G.watch.length ? '<div class="sublabel">気になる選手のその後</div>' + G.watch.map((t) => '<div class="small">' + esc(t) + '</div>').join('') : '')
+        + (crOn() ? '<div class="btns"><button class="btn sub small" id="hCohort">' + (crUi.open ? '同期の答え合わせを閉じる' : '同期の答え合わせを見る') + '</button></div>' : '')
         + '<div class="btns"><button class="btn sub small" data-detail="1">3年間の年表</button></div>'
-        + '<div class="btns"><button class="btn" id="hAgain">もう一度引く</button><button class="btn sub" id="hSame">同じシードでやり直す</button></div></div>';
+        + '<div class="btns"><button class="btn" id="hAgain">もう一度引く</button><button class="btn sub" id="hSame">同じシードでやり直す</button></div></div>'
+        + (crOn() && crUi.open ? renderCohort() : '');
+    }
+    // ---------- H1.8:同期の答え合わせ(卒業画面の下の節) ----------
+    const crUi = { open: false, sort: 'init', all: false };   // 保存しない
+    const crOn = () => !!(HM().cohortReview && HM().cohortReview.enabled) && !!(st.hero.cohort && st.hero.cohort.fin);
+    const LAB = ['有望', '逸材', '怪物級', '規格外'];
+    function crRow(x, hi) {
+      const top = (t) => (t == null ? '50%より下' : '上位' + Generation.formatTop(t));
+      const d = x.fin.r - x.init.r, dr = x.init.rank - x.fin.rank;
+      const marks = (x.hero ? '<span class="mk me">★主人公</span>' : '')
+        + (x.awoken ? '<span class="mk awk">覚醒(' + x.awoken.g + '年' + x.awoken.m + '月)</span>' : '')
+        + (x.hint ? (x.awoken ? '<span class="mk hit">✦的中</span>' : '<span class="mk miss">✦外れ</span>') : '')
+        + (x.talent ? '<span class="mk tal">素質あり</span>' : x.hint ? '<span class="mk ret">素質なし</span>' : '')
+        + (LAB.indexOf(x.init.label) >= 1 ? '<span class="rlabel">' + esc(x.init.label) + '</span>' : '');
+      return '<div class="crr' + (hi ? ' hi' : '') + (x.hero ? ' me' : '') + '"><div class="crn"><b>' + esc(x.name) + '</b>' + posTag(x.pos) + marks + '</div>'
+        + '<div class="crg"><div><span class="small">入学時</span><b>' + x.init.r + '</b><i>' + x.init.rank + '位・' + top(x.init.top) + '</i></div>'
+        + '<div><span class="small">卒業時</span><b>' + x.fin.r + '</b><i>' + x.fin.rank + '位・' + top(x.fin.top) + '</i></div>'
+        + '<div><span class="small">差</span><b class="' + (d >= 0 ? 'up' : 'dn') + '">' + (d >= 0 ? '+' : '') + d + '</b><i>' + (dr > 0 ? '↑' + dr : dr < 0 ? '↓' + -dr : '→') + '</i></div></div></div>';
+    }
+    function renderCohort() {
+      const c = cohortReview(st);
+      if (!c) return '';
+      const N = HM().cohortReview.firstShow || 10;
+      const hiOf = (x) => x.hero || !!x.awoken || x.hint;
+      const list = crUi.sort === 'fin' ? c.rows.slice().sort((a, b) => a.fin.rank - b.fin.rank) : c.rows;
+      const shown = crUi.all ? list : list.filter((x, i) => hiOf(x) || i < N);
+      const chip = (k, l) => '<button class="chip' + (crUi.sort === k ? ' on' : '') + '" data-crsort="' + k + '">' + l + '</button>';
+      let html = '<div class="card"><h2>👥 同期の答え合わせ(' + c.rows.length + '人)</h2>'
+        + '<div class="row2">' + chip('init', '入学時の順') + chip('fin', '卒業時の順') + '</div>'
+        + shown.map((x) => crRow(x, hiOf(x))).join('')
+        + (shown.length < list.length ? '<div class="btns"><button class="btn sub small" id="hCrAll">全員を見る(あと' + (list.length - shown.length) + '人)</button></div>' : '')
+        + '<div class="small">順位は同期の中の順位。上位○%は同世代(全国)の順位。素質は覚醒の素質(入学時には見えない値)。</div></div>';
+      if (c.unselected.length) {
+        const hiU = (x) => x.hint || !!x.awoken || LAB.indexOf(x.init.label) >= 1;
+        html += '<div class="card"><h2>選ばなかった選手たち(' + c.unselected.length + '人)</h2><div class="small">入学のときの一覧の順</div>'
+          + c.lines.map((t) => '<div class="story">' + esc(t) + '</div>').join('')
+          + c.unselected.map((x) => crRow(x, hiU(x))).join('') + '</div>';
+      }
+      return html;
     }
     // 通算成績(大会と練習試合。ライバルと2列で並べる。数が小さいときは「参考」)
     function gradTotals(T) {
@@ -2784,6 +2826,9 @@
       if (ds.rsort) { ui.rosterSort = ds.rsort; saveUi(); render(); return; }
       if (id === 'hRoster') { screen = 'roster'; render(); return; }
       if (id === 'hToGrad') { goGraduate(st); julyView = false; save(storage, st); window.scrollTo(0, 0); render(); return; }
+      if (id === 'hCohort') { crUi.open = !crUi.open; render(); return; }
+      if (ds.crsort) { crUi.sort = ds.crsort; render(); return; }
+      if (id === 'hCrAll') { crUi.all = true; render(); return; }
       if (id === 'hBackJuly') { julyView = true; window.scrollTo(0, 0); render(); return; }
       if (id === 'hLuDetail') { ui.luDetail = !ui.luDetail; saveUi(); render(); return; }
       if (id === 'hRosterClose') { screen = null; render(); return; }

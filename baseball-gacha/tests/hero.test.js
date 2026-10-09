@@ -1364,6 +1364,77 @@ test('H1.7b:見せ場に出る数値が、実際の能力値と一致する(総�
   assert.ok(n >= 5, '見せ場 ' + n);
 });
 
+// ---------- H1.8:同期の答え合わせ ----------
+function playToGrad(seed, pickIdx) {
+  const st = Hero.newHeroGame(seed);
+  const L = Hero.entryList(st);
+  const entry = L.map((p) => p.id);
+  const init = new Map(st.pendingRecruits.map((p) => [p.id, { r: Core.rating(p), top: (require('../logic.js').Generation.getGenerationRank(p, 1, 4) || {}).top }]));
+  Hero.pickHero(st, L[pickIdx % L.length].id); Hero.startPlay(st);
+  let fin = null;
+  for (let i = 0; i < 200 && st.hero.phase === 'play'; i++) {
+    Hero.advance(st, 'event');
+    if (st.hero.newYear && !st.hero.newYear.closed) Hero.closeNewYear(st);
+  }
+  return { st, entry, init };
+}
+test('H1.8:同期の答え合わせの数値(入学時・卒業時の総合値と順位)が実際の値と一致し、選ばなかった選手は確定した一覧と一致する(8回)', () => {
+  if (!Core.isV2()) return;
+  const { Generation } = require('../logic.js');
+  for (let s = 1; s <= 8; s++) {
+    const { st, entry, init } = playToGrad(9900 + s, s);
+    const c = Hero.cohortReview(st);
+    assert.ok(c && c.rows.length >= 5, '同期 ' + (c && c.rows.length));
+    assert.strictEqual(c.rows.length, init.size, '同期は今年の新入生の全員');
+    for (const x of c.rows) {
+      assert.strictEqual(x.init.r, init.get(x.id).r, '入学時の総合値');
+      assert.strictEqual(x.init.top == null ? undefined : x.init.top, init.get(x.id).top, '入学時の順位');
+      const p = Hero.anyPlayer(st, x.id);
+      // 主人公の卒業のあと、ゲームは進まないので、今の値 = 卒業時(3年の7月)の値
+      // 主人公は、卒業画面と同じ値(卒業の処理の直前の能力)
+      if (x.hero) { assert.strictEqual(x.fin.r, st.hero.graduation.fin.rating, '主人公の卒業時'); assert.strictEqual(x.fin.top == null ? null : x.fin.top, st.hero.graduation.fin.top == null ? null : st.hero.graduation.fin.top); continue; }
+      assert.strictEqual(x.fin.r, Core.rating(p), '卒業時の総合値');
+      assert.strictEqual(x.fin.top == null ? undefined : x.fin.top, (Generation.getGenerationRank(p, 3, 7) || {}).top, '卒業時の順位');
+    }
+    const byInit = c.rows.slice().sort((a, b) => b.init.r - a.init.r || a.id - b.id);
+    byInit.forEach((x, i) => assert.strictEqual(x.init.rank, i + 1));
+    assert.deepStrictEqual(c.rows.map((x) => x.id), byInit.map((x) => x.id), '入学時の順');
+    assert.deepStrictEqual(c.unselected.map((x) => x.id), entry.filter((id) => id !== st.hero.id), '選ばなかった選手 = 確定した一覧(主人公を除く)');
+    for (const t of c.lines) assert.ok(c.unselected.some((x) => t.indexOf(x.name) >= 0), '一言は見送った選手の事実');
+  }
+});
+
+test('H1.8:ヒントの的中・外れと覚醒の印が、実際の覚醒の記録と一致する。結果は機能の有無で変わらない(30回)', () => {
+  if (!Core.isV2()) return;
+  let hit = 0, miss = 0;
+  for (let s = 1; s <= 30; s++) {
+    const { st } = playToGrad(9950 + s, s);
+    const c = Hero.cohortReview(st);
+    for (const x of c.rows) {
+      const p = Hero.anyPlayer(st, x.id);
+      assert.strictEqual(!!x.awoken, !!p.awoken, '覚醒');
+      if (x.awoken) { assert.strictEqual(x.awoken.g, p.awoken.g); assert.strictEqual(x.awoken.m, p.awoken.m); }
+      assert.strictEqual(x.hint, !!(p.awk && p.awk.h), 'ヒント');
+      assert.strictEqual(x.talent, !!(p.awk && p.awk.t), '素質');
+      if (x.hint) { if (x.awoken) hit++; else miss++; }
+    }
+    const u = c.unselected.filter((x) => x.hint);
+    if (u.length) {
+      const h = u.find((x) => x.awoken) || u[0];
+      const t = c.lines[1];
+      assert.ok(t.indexOf(h.name) >= 0, 'ヒントの一言');
+      if (h.awoken) assert.ok(t.indexOf(h.awoken.g + '年の') >= 0, '覚醒の年');
+      else assert.ok(/しなかった|花開かなかった/.test(t), '覚醒しなかった');
+    }
+  }
+  assert.ok(hit + miss > 5, '的中 ' + hit + ' 外れ ' + miss);
+  // 機能の有無で、勝敗・能力・進路・成績・乱数が同じ
+  const FP = require('./hero-fingerprint.js');
+  const C = CONFIG.heroMode.cohortReview, prev = C.enabled;
+  const run = (on) => { C.enabled = on; try { return [0, 1, 2, 3].map((i) => FP.fingerprint(i, { stories: true, stats: true, games: true })); } finally { C.enabled = prev; } };
+  assert.deepStrictEqual(run(true), run(false));
+});
+
 // legacy の一致の確認(別プロセス)
 if (!LEGACY_ONLY && Core.isV2()) {
   test("roster.version 'legacy' の一致の確認(BBGACHA_ROSTER=legacy の別プロセスで、legacy の指紋のテストを実行)", () => {
