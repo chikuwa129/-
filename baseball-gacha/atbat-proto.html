@@ -57,28 +57,37 @@
   @media (prefers-reduced-motion: reduce) { .result.pop { animation: none; } }
   .good { color: var(--win); } .bad { color: var(--lose); }
   .note { font-size: 11px; color: var(--sub); }
-  /* 下:指示のカード(横に1行)と、メッセージ行 */
-  .bar { background: var(--card); border-radius: 10px; padding: 4px; display: flex; flex-direction: column; gap: 4px; }
-  .cards { display: flex; gap: 4px; }
-  .cd { flex: 1 1 0; min-width: 0; min-height: 56px; padding: 3px 2px; border: 2px solid var(--accent); background: #fff; color: #111; text-align: center; }
-  .cd .nm { display: block; font-size: 13px; font-weight: bold; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cd .gb { display: block; font-size: 10px; color: var(--sub); white-space: nowrap; }
-  .cd .gb b { font-size: 15px; } .cd .gb b.g { color: var(--win); } .cd .gb b.x { color: var(--lose); }
+  /* 下:指示のカード(横に1行。押すと、すぐ結果)と、右端の小さなボタン */
+  .bar { background: var(--card); border-radius: 10px; padding: 6px; display: flex; gap: 8px; align-items: stretch; }
+  .cards { flex: 1 1 auto; min-width: 0; display: flex; gap: 8px; }
+  .cd { flex: 1 1 0; min-width: 0; min-height: 84px; padding: 3px 3px; border: 2px solid var(--accent); background: #fff; color: #111; text-align: center; display: flex; flex-direction: column; justify-content: space-between; gap: 1px; }
+  .cd .nm { display: block; font-size: 14px; font-weight: bold; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cd .od { display: block; font-size: 10px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cd .ft { display: block; font-size: 10px; line-height: 1.2; color: #333; min-height: 2.4em; overflow: hidden; }
+  .cd .nums { display: flex; justify-content: center; align-items: flex-end; gap: 8px; }
+  .cd .pr, .cd .rt { display: flex; flex-direction: column; align-items: center; font-size: 9px; color: var(--sub); line-height: 1; }
+  .cd .pr b { font-size: 22px; line-height: 1.05; color: #111; }
+  .cd .rt b { font-size: 20px; line-height: 1.1; min-width: 1.4em; border-radius: 6px; border: 2px solid #777; color: #111; background: #f2f2f2; }
+  .r1c, .r2c, .r3c { color: #8c2a20 !important; border-color: #b03a2e !important; background: #fbe9e6 !important; }
+  .r5c, .r6c, .r7c { color: #135c2b !important; border-color: #1d7a3a !important; background: #e5f4e9 !important; }
+  .r7c, .r1c { border-width: 3px !important; }
+  .cd.two .nm { font-size: 16px; }
   .cd.sel { border-width: 4px; border-color: #0d3d5f; background: #e8f1f8; }
+  .cd:disabled { opacity: .55; color: #111; background: #fff; } .cd.sel:disabled { opacity: 1; background: #e8f1f8; }
   .cd.best { box-shadow: 0 0 0 3px #f4c542; }
-  .msg { display: flex; gap: 4px; align-items: stretch; }
-  .msg .txt { flex: 1 1 auto; min-width: 0; font-size: 12px; color: #111; display: flex; flex-direction: column; justify-content: center; padding: 0 4px; }
-  .msg .txt .sm { font-size: 10px; color: var(--sub); }
-  .msg button { min-height: 44px; min-width: 44px; padding: 0 10px; }
-  .plain { font-size: 11px; color: #333; max-width: 6.5em; line-height: 1.1; }
-  .ok { font-size: 16px; font-weight: bold; color: #fff !important; background: var(--accent) !important; border-color: var(--accent) !important; min-width: 5.5em; white-space: nowrap; }
-  .ok:disabled { color: #f0f0f0 !important; background: #9fb6c7 !important; border-color: #9fb6c7 !important; }
+  .side { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
+  .side button { min-height: 44px; min-width: 44px; padding: 0 6px; }
+  .plain { font-size: 11px; color: #333; max-width: 5.5em; line-height: 1.1; }
+  .msgbox { flex: 1 1 auto; min-width: 0; min-height: 84px; font-size: 12px; color: #111; display: flex; flex-direction: column; justify-content: center; padding: 0 6px; }
+  .msgbox .sm { font-size: 10px; color: var(--sub); }
   .gear { font-size: 18px; }
+  .result .ev { font-size: 11px; color: #333; margin-top: 2px; }
+  .result .ev b { font-size: 14px; }
   @media (orientation: portrait) {
     .opp { max-width: 54%; }
     .band { left: 4px; top: auto; bottom: 4px; transform: none; }
     .warn { bottom: 34px; }
-    .cd .nm { font-size: 12px; } .cd .gb b { font-size: 13px; }
+    .cards { gap: 5px; } .cd .nm { font-size: 12px; } .cd .pr b { font-size: 18px; } .cd .rt b { font-size: 16px; } .cd .nums { gap: 3px; }
   }
   /* 設定(歯車) */
   .sheet { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.5); display: flex; justify-content: center; padding: 8px; }
@@ -174,13 +183,26 @@
       success: { bat: { who: 'all', minInning: 1, chance: false }, pitch: { pinch: true, maxDiff: 3, minInning: 1 }, winRange: [0.3, 0.8] },
       manager: { bat: { who: 'focus', minInning: 7, chance: true }, pitch: { pinch: true, maxDiff: 3, minInning: 7 }, winRange: [0.3, 0.8] },
     },
-    // 良い結果・悪い結果の定義(打席の7つの結果。バント・スクイズ・盗塁は、成功と失敗)
+    // 成功と失敗の定義(打席の7つの結果を、どちらかに必ず入れる。補数で合計 1。バント・スクイズ・盗塁は、成功と失敗)
+    //   T1d:投手の失敗に単打を入れた(T1b は、単打をどちらにも入れていなかった)
     goodBad: {
-      bat: { good: ['BB', 'S', 'XB', 'HR'], bad: ['K', 'GO', 'FO'] },     // 打者:良い=出塁(長打を含む)、悪い=三振・凡退
-      pitch: { good: ['K', 'GO', 'FO'], bad: ['BB', 'XB', 'HR'] },        // 投手:良い=アウト(三振を含む)、悪い=四球・長打以上(単打はどちらでもない)
+      bat: { good: ['BB', 'S', 'XB', 'HR'], bad: ['K', 'GO', 'FO'] },     // 打者:成功=出塁(四球・単打・長打・本塁打)、失敗=アウト
+      pitch: { good: ['K', 'GO', 'FO'], bad: ['BB', 'S', 'XB', 'HR'] },   // 投手:成功=アウト(三振を含む)、失敗=出塁を許す
     },
-    // 確率の上限と下限(100% の選択肢を作らない):良い結果は goodMax を超えず、悪い結果は badMin を下回らない
-    cap: { goodMax: 0.9, badMin: 0.05 },
+    // 成功確率の上限と下限(100% の選択肢を作らない)。表示も内部も、成功確率を min〜max に収める(バント・スクイズ・盗塁も)
+    cap: { min: 0.05, max: 0.9 },
+    // 期待値の評価(1〜7):通常を base にし、通常との差を step ごとに1段階(ev:得点期待値の点、p1:1点以上の確率)。投手は、失点が小さいほど高い
+    //   round:'round'(四捨五入)か 'trunc'(切り捨て。差が step に届くまで同じ段階)
+    //   仕様の仮の値(ev 0.05・p1 0.02)では、4 が 7 割を超えたため、細かくした(T1d)
+    rating: { base: 4, min: 1, max: 7, step: { ev: 0.02, p1: 0.008 }, round: 'round' },
+    // カードの特徴の一言:通常との差が min(ポイント)以上、または相対で rel 以上(ただし floor ポイント以上)の結果を、増える・減るから各 maxEach 個まで(変化の相対の大きい順)
+    //   rel を 0 にすると、仕様の仮の値(2ポイント以上だけ)になる
+    feature: { min: 0.02, rel: 0.1, floor: 0.002, maxEach: 2, label: { K: '三振', BB: '四球', GO: 'ゴロ', FO: 'フライ', S: '単打', XB: '長打', HR: '本塁打' },
+      normal: '基準(いつもどおり)', flat: '通常とほぼ同じ',
+      // バント・スクイズ・盗塁(・敬遠)は、仕組みを短く(自作の文)
+      mech: { bunt: '走者を進める。打者はアウト', squeeze: '三塁走者を返す。失敗すると走者がアウト', steal: '走者を進める。失敗すると走者がアウト', walk: '打者を歩かせる' } },
+    // 画面:カードの表示(rating:成功確率と評価 / prob-only:成功確率だけ / two-choice:攻めと堅実の2枚)、結果の表示時間、誤タップよけ
+    ui: { cardMode: 'rating', resultMs: 1500, tapGuardMs: 300, ratingLabel: '期待', two: { attack: '攻め', safe: '堅実' } },
     // 試合の事前勝率と戦力差:事前勝率が under 以下なら「格上」(相手が強い)、over 以上なら「格下」、その間は「同格」
     strength: { under: 0.4, over: 0.6 },
     // 試合の勝率の推定(簡易):半イニングの得点の分散 v(仮)。残りイニングの得点は、得点期待値 μ(無死走者なし)と、事前勝率から逆算した力の差で見込む
@@ -203,14 +225,13 @@
         { key: 'control', max: 30, word: '制球が荒い' }, { key: 'velocity', max: 30, word: '球威がない' }, { key: 'breaking', max: 25, word: '変化球が少ない' },
       ],
     },
-    // 指示の説明(メッセージ行に出す自作の一文)
+    // 指示の説明(結果のあとの、メッセージ行に出す自作の一文)
     orderText: {
       bat: { normal: 'いつもどおりに打つ。', power: '大きいのを狙う。長打は増えるが、空振りも増える。', contact: '確実に当てにいく。三振は減るが、長打は出にくい。',
         bunt: '走者を進める。打者はアウトになる。', squeeze: '三塁走者を、バントで迎え入れる。失敗すると、走者がアウト。', steal: '一塁走者が、二塁を狙う。失敗するとアウト。' },
       pitch: { normal: 'いつもどおりに投げる。', fast: '直球で押す。球が速いほど効くが、遅いと打たれる。', breaking: '変化球でかわす。三振とゴロが増えるが、制球が悪いと四球が増える。',
         outside: '外角に集める。長打は減るが、四球が増える。', inside: '内角を攻める。詰まらせるが、制球が悪いと危ない。', walk: '勝負を避けて、歩かせる。' },
     },
-    messages: { idle: '指示のカードを選んでください。説明を読んでから「決定」。' },
   };
   const OUTCOMES = ['K', 'BB', 'GO', 'FO', 'S', 'XB', 'HR'];
   const OUTCOME_LABEL = { K: '三振', BB: '四球', GO: 'ゴロのアウト', FO: 'フライのアウト', S: '単打', XB: '長打', HR: '本塁打' };
@@ -278,19 +299,15 @@
     for (const k of OUTCOMES) w[k] /= sum;
     return capProbs(w, side, C);
   }
-  // 上限と下限:良い結果の合計を goodMax 以下に、悪い結果の合計を badMin 以上に(それぞれ、残りの結果で釣り合いを取る)
+  // 上限と下限:成功の合計を cap.min〜cap.max に収める(成功と失敗は補数なので、失敗の側を同じ割合で釣り合わせる)
   function capProbs(w, side, C) {
     const G = C.goodBad[side], cap = C.cap;
-    const tot = (ks) => ks.reduce((a, k) => a + w[k], 0);
-    const scale = (ks, f, rest, g) => { for (const k of ks) w[k] *= f; for (const k of rest) w[k] *= g; };
-    const others = (ks) => OUTCOMES.filter((k) => ks.indexOf(k) < 0);
-    let g = tot(G.good);
-    if (g > cap.goodMax) scale(G.good, cap.goodMax / g, others(G.good), (1 - cap.goodMax) / (1 - g));
-    const b = tot(G.bad);
-    if (b < cap.badMin && b > 0) scale(G.bad, cap.badMin / b, others(G.bad), (1 - cap.badMin) / (1 - b));
+    const g = G.good.reduce((a, k) => a + w[k], 0);
+    const t = clamp(g, cap.min, cap.max);
+    if (t !== g && g > 0 && g < 1) { for (const k of G.good) w[k] *= t / g; for (const k of G.bad) w[k] *= (1 - t) / (1 - g); }
     return w;
   }
-  // 指示ごとの、良い結果と悪い結果の確率(バント・スクイズ・盗塁は、成功と失敗。敬遠は null)
+  // 指示ごとの、成功と失敗の確率(補数。good = 成功、bad = 失敗。バント・スクイズ・盗塁は kind 'success'。敬遠は null)
   function goodBadOf(sc, order, cfg) {
     const C = cfg || CONFIG;
     const side = sc.side === 'pitch' ? 'pitch' : 'bat';
@@ -299,14 +316,15 @@
       const p = order === 'bunt' ? buntP(sc, C) : order === 'squeeze' ? squeezeP(sc, C) : stealP(sc, C);
       return { good: p, bad: 1 - p, kind: 'success' };
     }
-    const P = probs(sc, order, C), G = C.goodBad[side];
-    return { good: G.good.reduce((a, k) => a + P[k], 0), bad: G.bad.reduce((a, k) => a + P[k], 0), kind: 'outcome' };
+    const P = probs(sc, order, C), g = C.goodBad[side].good.reduce((a, k) => a + P[k], 0);
+    return { good: g, bad: 1 - g, kind: 'outcome' };
   }
   const p01 = (C, x) => clamp(x, C.run.pMin, C.run.pMax);
-  function buntP(sc, C) { C = C || CONFIG; const Z = zs(sc), B = C.bunt; return clamp(B.base + B.con * Z.con + B.spd * Z.spd - B.def * Z.def, B.min, B.max); }
+  const capP = (C, p) => clamp(p, C.cap.min, C.cap.max);
+  function buntP(sc, C) { C = C || CONFIG; const Z = zs(sc), B = C.bunt; return capP(C, clamp(B.base + B.con * Z.con + B.spd * Z.spd - B.def * Z.def, B.min, B.max)); }
   function buntHitP(sc, C) { C = C || CONFIG; const B = C.bunt; return clamp(B.hitBase + B.hitSpd * z(sc.batter.speed), 0, B.hitMax); }
-  function squeezeP(sc, C) { C = C || CONFIG; const Z = zs(sc), Q = C.squeeze; return clamp(Q.base + Q.con * Z.con - Q.def * Z.def, Q.min, Q.max); }
-  function stealP(sc, C) { C = C || CONFIG; const S = C.steal; return clamp(S.base + S.spd * z(runnerSpd(sc, 1)) - S.arm * z(sc.arm) - S.quick * z(sc.pitcher.quick), S.min, S.max); }
+  function squeezeP(sc, C) { C = C || CONFIG; const Z = zs(sc), Q = C.squeeze; return capP(C, clamp(Q.base + Q.con * Z.con - Q.def * Z.def, Q.min, Q.max)); }
+  function stealP(sc, C) { C = C || CONFIG; const S = C.steal; return capP(C, clamp(S.base + S.spd * z(runnerSpd(sc, 1)) - S.arm * z(sc.arm) - S.quick * z(sc.pitcher.quick), S.min, S.max)); }
   const runnerSpd = (sc, base) => (sc.runnerSpeed && sc.runnerSpeed[base - 1] != null ? sc.runnerSpeed[base - 1] : 50);
 
   // ---------- 走者の更新(分岐つき) ----------
@@ -484,7 +502,41 @@
     });
     const metric = isLateClose(sc, C) ? 'p1' : 'ev';
     const pick = sc.side === 'pitch' ? (a, b) => (b[metric] < a[metric] ? b : a) : (a, b) => (b[metric] > a[metric] ? b : a);
+    const n = rows.find((r) => r.order === 'normal');
+    for (const r of rows) {
+      r.dm = (r[metric] - n[metric]) * (sc.side === 'pitch' ? -1 : 1);   // 通常との差(得をする向きが正)
+      r.rating = ratingOf(r.dm, metric, C);
+      r.feature = featureOf(r, C);
+    }
     return { re: now, p1: p1Of(sc.outs, sc.bases, C), metric: metric, rows: rows, best: rows.reduce(pick).order };
+  }
+  // 期待値の評価(1〜7)。dm:通常との差(得をする向きが正)
+  function ratingOf(dm, metric, cfg) {
+    const R = (cfg || CONFIG).rating, x = dm / R.step[metric] + 1e-9 * Math.sign(dm);
+    return clamp(R.base + (R.round === 'trunc' ? Math.trunc(x) : Math.round(x)), R.min, R.max);
+  }
+  // 特徴の一言:{ up:[結果], down:[結果], text }。確率の変化(row.delta)から作る。バント・スクイズ・盗塁は、仕組みの文
+  function featureOf(row, cfg) {
+    const F = (cfg || CONFIG).feature;
+    if (row.order === 'normal') return { up: [], down: [], text: F.normal };
+    if (!row.delta) return { up: [], down: [], text: F.mech[row.order] || '' };
+    const p0 = {}; for (const k of OUTCOMES) p0[k] = row.probs[k] - row.delta[k];
+    const hit = OUTCOMES.map((k) => ({ k: k, d: row.delta[k], r: Math.abs(row.delta[k]) / Math.max(1e-9, p0[k]) }))
+      .filter((x) => Math.abs(x.d) >= F.min - 1e-12 || (F.rel > 0 && x.r >= F.rel && Math.abs(x.d) >= F.floor));
+    hit.sort((a, b) => b.r - a.r);
+    const up = hit.filter((x) => x.d > 0).slice(0, F.maxEach).map((x) => x.k), down = hit.filter((x) => x.d < 0).slice(0, F.maxEach).map((x) => x.k);
+    const text = up.map((k) => F.label[k] + '↑').concat(down.map((k) => F.label[k] + '↓')).join(' ');
+    return { up: up, down: down, text: text || F.flat };
+  }
+  // 2択の表示:攻め=評価が最も高い指示(同じなら成功確率が低いほう)、堅実=攻めを除いて成功確率が最も高い指示
+  //   dominated:堅実が、成功確率でも評価でも、攻めを上回らない(選ぶ意味がない)
+  function twoChoice(ev) {
+    const rows = ev.rows.filter((r) => r.good != null);
+    const attack = rows.reduce((a, b) => (b.rating > a.rating || (b.rating === a.rating && b.good < a.good) ? b : a));
+    const rest = rows.filter((r) => r !== attack);
+    if (!rest.length) return { attack: attack, safe: null, dominated: false };
+    const safe = rest.reduce((a, b) => (b.good > a.good ? b : a));
+    return { attack: attack, safe: safe, dominated: safe.good <= attack.good && safe.rating <= attack.rating };
   }
 
   // ---------- 抽選と結果 ----------
@@ -546,13 +598,12 @@
     const out = hit.slice(0, T.max).map((t) => t.word);
     return out.length ? out : ['平均的'];
   }
-  // 画面の手順(2段階で選ぶ):select で選択(進まない)、confirm で確定して結果、next で次へ
+  // 画面の手順(1タップで確定):pick でカードを押すと、すぐ結果。auto は勝負にならない試合(通常)。next で次へ(結果が出るまでは進まない)
   function uiStep(st, action, arg) {
     const s = Object.assign({ sel: null, result: null }, st);
-    if (action === 'select') { if (!s.result) s.sel = arg; return s; }
-    if (action === 'confirm') { if (!s.result && s.sel) s.result = { order: s.sel }; return s; }
+    if (action === 'pick') { if (!s.result && arg) { s.sel = arg; s.result = { order: arg }; } return s; }
     if (action === 'auto') { if (!s.result) { s.sel = 'normal'; s.result = { order: 'normal', auto: true }; } return s; }
-    if (action === 'next') return { sel: null, result: null };
+    if (action === 'next') return s.result || !st ? { sel: null, result: null } : s;
     return s;
   }
 
@@ -608,7 +659,7 @@
   return {
     CONFIG: CONFIG, OUTCOMES: OUTCOMES, OUTCOME_LABEL: OUTCOME_LABEL, ORDER_LABEL: ORDER_LABEL, PRESETS: PRESETS, SCENES: SCENES,
     Rng: Rng, probs: probs, orderBranches: orderBranches, legalOrders: legalOrders, reTable: reTable, reOf: reOf, p1Table: p1Table, p1Of: p1Of, expectOrderP1: expectOrderP1, expectOrder: expectOrder,
-    evaluate: evaluate, resolve: resolve, goodBadOf: goodBadOf, gameWinProb: gameWinProb, strengthLabel: strengthLabel, inWinRange: inWinRange, makeScene: makeScene, randomScene: randomScene, handsOf: handsOf, tagsOf: tagsOf, uiStep: uiStep, isKeyScene: isKeyScene,
+    evaluate: evaluate, ratingOf: ratingOf, featureOf: featureOf, twoChoice: twoChoice, resolve: resolve, goodBadOf: goodBadOf, gameWinProb: gameWinProb, strengthLabel: strengthLabel, inWinRange: inWinRange, makeScene: makeScene, randomScene: randomScene, handsOf: handsOf, tagsOf: tagsOf, uiStep: uiStep, isKeyScene: isKeyScene,
     buntP: buntP, squeezeP: squeezeP, stealP: stealP, rankOf: rankOf, kmh: kmh, breakTotal: breakTotal,
   };
 });
@@ -617,9 +668,12 @@
 // ---- atbat-art.js(build-play.js で埋め込み)----
 // =============================================================
 // atbat-art.js : 打席の場面の線画(自分の視点)。SVG の文字列を返す、独立した部品
-//   入力:{ mode:'bat'|'pitch', bats:'R'|'L', throws:'R'|'L', color, bg, width, height }
+//   入力:{ mode:'bat'|'pitch', bats:'R'|'L', throws:'R'|'L', color, bg, width, height, strokeWidth, heads }
 //   出力:SVG の文字列。画面や試作の状態に依存しない(監督モードでも使えるように)
-//   描き方:輪郭の線だけ(塗りは背景色のみ)。線の太さは一定、角は丸める。静止画(アニメーションなし)
+//   描き方:輪郭の線だけ(塗りは背景色で、重なりを表す)。線の太さは一定、角は丸める。静止画(アニメーションなし)
+//   人の形(T1d):頭(あご)と首、肩幅と厚みのある胴、太さのある腕と脚(閉じた輪郭)、ミトン状の手、靴の形。
+//     打者はヘルメット(つば)とバット、投手は帽子とグラブ、捕手はマスクとミット。各部品に data-el を付ける(テストで確かめる)
+//   頭身:heads(仮 3。頭の大きさだけを変える)。人物は、足もとを原点、頭1つ分を 10 とする座標で描き、場面の大きさに写す
 //   左右:基準の向き(右打席・右投げ)で描き、左のときは、その人物だけを左右反転する(transform の scale(-1,1))
 // =============================================================
 (function (root, factory) {
@@ -628,67 +682,142 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
   const W = 200, H = 120;
+  const DEF = { heads: 3, strokeWidth: 1.7 };
   const MIRROR = 'translate(' + W + ',0) scale(-1,1)';
+  const f = (v) => String(Math.round(v * 10) / 10);
   // 人物ごとのグループ。flip のとき左右反転する(data-flip で向きを残す。テストはこれで確かめる)
   const group = (name, flip, body) => '<g data-part="' + name + '" data-flip="' + (flip ? 1 : 0) + '"' + (flip ? ' transform="' + MIRROR + '"' : '') + '>' + body + '</g>';
-  const P = (d) => '<path d="' + d + '"/>';
-  const circle = (x, y, r) => '<circle cx="' + x + '" cy="' + y + '" r="' + r + '"/>';
+  const P = (el, d, tf) => '<path data-el="' + el + '"' + (tf ? ' transform="' + tf + '"' : '') + ' d="' + d + '"/>';
+
+  // ---------- 形の部品(閉じた輪郭) ----------
+  // 座標の写し:足もと (ox, oy)、倍率 s。頭は、首の付け根を中心に k 倍(頭身)
+  function mapper(ox, oy, s, k) {
+    const p = (x, y) => f(ox + s * x) + ' ' + f(oy + s * y);
+    const h = (x, y) => p(x * k, -24 + (y + 24) * k);
+    return { p: p, h: h, s: s, k: k, at: (x, y, rot) => 'translate(' + f(ox + s * x) + ',' + f(oy + s * y) + ')' + (rot ? ' rotate(' + rot + ')' : '') };
+  }
+  // 太さのある棒(腕・脚):両端が丸い、閉じた輪郭
+  function limb(m, x1, y1, x2, y2, w) {
+    const ax = x1, ay = y1, dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy) || 1;
+    const nx = -dy / L * w / 2, ny = dx / L * w / 2, r = f(w / 2 * m.s);
+    return 'M' + m.p(ax + nx, ay + ny) + ' L' + m.p(x2 + nx, y2 + ny) + ' A' + r + ' ' + r + ' 0 0 0 ' + m.p(x2 - nx, y2 - ny) + ' L' + m.p(ax - nx, ay - ny) + ' A' + r + ' ' + r + ' 0 0 0 ' + m.p(ax + nx, ay + ny) + ' Z';
+  }
+  // 先が太い棒(バット):握り w1、先 w2
+  function taper(m, x1, y1, x2, y2, w1, w2) {
+    const dx = x2 - x1, dy = y2 - y1, L = Math.hypot(dx, dy) || 1, ux = -dy / L, uy = dx / L;
+    const r1 = f(w1 / 2 * m.s), r2 = f(w2 / 2 * m.s);
+    return 'M' + m.p(x1 + ux * w1 / 2, y1 + uy * w1 / 2) + ' L' + m.p(x2 + ux * w2 / 2, y2 + uy * w2 / 2) + ' A' + r2 + ' ' + r2 + ' 0 0 0 ' + m.p(x2 - ux * w2 / 2, y2 - uy * w2 / 2)
+      + ' L' + m.p(x1 - ux * w1 / 2, y1 - uy * w1 / 2) + ' A' + r1 + ' ' + r1 + ' 0 0 0 ' + m.p(x1 + ux * w1 / 2, y1 + uy * w1 / 2) + ' Z';
+  }
+  // 楕円(中心からの大きさは、場面の単位)
+  const ell = (rx, ry, cx, cy) => { cx = cx || 0; cy = cy || 0; return 'M' + f(cx - rx) + ' ' + f(cy) + ' A' + f(rx) + ' ' + f(ry) + ' 0 1 1 ' + f(cx + rx) + ' ' + f(cy) + ' A' + f(rx) + ' ' + f(ry) + ' 0 1 1 ' + f(cx - rx) + ' ' + f(cy) + ' Z'; };
+  // ミトン状の手(親指つき):r は場面の単位。2つの輪郭(親指を先に描き、手のひらで重ねる)
+  const mitten = (tf, r) => P('hand', ell(r * 0.42, r * 0.62, -r * 0.8, r * 0.15), tf + ' rotate(-20)') + P('hand', ell(r * 0.8, r, 0, 0), tf);
+  // グラブ(指の分かれ目つき)
+  function glove(tf, r) {
+    const d = 'M' + f(-r * 0.95) + ' ' + f(r * 0.5) + ' Q' + f(-r * 1.25) + ' ' + f(-r * 0.6) + ' ' + f(-r * 0.6) + ' ' + f(-r * 1.1) + ' Q' + f(-r * 0.1) + ' ' + f(-r * 1.45) + ' ' + f(r * 0.35) + ' ' + f(-r * 1.15)
+      + ' Q' + f(r * 0.95) + ' ' + f(-r * 1.15) + ' ' + f(r * 1.05) + ' ' + f(-r * 0.3) + ' Q' + f(r * 1.3) + ' ' + f(r * 0.4) + ' ' + f(r * 0.6) + ' ' + f(r * 0.95) + ' Q' + f(-r * 0.2) + ' ' + f(r * 1.2) + ' ' + f(-r * 0.95) + ' ' + f(r * 0.5) + ' Z';
+    const lines = 'M' + f(-r * 0.35) + ' ' + f(-r * 1.0) + ' L' + f(-r * 0.25) + ' ' + f(r * 0.2) + ' M' + f(r * 0.3) + ' ' + f(-r * 1.0) + ' L' + f(r * 0.2) + ' ' + f(r * 0.25);
+    return P('glove', d, tf) + P('glove', lines, tf);
+  }
+  // 靴(正面・後ろから見た形:甲の丸みと靴底)
+  const shoe = (tf, w) => P('shoe', 'M' + f(-w) + ' 0 Q' + f(-w) + ' ' + f(-w * 0.75) + ' 0 ' + f(-w * 0.75) + ' Q' + f(w) + ' ' + f(-w * 0.75) + ' ' + f(w) + ' 0 Z', tf);
+  const ball = (tf, r) => P('ball', ell(r, r) + ' M' + f(-r * 0.5) + ' ' + f(-r * 0.8) + ' Q0 0 ' + f(-r * 0.5) + ' ' + f(r * 0.8) + ' M' + f(r * 0.5) + ' ' + f(-r * 0.8) + ' Q0 0 ' + f(r * 0.5) + ' ' + f(r * 0.8), tf);
+
+  // ---------- 人の体(足もとが原点、頭1つ分が 10) ----------
+  // 胴(ユニフォーム):肩幅と、腰へのすぼまり。ベルトと前立て(後ろ姿は、ベルトだけ)
+  function body(m, back, sw) {
+    const t = 'M' + m.p(-7, -20.5) + ' Q' + m.p(-8.2, -15) + ' ' + m.p(-5.3, -11) + ' L' + m.p(5.3, -11) + ' Q' + m.p(8.2, -15) + ' ' + m.p(7, -20.5) + ' Q' + m.p(0, -22.3) + ' ' + m.p(-7, -20.5) + ' Z';
+    const u = 'M' + m.p(-5.6, -12.7) + ' L' + m.p(5.6, -12.7) + (back ? '' : ' M' + m.p(0, -21.3) + ' L' + m.p(0, -12.7));
+    const legs = P('leg', limb(m, -3.6, -12, -6.5 * sw, -1.6, 4.8)) + P('leg', limb(m, 3.6, -12, 6.5 * sw, -1.6, 4.8));
+    const shoes = shoe(m.at(-6.8 * sw, 0), 3.4 * m.s) + shoe(m.at(6.8 * sw, 0), 3.4 * m.s);
+    const neck = P('neck', 'M' + m.h(-1.8, -24.5) + ' L' + m.h(-1.8, -20.3) + ' L' + m.h(1.8, -20.3) + ' L' + m.h(1.8, -24.5) + ' Z');
+    return legs + shoes + neck + P('torso', t) + P('uniform', u);
+  }
+  // 頭(丸い頭と、あご)
+  const head = (m) => P('head', 'M' + m.h(-4.3, -28) + ' A' + f(4.3 * m.s * m.k) + ' ' + f(4.3 * m.s * m.k) + ' 0 0 1 ' + m.h(4.3, -28) + ' Q' + m.h(4.4, -24.2) + ' ' + m.h(0, -23) + ' Q' + m.h(-4.4, -24.2) + ' ' + m.h(-4.3, -28) + ' Z');
+  // 帽子(正面):山と、つば
+  const cap = (m) => P('cap', 'M' + m.h(-4.6, -28.4) + ' Q' + m.h(-4.7, -33.2) + ' ' + m.h(0, -33.2) + ' Q' + m.h(4.7, -33.2) + ' ' + m.h(4.6, -28.4) + ' Z')
+    + P('cap', 'M' + m.h(-5.6, -28.4) + ' Q' + m.h(0, -29.4) + ' ' + m.h(5.6, -28.4) + ' Q' + m.h(0, -26.3) + ' ' + m.h(-5.6, -28.4) + ' Z');
+  // ヘルメット:つば(front:正面に見える / 後ろ姿は、山の両側にのぞく)、山、耳あて(画面の左の耳)
+  function helmet(m, front) {
+    const brim = front ? 'M' + m.h(-5.8, -28.2) + ' Q' + m.h(0, -29.2) + ' ' + m.h(5.8, -28.2) + ' Q' + m.h(0, -25.8) + ' ' + m.h(-5.8, -28.2) + ' Z'
+      : 'M' + m.h(-6.2, -28.3) + ' Q' + m.h(0, -30.2) + ' ' + m.h(6.2, -28.3) + ' Q' + m.h(0, -27.2) + ' ' + m.h(-6.2, -28.3) + ' Z';
+    const dome = 'M' + m.h(-5, -27.4) + ' Q' + m.h(-5.2, -34) + ' ' + m.h(0, -34) + ' Q' + m.h(5.2, -34) + ' ' + m.h(5, -27.4) + (front ? ' Z' : ' L' + m.h(5, -26.4) + ' L' + m.h(-5, -26.4) + ' Z');
+    const flap = 'M' + m.h(-5, -27.6) + ' Q' + m.h(-6.9, -27) + ' ' + m.h(-6.2, -24.2) + ' Q' + m.h(-5.2, -23.4) + ' ' + m.h(-4.1, -24.6) + ' Z';
+    return front ? P('helmet', dome) + P('helmet', brim) + P('helmet', flap) : P('helmet', brim) + P('helmet', dome) + P('helmet', flap);
+  }
 
   // ---------- 打者のモード(打席から、投手を見る) ----------
-  // 奥の投手(基準:右投げ。投手は打者の方を向くので、右腕は画面の左に出る)
+  // 奥の投手(正面。基準:右投げ。投手は打者の方を向くので、投げる腕は画面の左に出る)
   function farPitcher() {
-    return circle(100, 22, 4)                       // 頭
-      + P('M100 26 L100 42')                          // 胴
-      + P('M100 30 L92 24 L88 16')                    // 投げる腕(振りかぶる)
-      + P('M100 30 L107 34 L110 31')                  // グラブの腕
-      + P('M100 42 L95 52 M100 42 L106 51')           // 脚
-      + P('M86 54 Q100 50 114 54');                   // マウンド
+    const m = mapper(100, 54, 1.35, K);
+    return body(m, false, 1)
+      + P('arm', limb(m, 6.2, -19.8, 10, -15.6, 3.4)) + P('arm', limb(m, 10, -15.6, 8.2, -19.2, 3))      // グラブの腕(胸の前に構える)
+      + glove(m.at(8, -20.2), 3.6 * m.s)
+      + head(m) + cap(m)
+      + P('arm', limb(m, -6.2, -19.8, -10.6, -23.4, 3.4)) + P('arm', limb(m, -10.6, -23.4, -9.8, -29.6, 3))   // 投げる腕(振りかぶる)
+      + mitten(m.at(-9.8, -30.6), 1.9 * m.s) + ball(m.at(-9.6, -32.6), 1.1 * m.s);
   }
   // 手前の打者(後ろ姿。基準:右打席=画面の左寄り、バットは左側に構える)
   function nearBatter() {
-    return circle(62, 64, 9)                        // 頭(後ろ姿)
-      + P('M40 84 Q62 72 84 84')                      // 肩
-      + P('M44 84 L44 120 M80 84 L80 120')            // 胴の輪郭
-      + P('M46 86 L38 74 L36 66')                     // 腕(グリップへ)
-      + P('M36 68 L22 34');                           // バット(左側に構える)
+    const m = mapper(57, 118, 3.0, K);
+    return body(m, true, 1) + head(m) + helmet(m, false)
+      + P('arm', limb(m, 6.3, -20, 1.6, -18.2, 3.8)) + P('arm', limb(m, 1.6, -18.2, -6.6, -23.2, 3.4))   // 奥の腕(背中を横切る)
+      + P('bat', taper(m, -7.4, -23.6, -17.2, -34.2, 1.3, 2.7))
+      + P('arm', limb(m, -6.3, -20, -10.8, -19, 3.8)) + P('arm', limb(m, -10.8, -19, -8.6, -23.8, 3.4))   // 手前の腕
+      + mitten(m.at(-7.2, -23.4), 1.7 * m.s) + mitten(m.at(-8.6, -24.8), 1.7 * m.s);
   }
-  function homePlate() { return P('M86 104 L114 104 L114 110 L100 116 L86 110 Z'); }
+  function homePlate() { return P('plate', 'M86 104 L114 104 L114 110 L100 116 L86 110 Z'); }
+  function mound() { return P('mound', 'M78 58 Q100 50 122 58 Z'); }
 
   // ---------- 投手のモード(マウンドから、打者を見る) ----------
-  // 奥の打者(基準:右打席。投手から見て、右打者は画面の右側に立つ)
+  // 奥の打者(正面寄り。基準:右打席。投手から見て、右打者は画面の右側に立つ。バットは画面の右上に立てる)
   function farBatter() {
-    return circle(120, 34, 4.5)                     // 頭
-      + P('M120 39 L118 56')                          // 胴
-      + P('M119 43 L112 40 L110 34')                  // 腕(グリップ)
-      + P('M110 35 L104 22')                          // バット
-      + P('M118 56 L113 68 M118 56 L124 68');         // 脚
+    const m = mapper(124, 74, 1.2, K);
+    return body(m, false, 1.1) + head(m) + helmet(m, true)
+      + P('arm', limb(m, -6.2, -19.8, -1, -16.6, 3.4)) + P('arm', limb(m, -1, -16.6, 6.6, -22.4, 3))
+      + P('bat', taper(m, 7.6, -23.4, 14, -35, 1.3, 2.6))
+      + P('arm', limb(m, 6.2, -19.8, 10.6, -18, 3.4)) + P('arm', limb(m, 10.6, -18, 8.6, -23.4, 3))
+      + mitten(m.at(7.2, -22.6), 1.8 * m.s) + mitten(m.at(8.4, -24), 1.8 * m.s);
   }
-  function farPlateAndMitt() {
-    return P('M92 72 L108 72 L108 75 L100 78 L92 75 Z')  // ホームベース
-      + P('M96 60 Q100 55 104 60 Q104 66 100 67 Q96 66 96 60 Z');   // 捕手のミット(小)
+  // 捕手(しゃがんだ形を簡略に):マスクとミット。ホームベースは手前
+  function farCatcher() {
+    const m = mapper(100, 68, 0.95, K);
+    const legs = P('leg', limb(m, -3.2, -9.5, -8.4, -7.5, 4.6)) + P('leg', limb(m, -8.4, -7.5, -6.2, -1.4, 4.2))
+      + P('leg', limb(m, 3.2, -9.5, 8.4, -7.5, 4.6)) + P('leg', limb(m, 8.4, -7.5, 6.2, -1.4, 4.2));
+    const torso = P('torso', 'M' + m.p(-6.8, -17.5) + ' Q' + m.p(-7.8, -13) + ' ' + m.p(-5, -9) + ' L' + m.p(5, -9) + ' Q' + m.p(7.8, -13) + ' ' + m.p(6.8, -17.5) + ' Q' + m.p(0, -19.2) + ' ' + m.p(-6.8, -17.5) + ' Z');
+    const hm = mapper(100, 68 + 6.5 * 0.95, 0.95, K);   // 頭は、しゃがんだぶん低い
+    const mask = P('mask', 'M' + hm.h(-3.4, -27) + ' L' + hm.h(3.4, -27) + ' M' + hm.h(-3.6, -25) + ' L' + hm.h(3.6, -25) + ' M' + hm.h(0, -29.5) + ' L' + hm.h(0, -23.4));
+    return legs + torso + head(hm) + mask + glove(m.at(1.5, -13), 3.8 * m.s).replace(/data-el="glove"/g, 'data-el="mitt"') + homePlate2();
   }
-  // 手前の自分の投手(投げる腕とグラブの一部。基準:右投げ=投げる手は画面の右、グラブは左)
+  function homePlate2() { return P('plate', 'M92 72 L108 72 L108 75 L100 78 L92 75 Z'); }
+  // 手前の自分の投手(帽子のつば、袖、投げる腕とボール、グラブ。基準:右投げ=投げる手は画面の右、グラブは左)
   function nearPitcher() {
-    return P('M150 120 Q156 98 168 88')               // 投げる腕
-      + circle(172, 84, 7)                            // ボールを持つ手
-      + P('M30 120 Q36 104 46 98')                    // グラブの腕
-      + P('M44 92 Q56 86 62 98 Q60 110 48 110 Q40 104 44 92 Z');   // グラブ
+    const m = mapper(0, 0, 1, 1);
+    return P('cap', 'M48 0 Q100 17 152 0 Z')
+      + P('uniform', limb(m, 166, 130, 172, 106, 17)) + P('arm', limb(m, 172, 106, 176, 90, 11))
+      + mitten(m.at(176, 86) + ' rotate(-15)', 8.5) + ball(m.at(170, 79), 5)
+      + P('uniform', limb(m, 32, 130, 40, 110, 17)) + P('arm', limb(m, 40, 110, 48, 100, 11))
+      + glove(m.at(52, 92) + ' rotate(15)', 13);
   }
 
+  let K = 1;
   function draw(o) {
     o = o || {};
     const mode = o.mode === 'pitch' ? 'pitch' : 'bat';
     const bats = o.bats === 'L' ? 'L' : 'R', throws = o.throws === 'L' ? 'L' : 'R';
-    const color = o.color || '#222', bg = o.bg || '#fff', sw = o.strokeWidth || 2.4;
+    const color = o.color || '#222', bg = o.bg || '#fff', sw = o.strokeWidth || DEF.strokeWidth;
+    K = 3 / Math.max(2, Math.min(8, o.heads || DEF.heads));   // 頭身:3 で頭の大きさがそのまま。大きいほど頭が小さい
     let body;
-    if (mode === 'bat') body = group('pitcher', throws === 'L', farPitcher()) + homePlate() + group('batter', bats === 'L', nearBatter());
-    else body = group('plate', false, farPlateAndMitt()) + group('batter', bats === 'L', farBatter()) + group('pitcher', throws === 'L', nearPitcher());
+    if (mode === 'bat') body = mound() + group('pitcher', throws === 'L', farPitcher()) + homePlate() + group('batter', bats === 'L', nearBatter());
+    else body = group('plate', false, farCatcher()) + group('batter', bats === 'L', farBatter()) + group('pitcher', throws === 'L', nearPitcher());
     const size = (o.width ? ' width="' + o.width + '"' : '') + (o.height ? ' height="' + o.height + '"' : '');
     return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '"' + size + ' preserveAspectRatio="xMidYMid meet" role="img" aria-label="' + (mode === 'bat' ? '打席から投手を見る' : 'マウンドから打者を見る') + '"'
       + ' data-mode="' + mode + '" data-bats="' + bats + '" data-throws="' + throws + '">'
       + '<g fill="' + bg + '" stroke="' + color + '" stroke-width="' + sw + '" stroke-linecap="round" stroke-linejoin="round">' + body + '</g></svg>';
   }
-  return { draw: draw, VIEWBOX: [W, H] };
+  return { draw: draw, VIEWBOX: [W, H], DEFAULTS: DEF };
 });
 </script>
 <script>
@@ -700,8 +829,8 @@
   const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const pc = (v) => Math.round(v * 100) + '%';
   const sg = (v) => (v >= 0 ? '+' : '−') + Math.abs(Math.round(v * 100));
-  const S = { mode: 'bat', seed: 1, presetIdx: -1, bat: 'normal', pit: 'normal', key: 'success', sheet: false, bats: null, throws: null };
-  let rng = new A.Rng(1), sc = null, ui = { sel: null, result: null }, result = null, lastEval = null;
+  const S = { mode: 'bat', seed: 1, presetIdx: -1, bat: 'normal', pit: 'normal', key: 'success', sheet: false, bats: null, throws: null, card: C.ui.cardMode };
+  let rng = new A.Rng(1), sc = null, ui = { sel: null, result: null }, result = null, lastEval = null, timer = null, shownAt = 0;
   const NAMES = ['青木', '石川', '上田', '大野', '加藤', '北村', '小林', '佐々木', '高田', '中島', '西村', '原田', '松本', '森', '山口', '渡辺'];
   const nameOf = (k) => NAMES[((S.seed * 7 + k * 13) >>> 0) % NAMES.length];
 
@@ -721,17 +850,22 @@
   }
   // 場面の始まり:勝負にならない試合は、操作なしで「通常」の結果だけ
   function begin() { ui = A.uiStep(null, 'next'); result = null; if (!inRange(sc)) { ui = A.uiStep(ui, 'auto'); resolve(); } }
+  // カードを押すと、その指示で、すぐ結果(1タップで確定)
+  function pick(order, pickAs) { ui = A.uiStep(ui, 'pick', order); if (ui.result) { ui.result.pickAs = pickAs || null; resolve(); } }
   function resolve() {
     const order = ui.result.order;
+    const ev = A.evaluate(sc), row = ev.rows.find((x) => x.order === order), nrow = ev.rows.find((x) => x.order === 'normal');
     const w0 = A.gameWinProb(sc);
     const r = A.resolve(sc, order, rng);
     const bat = S.mode === 'bat';
     const diff = sc.diff + (bat ? r.runs : -r.runs);
     const w1 = A.gameWinProb(sc, { outs: r.outs, bases: r.bases, diff: diff });
-    result = Object.assign(r, { order: order, orderLabel: A.ORDER_LABEL[S.mode][order], w0: w0, w1: w1, diff: diff, auto: !!ui.result.auto, fresh: true,
+    result = Object.assign(r, { order: order, orderLabel: A.ORDER_LABEL[S.mode][order], w0: w0, w1: w1, diff: diff, auto: !!ui.result.auto, fresh: true, pickAs: ui.result.pickAs || null,
+      row: row, nrow: nrow, metric: ev.metric,
       my: sc.my + (bat ? r.runs : 0), op: sc.op + (bat ? 0 : r.runs) });
   }
   function nextScene() {
+    clearTimeout(timer); timer = null;
     if (result && result.outs < 3) { sc = Object.assign({}, sc, { outs: result.outs, bases: result.bases, diff: result.diff, my: result.my, op: result.op }); begin(); }
     else { S.seed = (S.seed + 1) >>> 0; S.presetIdx = -1; newScene(true); }
   }
@@ -765,31 +899,51 @@
     if (!result) return '';
     const r = result;
     const good = S.mode === 'bat' ? r.delta >= 0 : r.delta <= 0;
-    const html = '<div class="pane result' + (r.fresh ? ' pop' : '') + '" id="res"><div class="note">' + (r.auto ? '勝負にならない試合:指示は「通常」' : esc(r.orderLabel)) + '</div>'
+    const html = '<div class="pane result' + (r.fresh ? ' pop' : '') + '" id="res"><div class="note">' + (r.auto ? '勝負にならない試合:指示は「通常」' : (r.pickAs ? esc(C.ui.two[r.pickAs]) + ':' : '') + esc(r.orderLabel)) + '</div>'
       + '<div class="r1 ' + (good ? 'good' : 'bad') + '">' + esc(r.label) + '</div>'
       + '<div>' + (r.runs ? r.runs + '点' + (S.mode === 'bat' ? '入った' : '取られた') + '。' : '') + (r.outs >= 3 ? 'チェンジ' : r.outs + 'アウト') + '</div>'
-      + '<div class="r3">試合の勝率:' + pc(r.w0) + ' → <span class="' + (r.w1 >= r.w0 ? 'good' : 'bad') + '">' + pc(r.w1) + '</span></div></div>';
+      + '<div class="r3">試合の勝率:' + pc(r.w0) + ' → <span class="' + (r.w1 >= r.w0 ? 'good' : 'bad') + '">' + pc(r.w1) + '</span></div>' + evalLine(r) + '</div>';
     r.fresh = false;
     return html;
   }
-  // ---------- 下:カードとメッセージ行 ----------
+  // 評価の中身(結果と一緒に、小さく):評価の数字、見込み、通常との差
+  function evalLine(r) {
+    if (!r.row) return '';
+    const x = r.row, n = r.nrow, bat = S.mode === 'bat';
+    const what = r.metric === 'p1' ? (bat ? '1点以上取る確率' : '1点以上取られる確率') : (bat ? '得点期待値' : '失点の期待値');
+    const v = (row) => (r.metric === 'p1' ? pc(row.p1) : row.ev.toFixed(2));
+    const d = r.metric === 'p1' ? (x.p1 - n.p1) * 100 : x.ev - n.ev;
+    const ds = x.order === 'normal' ? '' : '(通常 ' + v(n) + '、差 ' + (d >= 0 ? '+' : '−') + (r.metric === 'p1' ? Math.abs(Math.round(d)) + 'pt' : Math.abs(d).toFixed(2)) + ')';
+    return '<div class="ev">' + esc(C.ui.ratingLabel) + ' <b>' + x.rating + '</b> ・成功 ' + pc(x.good) + ' ・' + what + ' ' + v(x) + ds + '</div>';
+  }
+  // ---------- 下:カード(押すと、すぐ結果) ----------
+  function cardHtml(r, opt) {
+    opt = opt || {};
+    const mode = S.card, showRt = mode !== 'prob-only';
+    const sel = result && result.order === r.order;
+    return '<button class="cd' + (opt.two ? ' two' : '') + (sel ? ' sel' : '') + (DEV && lastEval && r.order === lastEval.best ? ' best' : '') + '" data-order="' + r.order + '"' + (opt.as ? ' data-as="' + opt.as + '"' : '') + (result ? ' disabled' : '') + '>'
+      + '<span class="nm">' + esc(opt.two ? C.ui.two[opt.as] : r.label) + '</span>' + (opt.two ? '<span class="od">' + esc(r.label) + '</span>' : '')
+      + '<span class="ft">' + esc(r.feature.text) + '</span>'
+      + '<span class="nums"><span class="pr">成功<b>' + pc(r.good) + '</b></span>' + (showRt ? '<span class="rt">' + esc(C.ui.ratingLabel) + '<b class="r' + r.rating + 'c">' + r.rating + '</b></span>' : '') + '</span></button>';
+  }
+  function cardsHtml() {
+    const rows = lastEval.rows.filter((r) => r.good != null);
+    if (S.card === 'two-choice') {
+      const t = A.twoChoice(lastEval);
+      return cardHtml(t.attack, { two: true, as: 'attack' }) + (t.safe ? cardHtml(t.safe, { two: true, as: 'safe' }) : '');
+    }
+    return rows.map((r) => cardHtml(r)).join('');
+  }
   function barHtml() {
+    const gear = '<button class="gear" id="gear" aria-label="設定">⚙</button>';
     if (result) {
-      return '<div class="bar"><div class="msg"><div class="txt">' + esc(result.label) + '(得点期待値の変化 ' + (result.delta >= 0 ? '+' : '') + result.delta.toFixed(2) + '、攻撃側)<span class="sm">結果の演出は、画面を押すと飛ばせます</span></div>'
-        + '<button class="ok" id="next">' + (result.outs >= 3 ? 'チェンジ・次へ' : '次の場面へ') + '</button><button class="gear" id="gear" aria-label="設定">⚙</button></div></div>';
+      // 結果のあと:選んだ指示の中身(四球や長打の重さなど。T1c の説明文)と、通常との差。カードは出さない(押すと次へ)
+      const x = result.row;
+      const dd = x && x.dGood != null && x.order !== 'normal' ? '通常との差:成功 ' + sg(x.dGood) + 'pt' : '';
+      return '<div class="bar"><div class="msgbox">' + (result.auto ? '勝負にならない試合。結果だけを表示します。' : esc(C.orderText[S.mode][result.order] || '')) + '<span class="sm">' + esc(dd) + (dd ? '・' : '') + (result.outs >= 3 ? 'チェンジ。' : '') + '画面を押すと、すぐ次へ</span></div><div class="side">' + gear + '</div></div>';
     }
     lastEval = A.evaluate(sc);
-    const m = lastEval.metric;
-    const cards = lastEval.rows.map((r) => {
-      const succ = r.success != null;
-      return '<button class="cd' + (ui.sel === r.order ? ' sel' : '') + (DEV && r.order === lastEval.best ? ' best' : '') + '" data-order="' + r.order + '"><span class="nm">' + esc(r.label) + '</span>'
-        + (r.good == null ? '<span class="gb">確実に歩かせる</span>' : '<span class="gb">' + (succ ? '成功 ' : '良 ') + '<b class="g">' + pc(r.good) + '</b></span><span class="gb">' + (succ ? '失敗 ' : '悪 ') + '<b class="x">' + pc(r.bad) + '</b></span>') + '</button>';
-    }).join('');
-    const sel = ui.sel ? lastEval.rows.find((r) => r.order === ui.sel) : null;
-    const txt = sel ? esc(C.orderText[S.mode][sel.order] || '') + '<span class="sm">' + (sel.dGood != null && sel.order !== 'normal' ? '通常との差 良' + sg(sel.dGood) + ' 悪' + sg(sel.dBad) + '・' : '') + (m === 'p1' ? '1点以上の確率 ' + pc(sel.p1) : '得点期待値 ' + sel.ev.toFixed(2)) + '</span>'
-      : esc(C.messages.idle);
-    return '<div class="bar"><div class="cards">' + cards + '</div><div class="msg"><button class="plain" id="plain">結果だけ見る</button><div class="txt">' + txt + '</div>'
-      + '<button class="ok" id="ok"' + (ui.sel ? '' : ' disabled') + '>決定</button><button class="gear" id="gear" aria-label="設定">⚙</button></div></div>';
+    return '<div class="bar"><div class="cards">' + cardsHtml() + '</div><div class="side"><button class="plain" id="plain">結果だけ見る</button>' + gear + '</div></div>';
   }
   // ---------- 設定(歯車) ----------
   function sheetHtml() {
@@ -807,10 +961,11 @@
       const pats = [];
       for (const mode of ['bat', 'pitch']) for (const bt of ['R', 'L']) for (const th of ['R', 'L']) pats.push('<div>' + (mode === 'bat' ? '打者' : '投手') + 'のモード・' + (bt === 'R' ? '右打席' : '左打席') + '・' + (th === 'R' ? '右投げ' : '左投げ') + ART.draw({ mode: mode, bats: bt, throws: th, color: INK, bg: STAGE }) + '</div>');
       dev = '<h2>線画の全パターン(8通り)</h2><div class="pats">' + pats.join('') + '</div>'
-        + '<h2>dev</h2><div class="dev">最善 ' + (lastEval ? lastEval.best + '(' + lastEval.metric + ')' : '-') + '<br>' + (lastEval ? lastEval.rows.map((r) => r.order + ': ' + (r.probs ? A.OUTCOMES.map((k) => k + ' ' + (r.probs[k] * 100).toFixed(1) + '%').join(' ') : '成功率 ' + (r.success != null ? pc(r.success) : '-')) + ' / 期待 ' + r.ev.toFixed(3) + ' / 1点以上 ' + pc(r.p1)).join('<br>') : '') + '<br><br>設定(仮の値):' + esc(JSON.stringify(C)) + '</div>';
+        + '<h2>dev</h2><div class="dev">最善 ' + (lastEval ? lastEval.best + '(' + lastEval.metric + ')' : '-') + '<br>' + (lastEval ? lastEval.rows.map((r) => r.order + ': ' + (r.probs ? A.OUTCOMES.map((k) => k + ' ' + (r.probs[k] * 100).toFixed(1) + '%').join(' ') : '成功率 ' + (r.success != null ? pc(r.success) : '-')) + ' / 期待 ' + r.ev.toFixed(3) + ' / 1点以上 ' + pc(r.p1) + ' / 評価 ' + r.rating + '(差 ' + r.dm.toFixed(3) + ')/ ' + esc(r.feature.text)).join('<br>') : '') + '<br><br>設定(仮の値):' + esc(JSON.stringify(C)) + '</div>';
     }
     return '<div class="sheet" id="sheetbg"><div class="box"><div class="row" style="justify-content:space-between"><b style="font-size:16px">設定(調整用)</b><button class="chip" id="close">閉じる</button></div>'
       + '<h2>モード</h2><div class="row">' + chip('mode', 'bat', '野手(自分の打席)', S.mode) + chip('mode', 'pitch', '投手(ピンチ)', S.mode) + '</div>'
+      + '<h2>カードの表示</h2><div class="row">' + chip('card', 'rating', '成功確率と評価', S.card) + chip('card', 'prob-only', '成功確率だけ', S.card) + chip('card', 'two-choice', '2択(' + esc(C.ui.two.attack) + 'と' + esc(C.ui.two.safe) + ')', S.card) + '</div>'
       + '<h2>場面</h2><div class="row"><select id="preset">' + opts + '</select></div>'
       + '<div class="row"><span>シード</span><input type="number" id="seed" value="' + S.seed + '" style="width:8em"><button class="chip" id="useSeed">この場面</button></div>'
       + '<h2>打者の能力</h2><div class="row">' + chip('bat', 'strong', '強い', S.bat) + chip('bat', 'normal', '普通', S.bat) + chip('bat', 'weak', '弱い', S.bat) + '</div>'
@@ -823,17 +978,19 @@
   function render() {
     document.getElementById('app').innerHTML = stageHtml() + barHtml();
     document.getElementById('sheet').innerHTML = sheetHtml();
+    // 結果は、resultMs のあとに自動で次の場面へ(設定を開いている間は止める)
+    if (result && !S.sheet) { if (!timer) { shownAt = Date.now(); timer = setTimeout(() => { timer = null; nextScene(); render(); }, C.ui.resultMs); } }
+    else { clearTimeout(timer); timer = null; }
   }
   document.addEventListener('click', (e) => {
     const t = e.target;
-    // 結果の演出だけ、押すと飛ばせる(指示を選ぶ画面は、飛ばせない)
-    const res = document.getElementById('res');
-    if (res && res.classList.contains('pop') && t.closest('#stage')) { res.classList.remove('pop'); return; }
     if (S.sheet && t.id === 'sheetbg') { S.sheet = false; render(); return; }
     const b = t.closest('button');
+    if (b && b.id === 'gear') { S.sheet = true; render(); return; }
+    // 結果の表示中:画面のどこを押しても、すぐ次へ(押した直後の誤タップは無視)
+    if (result && !S.sheet) { if (Date.now() - shownAt >= C.ui.tapGuardMs) { nextScene(); render(); } return; }
     if (!b) return;
     const d = b.dataset;
-    if (b.id === 'gear') { S.sheet = true; render(); return; }
     if (b.id === 'close') { S.sheet = false; render(); return; }
     if (d.set === 'mode') { S.mode = d.val; S.presetIdx = -1; newScene(true); render(); return; }
     if (d.set === 'bat') { S.bat = d.val; sc.batter = Object.assign({}, A.PRESETS.batter[S.bat]); render(); return; }
@@ -841,12 +998,11 @@
     if (d.set === 'bats') { S.bats = d.val; sc.bats = d.val; render(); return; }
     if (d.set === 'throws') { S.throws = d.val; sc.throws = d.val; render(); return; }
     if (d.set === 'key') { S.key = d.val; render(); return; }
+    if (d.set === 'card') { S.card = d.val; render(); return; }
     if (b.id === 'useSeed') { const v = Number(document.getElementById('seed').value); S.seed = (Number.isFinite(v) ? Math.floor(v) : 1) >>> 0; S.presetIdx = -1; newScene(true); render(); return; }
-    // カードを押すと選択だけ(進まない)。「決定」で確定する
-    if (d.order) { ui = A.uiStep(ui, 'select', d.order); render(); return; }
-    if (b.id === 'ok') { ui = A.uiStep(ui, 'confirm'); if (ui.result) resolve(); render(); return; }
-    if (b.id === 'plain') { ui = A.uiStep(A.uiStep(ui, 'select', 'normal'), 'confirm'); resolve(); render(); return; }
-    if (b.id === 'next') { nextScene(); render(); return; }
+    // カードを押すと、すぐ結果(「選択」と「決定」の2段階にしない)
+    if (d.order) { pick(d.order, d.as); render(); return; }
+    if (b.id === 'plain') { pick('normal'); render(); return; }
   });
   document.addEventListener('change', (e) => { if (e.target.id === 'preset') { S.presetIdx = Number(e.target.value); newScene(S.presetIdx < 0); render(); } });
   window.addEventListener('resize', () => { if (!S.sheet) render(); });
