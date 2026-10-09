@@ -1175,7 +1175,10 @@ test('H1.6b:覚醒を無効・ライバルの表示を有効にすると、H1.6a
   if (!Core.isV2()) return;
   const FP = require('./hero-fingerprint.js');
   const ref = require('./fixtures/h16a-fingerprint.json');
-  withPreH16b(() => { for (let i = 0; i < ref.length; i++) assert.deepStrictEqual(FP.fingerprint(i, { stories: true, stats: true, games: true }), ref[i], i + '回目'); });
+  // H1.6b で、卒業生の記録に途中出場の成績が写るようになり(H1.6a の不具合の修正)、卒業の読み物に途中出場の1文が出るようになった。
+  // そのため物語の文面(卒業の読み物を含む stories)は比べない。それ以外(勝敗・能力・進路・成績・乱数)は完全に一致する
+  const noText = (o) => { const x = Object.assign({}, o); delete x.stories; return x; };
+  withPreH16b(() => { for (let i = 0; i < ref.length; i++) assert.deepStrictEqual(noText(FP.fingerprint(i, { stories: true, stats: true, games: true })), noText(ref[i]), i + '回目'); });
 });
 
 test('H1.6b:覚醒は年度ごとに0〜2人、1人1回まで。3年生は4〜7月。伸びは仮の幅で、下がらない。素質とヒントの割合は設定どおり(30回)', () => {

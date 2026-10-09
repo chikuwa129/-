@@ -1853,7 +1853,15 @@
       watched: !!p.watched,
       enrolledYear: p.enrolledYear,
       origin: p.origin || 'recruit',
-    }, extra || {});
+    }, heroFields(p), extra || {});
+  }
+  // 新入部員モードだけが持つ選手の値(途中出場と盗塁の成績、覚醒の素質・覚醒)。あるときだけ卒業生の記録に写す
+  function heroFields(p) {
+    const o = {};
+    if (p.subStats) o.subStats = JSON.parse(JSON.stringify(p.subStats));
+    if (p.awk) o.awk = Object.assign({}, p.awk);
+    if (p.awoken) o.awoken = Object.assign({}, p.awoken);
+    return o;
   }
 
   // ---------- スタメン編成・チームの強さ ----------

@@ -584,4 +584,48 @@ function subRun(group, seed, on) {
   log('  偏り(年度ごとの途中出場のうち、上位1人の割合。途中出場4回以上の年度 ' + CONC.length + '件):' + d4(CONC, (x) => x * 100) + '(%)/ 半分以上の年度 ' + share(CONC, (x) => x >= 0.5));
   log('  チームの大会の勝率:有効 ' + pct(winOn / gOn) + ' / 無効 ' + pct(winOff / gOff) + '(差 ' + ((winOn / gOn - winOff / gOff) * 100).toFixed(1) + 'ポイント)');
 }
+// H1.6b 覚醒とヒント:有効 / 無効(覚醒なし、ライバルの表示あり = H1.6a-fix1)を、同じシード・同じ選択で比べる
+function awRun(kind, seed, on) {
+  const A = CONFIG.heroMode.awakening, R = CONFIG.heroMode.rival;
+  const prev = [A.enabled, R.display];
+  A.enabled = on; R.display = !on;
+  try {
+    const st = Hero.newHeroGame(seed);
+    if (kind.pick) Hero.pickHero(st, new Core.Rng((seed * 40503) >>> 0).pick(Hero.pickable(st)).id);
+    else { if (Hero.createHero(st, kind)) return null; Hero.confirmRival(st, 'auto'); }
+    const H = st.hero;
+    Hero.startPlay(st);
+    for (let g = 0; H.phase === 'play' && g < 200; g++) Hero.advance(st, 'event');
+    const a = st.alumni.find((x) => x.id === H.id);
+    const T = H.appear.filter((e) => e.kind === 'tourney');
+    const G = H.graduation;
+    return { awk: a.awk || null, awoken: a.awoken || null, init: H.initRating, fin: a.rating, top0: G.init.top, top1: G.fin.top,
+      wins: T.filter((e) => e.win).length, games: T.length, stops: Object.keys(H.stopsByYear).reduce((x, k) => x + H.stopsByYear[k], 0) / 3 };
+  } finally { A.enabled = prev[0]; R.display = prev[1]; }
+}
+{
+  const AK = [{ label: '引き', pick: true }, { label: '作成・野手(凡人・普通)', pos: 'fielder', type: 'kouda', level: 'mid', talent: 'normal' }, { label: '作成・投手(凡人・普通)', pos: 'pitcher', type: 'gouwan', level: 'mid', talent: 'normal' }];
+  const ON = [], OFF = [];
+  for (const k of AK) for (let i = 1; i <= NB; i++) { const a = awRun(k, 30000 + i, true); const b = awRun(k, 30000 + i, false); if (a && b) { ON.push(a); OFF.push(b); } }
+  log('');
+  log('■ H1.6b 覚醒とヒント(主人公 ' + ON.length + '人 = 引き・作成の野手・作成の投手 各 ' + NB + '人。有効 / 無効(= H1.6a-fix1)を同じシード・同じ選択で)');
+  const T1 = ON.filter((x) => x.awk && x.awk.t), T0 = ON.filter((x) => !(x.awk && x.awk.t));
+  log('  3年間で覚醒した割合:素質あり ' + pct(T1.filter((x) => x.awoken).length / (T1.length || 1)) + '(' + T1.length + '人)/ 素質なし ' + pct(T0.filter((x) => x.awoken).length / (T0.length || 1)) + '(' + T0.length + '人)');
+  const AWK = ON.filter((x) => x.awoken);
+  const mon = {};
+  AWK.forEach((x) => { const k = x.awoken.g + '年' + x.awoken.m + '月'; mon[k] = (mon[k] || 0) + 1; });
+  log('  覚醒の月(' + AWK.length + '人):' + Object.keys(mon).sort().map((k) => k + ' ' + mon[k]).join(' / '));
+  const HI = ON.filter((x) => x.awk && x.awk.h);
+  log('  ヒントが出た主人公 ' + pct(HI.length / ON.length) + ' / そのうち覚醒 ' + pct(HI.filter((x) => x.awoken).length / (HI.length || 1)) + ' / ヒントなしで覚醒 ' + pct(ON.filter((x) => !(x.awk && x.awk.h) && x.awoken).length / ON.length) + '(全体に対して)');
+  if (AWK.length) log('  覚醒した主人公:入学時 平均 ' + f1(mean(AWK.map((x) => x.init))) + ' → 卒業時 ' + f1(mean(AWK.map((x) => x.fin))) + ' / 同世代の上位% 入学時 中央値 ' + f1(quant(AWK.map((x) => (x.top0 == null ? 75 : x.top0)), 0.5)) + ' → 卒業時 ' + f1(quant(AWK.map((x) => (x.top1 == null ? 75 : x.top1)), 0.5)) + '(50%より下は75として)');
+  const keep = (L) => { const S = L.filter((x) => x.top0 != null && x.top0 <= 10); return S.length ? S.filter((x) => x.top1 != null && x.top1 <= 10).length / S.length : NaN; };
+  const jump = (L) => { const S = L.filter((x) => x.top0 == null); return S.length ? S.filter((x) => x.top1 != null && x.top1 <= 20).length / S.length : NaN; };
+  const jd = (v, lo, hi) => (!Number.isFinite(v) ? '−' : v >= lo && v <= hi ? '✓' : v >= lo * 0.8 && v <= hi * 1.2 ? '△' : '✕');
+  log('  入学時上位10%が卒業時も上位10%:有効 ' + jd(keep(ON), 0.5, 0.65) + ' ' + pct(keep(ON)) + ' / 無効 ' + jd(keep(OFF), 0.5, 0.65) + ' ' + pct(keep(OFF)) + '(目安 50〜65%)');
+  log('  下位半分から上位20%:有効 ' + jd(jump(ON), 0.1, 0.2) + ' ' + pct(jump(ON)) + ' / 無効 ' + jd(jump(OFF), 0.1, 0.2) + ' ' + pct(jump(OFF)) + '(目安 10〜20%)');
+  const wr = (L) => L.reduce((a, x) => a + x.wins, 0) / L.reduce((a, x) => a + x.games, 0);
+  log('  チームの大会の勝率:有効 ' + pct(wr(ON)) + ' / 無効 ' + pct(wr(OFF)) + '(差 ' + ((wr(ON) - wr(OFF)) * 100).toFixed(1) + 'ポイント)');
+  const sp = mean(ON.map((x) => x.stops));
+  log('  止まる回数(1年あたり):有効 ' + jd(sp, 6, 12) + ' ' + f1(sp) + ' / 無効 ' + f1(mean(OFF.map((x) => x.stops))) + '(目安 6〜12)');
+}
 console.log(out.join('\n'));
