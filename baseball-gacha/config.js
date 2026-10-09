@@ -456,7 +456,7 @@
       watchMax: 2,                  // 気になる選手の上限(主人公とライバルは別枠)
       entranceMax: 8,               // 入口で大きなカードで出す新入生(ピックアップ)の最大人数(roster.version 'v2' のとき)
       entrancePickTop: 5,           // ピックアップのうち、総合値の上位から選ぶ人数(残りは無作為)
-      ui: { progressBar: 'bottom' },   // 進行ボタンのバー:'bottom' 下に固定 / 'top' 上に固定 / 'inline' 固定しない(H1.4b の表示)
+      ui: { progressBar: 'bottom', nextLabel: '次へ' },   // 進行ボタンのバー:'bottom' 下に固定 / 'top' 上に固定 / 'inline' 固定しない(H1.4b の表示)。nextLabel:ホームの進行ボタン(H1.9 で1つに。止まる月まで進む)のラベル
       // 同期の答え合わせ(H1.8。卒業画面から。表示だけ)。すべて仮の値
       cohortReview: {
         enabled: true,              // false で、H1.7b と同じ(ボタンなし)
@@ -950,6 +950,7 @@
     ['heroMode.awakening.kmhMin', 'hero', '覚醒で伸びる球速の下限(km/h)'],
     ['heroMode.awakening.kmhMax', 'hero', '覚醒で伸びる球速の上限(km/h)'],
     ['heroMode.awakening.brkGain', 'hero', '覚醒で伸びる変化球(総変化量)'],
+    ['heroMode.ui.nextLabel', 'hero', 'ホームの進行ボタンのラベル(止まる月まで進む)', true, ['次へ', '進む', '次のイベントまで']],
     ['heroMode.cohortReview.enabled', 'hero', '卒業画面の「同期の答え合わせ」(オン/オフ。オフで H1.7b と同じ)', true],
     ['heroMode.cohortReview.firstShow', 'hero', '同期の答え合わせ:先に出す人数(強調する行のほか)', true],
     ['heroMode.fx.enabled', 'hero', '演出(入口の登場・覚醒の瞬間)のオン/オフ。オフで H1.6b と同じ見た目', true],

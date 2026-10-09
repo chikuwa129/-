@@ -1399,7 +1399,10 @@ test('H1.8:同期の答え合わせの数値(入学時・卒業時の総合値�
     const byInit = c.rows.slice().sort((a, b) => b.init.r - a.init.r || a.id - b.id);
     byInit.forEach((x, i) => assert.strictEqual(x.init.rank, i + 1));
     assert.deepStrictEqual(c.rows.map((x) => x.id), byInit.map((x) => x.id), '入学時の順');
-    assert.deepStrictEqual(c.unselected.map((x) => x.id), entry.filter((id) => id !== st.hero.id), '選ばなかった選手 = 確定した一覧(主人公を除く)');
+    // H1.9:「見送った」の印(entry)は、確定した一覧に出ていた、主人公以外の同期だけに付く
+    assert.deepStrictEqual(c.rows.filter((x) => x.entry && !x.hero).map((x) => x.id).sort((a, b) => a - b), entry.filter((id) => id !== st.hero.id).sort((a, b) => a - b), '見送った = 確定した一覧(主人公を除く)');
+    for (const x of c.rows) assert.strictEqual(x.entry, entry.indexOf(x.id) >= 0, '一覧に出なかった同期には印なし');
+    assert.deepStrictEqual(c.unselected.map((x) => x.id), entry.filter((id) => id !== st.hero.id), '一言の対象 = 確定した一覧(主人公を除く)');
     for (const t of c.lines) assert.ok(c.unselected.some((x) => t.indexOf(x.name) >= 0), '一言は見送った選手の事実');
   }
 });
@@ -1433,6 +1436,22 @@ test('H1.8:ヒントの的中・外れと覚醒の印が、実際の覚醒の記
   const C = CONFIG.heroMode.cohortReview, prev = C.enabled;
   const run = (on) => { C.enabled = on; try { return [0, 1, 2, 3].map((i) => FP.fingerprint(i, { stories: true, stats: true, games: true })); } finally { C.enabled = prev; } };
   assert.deepStrictEqual(run(true), run(false));
+});
+
+test('H1.9:進め方(止まる月まで / 1か月ずつ)で、勝敗・能力・進路・成績・本体の乱数が同じ(4回)', () => {
+  if (!Core.isV2()) return;
+  const run = (seed, mode) => {
+    const st = Hero.newHeroGame(seed); Hero.pickHero(st, Hero.entryList(st)[seed % 3].id); Hero.startPlay(st);
+    const g = [];
+    for (let i = 0; i < 400 && st.hero.phase === 'play'; i++) {
+      Hero.advance(st, mode);
+      for (const m of st.lastEvents || []) for (const c of m.cards || []) if (c.games) for (const x of c.games) g.push((x.win ? 'W' : 'L') + (x.box ? x.box.my + '-' + x.box.opp : ''));
+      if (st.hero.newYear && !st.hero.newYear.closed) Hero.closeNewYear(st);
+    }
+    const ppl = st.players.concat(st.alumni || []).map((p) => p.id + ':' + JSON.stringify(p.finalAbilities || p.abilities) + (p.career || '') + JSON.stringify((p.stats && p.stats.career) || {})).sort().join('|');
+    return { g: g.join(' '), ppl: ppl, rng: st.rngState, stat: st.statRngState };
+  };
+  for (const s of [11, 12, 13, 14]) assert.deepStrictEqual(run(s, 'event'), run(s, 'month'), 'seed ' + s);
 });
 
 // legacy の一致の確認(別プロセス)

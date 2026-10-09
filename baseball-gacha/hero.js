@@ -2489,7 +2489,7 @@
       html += gamesCard(july ? summerResultLine(st) : null);
       html += rivalCompare(july);
       html += july ? pbar('<button class="btn" id="hToGrad">卒業へ進む</button>')
-        : pbar('<button class="btn" id="hNextEvent">次のイベントまで</button><button class="btn sub" id="hNextMonth">次の月へ</button>');
+        : pbar('<button class="btn" id="hNextEvent">' + esc((HM().ui && HM().ui.nextLabel) || '次へ') + '</button>');   // H1.9:進行ボタンを1つに(止まる月まで進む)
       // 折りたたみの並び(1つのブロック)
       html += '<div class="card">' + renderCollapsible('team', 'チームの様子', () => lineupTable(july)) + watchCollapsible()
         + renderCollapsible('chron', '主人公の年表', chronicle) + renderCollapsible('roster', '部員名簿', () => rosterView(july)) + '</div>';
@@ -2683,7 +2683,7 @@
     function crRow(x, hi) {
       const top = (t) => (t == null ? '50%より下' : '上位' + Generation.formatTop(t));
       const d = x.fin.r - x.init.r, dr = x.init.rank - x.fin.rank;
-      const marks = (x.hero ? '<span class="mk me">★主人公</span>' : '')
+      const marks = (x.hero ? '<span class="mk me">★主人公</span>' : '') + (x.entry && !x.hero ? '<span class="mk pass">見送った</span>' : '')
         + (x.awoken ? '<span class="mk awk">覚醒(' + x.awoken.g + '年' + x.awoken.m + '月)</span>' : '')
         + (x.hint ? (x.awoken ? '<span class="mk hit">✦的中</span>' : '<span class="mk miss">✦外れ</span>') : '')
         + (x.talent ? '<span class="mk tal">素質あり</span>' : x.hint ? '<span class="mk ret">素質なし</span>' : '')
@@ -2702,16 +2702,11 @@
       const shown = crUi.all ? list : list.filter((x, i) => hiOf(x) || i < N);
       const chip = (k, l) => '<button class="chip' + (crUi.sort === k ? ' on' : '') + '" data-crsort="' + k + '">' + l + '</button>';
       let html = '<div class="card"><h2>👥 同期の答え合わせ(' + c.rows.length + '人)</h2>'
+        + c.lines.map((t) => '<div class="story">' + esc(t) + '</div>').join('')   // H1.9:見送った選手の一言(1〜2行)
         + '<div class="row2">' + chip('init', '入学時の順') + chip('fin', '卒業時の順') + '</div>'
         + shown.map((x) => crRow(x, hiOf(x))).join('')
         + (shown.length < list.length ? '<div class="btns"><button class="btn sub small" id="hCrAll">全員を見る(あと' + (list.length - shown.length) + '人)</button></div>' : '')
-        + '<div class="small">順位は同期の中の順位。上位○%は同世代(全国)の順位。素質は覚醒の素質(入学時には見えない値)。</div></div>';
-      if (c.unselected.length) {
-        const hiU = (x) => x.hint || !!x.awoken || LAB.indexOf(x.init.label) >= 1;
-        html += '<div class="card"><h2>選ばなかった選手たち(' + c.unselected.length + '人)</h2><div class="small">入学のときの一覧の順</div>'
-          + c.lines.map((t) => '<div class="story">' + esc(t) + '</div>').join('')
-          + c.unselected.map((x) => crRow(x, hiU(x))).join('') + '</div>';
-      }
+        + '<div class="small">「見送った」は、入学のときの一覧に出ていて、選ばなかった選手。順位は同期の中の順位。上位○%は同世代(全国)の順位。素質は覚醒の素質(入学時には見えない値)。</div></div>';
       return html;
     }
     // 通算成績(大会と練習試合。ライバルと2列で並べる。数が小さいときは「参考」)
@@ -2857,7 +2852,6 @@
       }
       if (id === 'hStart') { act(() => startPlay(st)); return; }
       if (id === 'hNextEvent') { act(() => advance(st, 'event')); window.scrollTo(0, 0); return; }
-      if (id === 'hNextMonth') { act(() => advance(st, 'month')); return; }
       if (id === 'hAgain') { modal = { text: '新しいシード(' + ((st.seed + 1) >>> 0) + ')で、もう一度引きますか?', ok: '引く', action: () => { st = resetNewSeed(storage, (st.seed + 1) >>> 0); screen = null; detail = null; ui = { open: {} }; } }; render(); return; }
       if (id === 'hSame' || id === 'hResetSame') { modal = { text: '同じシード(' + st.seed + ')で、最初からやり直しますか?', ok: 'やり直す', action: () => { st = resetSameSeed(storage, st); screen = null; detail = null; ui = { open: {} }; } }; render(); return; }
       if (id === 'hResetNew') { modal = { text: '新しいシードで始めますか?', ok: '始める', action: () => { st = resetNewSeed(storage); screen = null; detail = null; ui = { open: {} }; } }; render(); return; }
