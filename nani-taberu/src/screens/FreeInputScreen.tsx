@@ -18,7 +18,7 @@ type Recognition = {
   stop: () => void;
 };
 const SpeechRecognitionCtor: (new () => Recognition) | undefined =
-  typeof window !== 'undefined'
+  typeof window !== 'undefined' && import.meta.env.MODE !== 'artifact'
     ? ((window as unknown as Record<string, unknown>).SpeechRecognition ??
         (window as unknown as Record<string, unknown>).webkitSpeechRecognition) as
         | (new () => Recognition)
