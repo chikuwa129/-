@@ -255,7 +255,7 @@ const pct = (v) => (v * 100).toFixed(1) + '%';
   }
   const judge = (o, n) => { const m = Math.max.apply(null, Object.values(o)); return m / n > 0.95 ? '✕' : m / n > 0.6 ? '△' : '✓'; };
   const fmt = (o, n) => Object.keys(o).sort((a, b) => o[b] - o[a]).map((k) => k + ' ' + o[k] + '(' + pct(o[k] / n) + ')').join('、');
-  log('## 2. 場面ごとの最善の指示(プリセット ' + A.SCENES.length + ' + ランダム 200)\n終盤の接戦(' + A.CONFIG.lateClose.inning + '回以降・' + A.CONFIG.lateClose.diff + '点差以内)は「1点以上の確率」、それ以外は得点期待値で比べる');
+  log('## 2. 場面ごとの最善の指示(プリセット ' + A.SCENES.length + ' + ランダム 200)\nT1g:試合の勝率の期待値で比べる(T1f までは、終盤の接戦は「1点以上の確率」、それ以外は得点期待値)');
   for (const s of ['bat', 'pitch']) {
     log(s + '(' + tot[s] + '場面):' + fmt(res[s], tot[s]) + ' → ' + judge(res[s], tot[s]));
     log('  参考:すべて得点期待値で比べた場合:' + fmt(resEv[s], tot[s]) + ' → ' + judge(resEv[s], tot[s]));
@@ -366,6 +366,6 @@ const pct = (v) => (v * 100).toFixed(1) + '%';
 }
 
 const file = path.join(__dirname, 'atbat-sim-result.txt');
-fs.writeFileSync(file, '# 打席の試作(T1〜T1d)の検証の出力\n\n## 要約\n' + sum.join('\n') + '\n\n' + out.join('\n\n') + '\n');
+fs.writeFileSync(file, '# 打席の試作(T1〜T1g)の検証の出力\n\n## 要約\n' + sum.join('\n') + '\n\n' + out.join('\n\n') + '\n');
 console.log(sum.join('\n'));
 console.log('全出力:' + path.relative(process.cwd(), file));
