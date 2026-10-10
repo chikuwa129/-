@@ -139,20 +139,20 @@
   const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const pc = (v) => Math.round(v * 100) + '%';
   const sg = (v) => (v >= 0 ? '+' : '−') + Math.abs(Math.round(v * 100));
-  const S = { mode: 'bat', seed: 1, presetIdx: -1, bat: 'normal', pit: 'normal', key: 'success', sheet: false, bats: null, throws: null, card: C.ui.cardMode };
+  // T1g:場面の能力は、型と強さから(既定はランダム)。強さは、自分の側(野手のモードは打者、投手のモードは投手)。相手の強さはランダム
+  const S = { mode: 'bat', seed: 1, presetIdx: -1, batType: 'random', pitType: 'random', lv: 'random', key: 'success', sheet: false, bats: null, throws: null, card: C.ui.cardMode };
   let rng = new A.Rng(1), sc = null, ui = { sel: null, result: null }, result = null, lastEval = null, timer = null, shownAt = 0;
   const NAMES = ['青木', '石川', '上田', '大野', '加藤', '北村', '小林', '佐々木', '高田', '中島', '西村', '原田', '松本', '森', '山口', '渡辺'];
   const nameOf = (k) => NAMES[((S.seed * 7 + k * 13) >>> 0) % NAMES.length];
   // 画面の向き(打者か投手か):試合のモードでは、試合の設定(野手 / 投手)
   const VM = () => (S.mode === 'game' ? GM.cfg.mode : S.mode);
 
-  function applyPresets(s) { s.batter = Object.assign({}, A.PRESETS.batter[S.bat]); s.pitcher = Object.assign({}, A.PRESETS.pitcher[S.pit]); return s; }
+  const playerOpts = () => ({ batType: S.batType, pitType: S.pitType, batLevel: S.mode === 'bat' ? S.lv : 'random', pitLevel: S.mode === 'pitch' ? S.lv : 'random' });
   const inRange = (s) => A.inWinRange(s, C.keyScene[S.key]);
   function newScene(fromSeed) {
-    sc = fromSeed || S.presetIdx < 0 ? A.randomScene(S.seed) : Object.assign(A.makeScene(Object.assign({}, A.SCENES[S.presetIdx])), A.handsOf(S.seed));
+    sc = fromSeed || S.presetIdx < 0 ? A.randomScene(S.seed, playerOpts()) : Object.assign(A.makeScene(Object.assign({}, A.SCENES[S.presetIdx])), A.playersOf(S.seed, playerOpts()), A.handsOf(S.seed));
     sc.side = S.mode;
     sc.half = S.mode === 'pitch' ? 'bottom' : 'top';   // 自校は先攻(攻撃は表、守備は裏)
-    applyPresets(sc);
     if (S.bats) sc.bats = S.bats;
     if (S.throws) sc.throws = S.throws;
     // スコア(表示用):点差と同じになるように。自校と相手
@@ -177,10 +177,10 @@
       row: row, nrow: nrow, metric: ev.metric,
       my: sc.my + (bat ? r.runs : 0), op: sc.op + (bat ? 0 : r.runs) });
   }
+  // 結果のあとは、別の場面へ(T1g。型・走者・アウト・点差・回を、次のシードで決め直す)
   function nextScene() {
     clearTimeout(timer); timer = null;
-    if (result && result.outs < 3) { sc = Object.assign({}, sc, { outs: result.outs, bases: result.bases, diff: result.diff, my: result.my, op: result.op }); begin(); }
-    else { S.seed = (S.seed + 1) >>> 0; S.presetIdx = -1; newScene(true); }
+    S.seed = (S.seed + 1) >>> 0; S.presetIdx = -1; newScene(true);
   }
 
   // ---------- 舞台 ----------
@@ -225,6 +225,10 @@
   function evalLine(r) {
     if (!r.row) return '';
     const x = r.row, n = r.nrow, bat = VM() === 'bat';
+    if (r.metric === 'win') {   // T1g:試合の勝率の見込み(この指示を選んだときの、打席のあとの勝率の期待値)
+      const w = (row) => (row.win * 100).toFixed(1) + '%', d = (x.win - n.win) * 100;
+      return '<div class="ev">' + esc(C.ui.ratingLabel) + ' <b>' + x.rating + '</b> ・成功 ' + pc(x.good) + ' ・勝率の見込み ' + w(x) + (x.order === 'normal' ? '' : '(通常 ' + w(n) + '、差 ' + (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(1) + 'pt)') + '</div>';
+    }
     const what = r.metric === 'p1' ? (bat ? '1点以上取る確率' : '1点以上取られる確率') : (bat ? '得点期待値' : '失点の期待値');
     const v = (row) => (r.metric === 'p1' ? pc(row.p1) : row.ev.toFixed(2));
     const d = r.metric === 'p1' ? (x.p1 - n.p1) * 100 : x.ev - n.ev;
@@ -252,6 +256,8 @@
     return '<div class="bar"><div class="cards">' + cardsHtml() + '</div><div class="side"><button class="plain" id="plain">結果だけ見る</button>' + gear + '</div></div>';
   }
   // ---------- 設定(歯車) ----------
+  // 型の選択(「ランダム」+ 型の一覧)
+  const typeChips = (key, kind, cur, chip) => chip(key, 'random', 'ランダム', cur) + A.typeKeys(kind).map((t) => chip(key, t, esc(A.typeLabel(kind, t)), cur)).join('');
   function sheetHtml() {
     if (!S.sheet) return '';
     const chip = (key, val, label, cur) => '<button class="chip' + (cur === val ? ' on' : '') + '" data-set="' + key + '" data-val="' + val + '">' + label + '</button>';
@@ -261,13 +267,14 @@
     const yn = (v) => (v ? '◯' : '−');
     const key = '<table><tr><th>場面</th><th>攻守</th><th>回</th><th>状況</th><th>事前</th><th>新入部員</th><th>監督</th></tr>' + list.map((s) => '<tr><td>' + esc(s.name) + (s.side === 'bat' ? (s.hero ? ' 主' : '') + (s.focus ? ' 注' : '') : '') + '</td><td>' + (s.side === 'pitch' ? '守' : '攻') + '</td><td>' + s.inning + '</td><td>' + s.outs + '死 ' + (s.bases.map((x, i) => (x == null ? '' : i + 1)).join('') || '無走者') + ' ' + (s.diff > 0 ? '+' : '') + s.diff + '</td><td>' + pc(s.winP) + '</td><td>' + yn(A.isKeyScene(s, 'success')) + '</td><td>' + yn(A.isKeyScene(s, 'manager')) + '</td></tr>').join('') + '</table>';
     const b = sc.batter, p = sc.pitcher;
-    const nums = '<table><tr><th></th><th>ミート</th><th>パワー</th><th>走力</th><th>球速</th><th>制球</th><th>変化球</th><th>クイック</th><th>守備</th><th>肩</th><th>事前勝率</th></tr><tr><td>今の場面</td><td>' + b.contact + '</td><td>' + b.power + '</td><td>' + b.speed + '</td><td>' + A.kmh(p.velocity) + 'km/h(' + p.velocity + ')</td><td>' + p.control + '</td><td>' + A.breakTotal(p.breaking) + '(' + p.breaking + ')</td><td>' + p.quick + '</td><td>' + sc.defense + '</td><td>' + sc.arm + '</td><td>' + pc(sc.winP) + '</td></tr></table>';
+    const tl = (k, t) => esc(t ? A.typeLabel(k, t) : '-');
+    const nums = '<table><tr><th></th><th>打者の型</th><th>投手の型</th><th>ミート</th><th>パワー</th><th>走力</th><th>球速</th><th>制球</th><th>変化球</th><th>クイック</th><th>守備</th><th>肩</th><th>事前勝率</th></tr><tr><td>今の場面</td><td>' + tl('batter', sc.batType) + '</td><td>' + tl('pitcher', sc.pitType) + '</td><td>' + b.contact + '</td><td>' + b.power + '</td><td>' + b.speed + '</td><td>' + A.kmh(p.velocity) + 'km/h(' + p.velocity + ')</td><td>' + p.control + '</td><td>' + A.breakTotal(p.breaking) + '(' + p.breaking + ')</td><td>' + p.quick + '</td><td>' + sc.defense + '</td><td>' + sc.arm + '</td><td>' + pc(sc.winP) + '</td></tr></table>';
     let dev = '';
     if (DEV) {
       const pats = [];
       for (const mode of ['bat', 'pitch']) for (const bt of ['R', 'L']) for (const th of ['R', 'L']) pats.push('<div>' + (mode === 'bat' ? '打者' : '投手') + 'のモード・' + (bt === 'R' ? '右打席' : '左打席') + '・' + (th === 'R' ? '右投げ' : '左投げ') + ART.draw({ mode: mode, bats: bt, throws: th, color: INK, bg: STAGE }) + '</div>');
       dev = '<h2>線画の全パターン(8通り)</h2><div class="pats">' + pats.join('') + '</div>'
-        + '<h2>dev</h2><div class="dev">最善 ' + (lastEval ? lastEval.best + '(' + lastEval.metric + ')' : '-') + '<br>' + (lastEval ? lastEval.rows.map((r) => r.order + ': ' + (r.probs ? A.OUTCOMES.map((k) => k + ' ' + (r.probs[k] * 100).toFixed(1) + '%').join(' ') : '成功率 ' + (r.success != null ? pc(r.success) : '-')) + ' / 期待 ' + r.ev.toFixed(3) + ' / 1点以上 ' + pc(r.p1) + ' / 評価 ' + r.rating + '(差 ' + r.dm.toFixed(3) + ')/ ' + esc(r.feature.text)).join('<br>') : '') + '<br><br>設定(仮の値):' + esc(JSON.stringify(C)) + '</div>';
+        + '<h2>dev</h2><div class="dev">最善 ' + (lastEval ? lastEval.best + '(' + lastEval.metric + (lastEval.lev != null ? '、重要度 ' + lastEval.lev.toFixed(4) + '、段階の幅 ' + lastEval.step.toFixed(4) : '') + ')' : '-') + '<br>' + (lastEval ? lastEval.rows.map((r) => r.order + ': ' + (r.probs ? A.OUTCOMES.map((k) => k + ' ' + (r.probs[k] * 100).toFixed(1) + '%').join(' ') : '成功率 ' + (r.success != null ? pc(r.success) : '-')) + ' / 期待 ' + r.ev.toFixed(3) + ' / 1点以上 ' + pc(r.p1) + ' / 勝率 ' + (r.win * 100).toFixed(2) + '% / 評価 ' + r.rating + '(差 ' + r.dm.toFixed(4) + ')/ ' + esc(r.feature.text)).join('<br>') : '') + '<br><br>設定(仮の値):' + esc(JSON.stringify(C)) + '</div>';
     }
     return '<div class="sheet" id="sheetbg"><div class="box"><div class="row" style="justify-content:space-between"><b style="font-size:16px">設定(調整用)</b><button class="chip" id="close">閉じる</button></div>'
       + '<h2>モード</h2><div class="row">' + chip('mode', 'bat', '野手(自分の打席)', S.mode) + chip('mode', 'pitch', '投手(ピンチ)', S.mode) + chip('mode', 'game', '試合(通し)', S.mode) + '</div>'
@@ -275,16 +282,17 @@
       + '<h2>カードの表示</h2><div class="row">' + chip('card', 'rating', '成功確率と評価', S.card) + chip('card', 'prob-only', '成功確率だけ', S.card) + chip('card', 'two-choice', '2択(' + esc(C.ui.two.attack) + 'と' + esc(C.ui.two.safe) + ')', S.card) + '</div>'
       + '<h2>場面</h2><div class="row"><select id="preset">' + opts + '</select></div>'
       + '<div class="row"><span>シード</span><input type="number" id="seed" value="' + S.seed + '" style="width:8em"><button class="chip" id="useSeed">この場面</button></div>'
-      + '<h2>打者の能力</h2><div class="row">' + chip('bat', 'strong', '強い', S.bat) + chip('bat', 'normal', '普通', S.bat) + chip('bat', 'weak', '弱い', S.bat) + '</div>'
-      + '<h2>投手の能力</h2><div class="row">' + chip('pit', 'strong', '強い', S.pit) + chip('pit', 'normal', '普通', S.pit) + chip('pit', 'weak', '弱い', S.pit) + '</div>'
+      + (S.mode === 'game' ? '' : '<h2>打者の型</h2><div class="row">' + typeChips('batType', 'batter', S.batType, chip) + '</div>'
+        + '<h2>投手の型</h2><div class="row">' + typeChips('pitType', 'pitcher', S.pitType, chip) + '</div>'
+        + '<h2>強さ(自分の' + (S.mode === 'pitch' ? '投手' : '打者') + '。相手はランダム)</h2><div class="row">' + chip('lv', 'random', 'ランダム', S.lv) + ['strong', 'normal', 'weak'].map((k) => chip('lv', k, LV[k], S.lv)).join('') + '</div>')
       + '<h2>左右(確認用。表示だけで、結果には効かない)</h2><div class="row">打席 ' + chip('bats', 'R', '右', sc.bats) + chip('bats', 'L', '左', sc.bats) + ' 投げ ' + chip('throws', 'R', '右', sc.throws) + chip('throws', 'L', '左', sc.throws) + '</div>'
-      + '<h2>介入の範囲(事前勝率)</h2><div class="row">' + chip('key', 'success', '新入部員', S.key) + chip('key', 'manager', '監督', S.key) + '<span style="font-size:12px">' + pc(C.keyScene[S.key].winRange[0]) + '〜' + pc(C.keyScene[S.key].winRange[1]) + ' の外は「勝負にならない試合」</span></div>'
+      + (S.mode === 'game' ? '' : '<h2>勝負にならない試合</h2><div class="row"><span style="font-size:12px">事前勝率が ' + pc(C.keyScene[S.key].winRange[0]) + '〜' + pc(C.keyScene[S.key].winRange[1]) + ' の外の場面は、結果だけを表示</span></div>')
       + '<h2>能力の数値</h2>' + nums
       + '<h2>介入場面の判定(確認用)</h2>' + key + '<div style="font-size:11px;color:#555">主=主人公の打席、注=注目選手の打席。事前勝率が範囲の外の場面は、介入しない。</div>' + dev + '</div></div>';
   }
   // ---------- 試合のモード(T1e):自動で進み、介入場面だけ止まる ----------
   //   phase:start(開始の画面)/ run(自動で進む)/ key(介入場面。カード)/ res(介入の結果を表示)/ end(終了とふりかえり)
-  const GM = { cfg: { mode: 'pitch', my: 'normal', op: 'normal', seed: 1 }, G: null, phase: 'start', tick: null, hold: false, newCell: null, logMode: C.game.logMode, preview: null };
+  const GM = { cfg: { mode: 'pitch', my: 'normal', op: 'normal', seed: 1, myType: 'random' }, G: null, phase: 'start', tick: null, hold: false, newCell: null, logMode: C.game.logMode, preview: null };
   const reduce = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const LV = { strong: '強い', normal: '普通', weak: '弱い' };
   function gamePreview() {
@@ -370,7 +378,8 @@
       return '<div class="pane gov"><div class="row"><b class="gt">試合(通し)</b><button class="ok2" id="gstart">試合開始</button><button class="chip" id="gplain0">結果だけ見る</button></div>'
         + '<div class="row">事前勝率 <b>' + pc(P.winP) + '</b> ・ 戦力:相手は' + lab + (out ? ' <span class="bad">(勝負にならない試合:介入なし)</span>' : '') + '</div>'
         + '<div class="row">自分 ' + chip('mode', 'bat', '野手(' + C.game.myOrder + '番)', GM.cfg.mode) + chip('mode', 'pitch', '投手(先発)', GM.cfg.mode) + ' シード <input type="number" id="gseed" value="' + GM.cfg.seed + '" style="width:5em;min-height:40px"><button class="chip" id="gseedSet">変える</button></div>'
-        + '<div class="row">自校 ' + ['strong', 'normal', 'weak'].map((k) => chip('my', k, LV[k], GM.cfg.my)).join('') + ' 相手 ' + ['strong', 'normal', 'weak'].map((k) => chip('op', k, LV[k], GM.cfg.op)).join('') + '</div></div>';
+        + '<div class="row">自校 ' + ['strong', 'normal', 'weak'].map((k) => chip('my', k, LV[k], GM.cfg.my)).join('') + ' 相手 ' + ['strong', 'normal', 'weak'].map((k) => chip('op', k, LV[k], GM.cfg.op)).join('') + '</div>'
+        + '<div class="row">自分の型 ' + typeChips('myType', GM.cfg.mode === 'pitch' ? 'pitcher' : 'batter', GM.cfg.myType, chip) + '</div></div>';
     }
     if (GM.phase === 'end') {
       const G = GM.G, res = G.result === 'win' ? '勝ち' : G.result === 'draw' ? '引き分け' : (G.walkoff ? 'サヨナラ負け' : '負け');
@@ -425,11 +434,10 @@
     if (b.id === 'close') { S.sheet = false; render(); return; }
     if (d.set === 'mode') { clearTimeout(timer); timer = null; result = null; S.mode = d.val; if (d.val !== 'game') { S.presetIdx = -1; newScene(true); } else if (!GM.G) GM.phase = 'start'; render(); return; }
     if (d.set === 'glog') { GM.logMode = d.val; render(); return; }
-    if (d.set === 'bat') { S.bat = d.val; sc.batter = Object.assign({}, A.PRESETS.batter[S.bat]); render(); return; }
-    if (d.set === 'pit') { S.pit = d.val; sc.pitcher = Object.assign({}, A.PRESETS.pitcher[S.pit]); render(); return; }
+    // 型と強さを変えたら、同じシードで場面を作り直す
+    if (d.set === 'batType' || d.set === 'pitType' || d.set === 'lv') { S[d.set] = d.val; newScene(S.presetIdx < 0); render(); return; }
     if (d.set === 'bats') { S.bats = d.val; sc.bats = d.val; render(); return; }
     if (d.set === 'throws') { S.throws = d.val; sc.throws = d.val; render(); return; }
-    if (d.set === 'key') { S.key = d.val; render(); return; }
     if (d.set === 'card') { S.card = d.val; render(); return; }
     if (b.id === 'useSeed') { const v = Number(document.getElementById('seed').value); S.seed = (Number.isFinite(v) ? Math.floor(v) : 1) >>> 0; S.presetIdx = -1; newScene(true); render(); return; }
     // カードを押すと、すぐ結果(「選択」と「決定」の2段階にしない)
@@ -441,7 +449,7 @@
     if (GM.phase === 'res') { if (Date.now() - shownAt >= C.ui.tapGuardMs) { clearTimeout(timer); timer = null; gameResume(); render(); } return true; }
     if (!b) return GM.phase === 'run';
     const d = b.dataset;
-    if (d.gset) { GM.cfg[d.gset] = d.val; render(); return true; }
+    if (d.gset) { GM.cfg[d.gset] = d.val; if (d.gset === 'mode') GM.cfg.myType = 'random'; render(); return true; }
     if (b.id === 'gseedSet') { const v = Number(document.getElementById('gseed').value); GM.cfg.seed = (Number.isFinite(v) ? Math.floor(v) : 1) >>> 0; render(); return true; }
     if (b.id === 'gstart') { gameStart(false); render(); return true; }
     if (b.id === 'gplain0') { gameStart(true); render(); return true; }
@@ -459,7 +467,7 @@
   document.addEventListener('change', (e) => { if (e.target.id === 'preset') { S.presetIdx = Number(e.target.value); newScene(S.presetIdx < 0); render(); } });
   window.addEventListener('resize', () => { if (!S.sheet) render(); });
   // 最初の場面:介入できる(勝負になる)場面から始める
-  for (let i = 0; i < 50 && !inRange(A.randomScene(S.seed)); i++) S.seed++;
+  for (let i = 0; i < 50 && !inRange(A.randomScene(S.seed, playerOpts())); i++) S.seed++;
   newScene(true);
   render();
 })();
