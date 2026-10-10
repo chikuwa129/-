@@ -192,5 +192,22 @@
  "包丁いらず": {"knife": "不要"},
  "切りたくない": {"knife": "不要"},
  "切らない": {"knife": "不要"},
- "切らずに": {"knife": "不要"}
+ "切らずに": {"knife": "不要"},
+ "簡単でも凝ったのでもいい": {"effortAny": true},
+ "簡単でも凝ったのでも": {"effortAny": true},
+ "どっちでもいい": {"effortAny": true},
+ "どちらでもいい": {"effortAny": true},
+ "手間はなんでもいい": {"effortAny": true},
+ "手間はどうでもいい": {"effortAny": true},
+ "手間はどっちでもいい": {"effortAny": true},
+ "手間はどれでも": {"effortAny": true},
+ "凝ったのも見たい": {"effortRange": [3, 4]},
+ "凝ったのも": {"effortRange": [3, 4]},
+ "ちゃんとしたのも": {"effortRange": [3, 4]},
+ "手の込んだのも": {"effortRange": [3, 4]},
+ "本格的なのも": {"effortRange": [3, 4]},
+ "楽なのも見たい": {"effortRange": [1, 2]},
+ "楽なのも": {"effortRange": [1, 2]},
+ "簡単なのも": {"effortRange": [1, 2]},
+ "手軽なのも": {"effortRange": [1, 2]}
 }

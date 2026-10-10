@@ -48,7 +48,10 @@ const tags = (text: string) =>
     i.answers.map((a) => {
       const neg = 'negate' in a && a.negate ? '!' : '';
       if (a.kind === 'attr') return `${neg}${a.attr}:${a.value}`;
-      if (a.kind === 'effort') return `effort:${a.level}`;
+      if (a.kind === 'effort') {
+        const e = a.sel;
+        return e.type === 'max' ? `effort:${e.level}` : e.type === 'range' ? `effort:${e.min}-${e.max}` : e.type === 'any' ? 'effort:any' : `effort:[${e.levels}]`;
+      }
       if (a.kind === 'knife') return 'knife:不要';
       return `${neg}food:${a.target.type === 'dish' ? a.target.word : a.target.type === 'ingredient' ? a.target.name : a.target.category}`;
     }),
@@ -97,6 +100,8 @@ describe('data', () => {
     for (const [word, t] of Object.entries(keywords as Record<string, Record<string, unknown>>)) {
       for (const [attr, value] of Object.entries(t)) {
         if (attr === 'effortLevel' || attr === 'effortMax') expect([0, 1, 2, 3, 4], word).toContain(value);
+        else if (attr === 'effortRange') expect((value as number[]).length, word).toBe(2);
+        else if (attr === 'effortAny') expect(value, word).toBe(true);
         else if (attr === 'knife') expect(value, word).toBe('不要');
         else if (attr === 'method') expect(typeof value).toBe('string');
         else {
@@ -162,7 +167,7 @@ describe('やる気度', () => {
     for (const level of [1, 2, 3]) {
       const s = runToEnd(answer(fresh(), 'effort', String(level)));
       const ev = evaluate(dishes, s);
-      expect(ev.effortLevel).toBe(level);
+      expect(ev.effort?.cook?.max).toBe(level);
       for (const r of ev.ranked) expect(r.dish.effort, r.dish.name).toBeLessThanOrEqual(level);
     }
   });
@@ -185,7 +190,7 @@ describe('やる気度', () => {
     const level1 = evaluate(dishes, s).pool.map((d) => d.name);
     for (const name of level1.slice(0, level1.length - 2)) s = excludeDish(s, name);
     const ev = evaluate(dishes, s);
-    expect(ev.effortLevel).toBe(2);
+    expect(ev.effort?.cook?.max).toBe(2);
     expect(ev.pool.length).toBeGreaterThanOrEqual(3);
     expect(ev.pool.every((d) => d.effort <= 2)).toBe(true);
     expect(ev.notices).toContain('やる気の範囲では候補が少なかったので、少しだけ手間が増える料理も入れています');
@@ -213,7 +218,7 @@ describe('やる気度', () => {
 
   it('uses the lower limit when several effort words appear', () => {
     const ev = evaluate(dishes, free('疲れたし温めるだけがいい'));
-    expect(ev.effortLevel).toBe(1);
+    expect(ev.effort?.cook?.max).toBe(1);
   });
 });
 
@@ -364,14 +369,14 @@ describe('free text: ingredients and dish names', () => {
 
   it('ingredient and effort work together', () => {
     const ev = evaluate(dishes, free('卵で炒めるだけ'));
-    expect(ev.effortLevel).toBe(2);
+    expect(ev.effort?.cook?.max).toBe(2);
     expect(ev.pool.every((d) => d.effort <= 2)).toBe(true);
     expect(ev.pool.every((d) => usesIngredient(d, '卵'))).toBe(true);
   });
 
   it('炒めるだけ does not push tomato-main dishes out; in-range dishes rank first after relaxing', () => {
     const ev = evaluate(dishes, free('トマト系の炒めるだけ'));
-    expect(ev.effortLevel).toBe(3);
+    expect(ev.effort?.cook?.max).toBe(3);
     expect(ev.candidates.length).toBeGreaterThanOrEqual(3);
     expect(ev.ranked[0].dish.name).toBe('冷製パスタ'); // トマトが主役でレベル2以内
   });
@@ -379,7 +384,7 @@ describe('free text: ingredients and dish names', () => {
   it('relaxes effort first when the ingredient hits are all above the level', () => {
     // 牛肉を使う料理はレベル1にはない
     const ev = evaluate(dishes, free('牛肉で温めるだけ'));
-    expect(ev.effortLevel).toBeGreaterThan(1);
+    expect(ev.effort?.cook?.max).toBeGreaterThan(1);
     expect(ev.notices).toContain('やる気の範囲では候補が少なかったので、少しだけ手間が増える料理も入れています');
     expect(ev.ranked[0].dish.ingredients.some((i) => i.name === '牛肉')).toBe(true);
   });

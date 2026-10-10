@@ -34,6 +34,9 @@ src/
   logic/freeText.ts     フリー入力の解析（食材・料理名・属性語の最長一致、否定表現）
   logic/text.ts         入力の正規化（ひらがな／カタカナ、全角／半角）
   logic/display.ts      結果画面のやる気バッジと理由の1行
+  logic/effort.ts       やる気度の範囲（複数選択・緩和・楽／凝る切り替え）
+  logic/search.ts       外部検索の検索語と URL の組み立て
+  settings.ts           設定（レシピ検索の開く先。localStorage）
   logic/interpreter.ts  フリー入力解釈のインターフェース（将来 LLM 実装を差し込む場所）
   screens/              スタート / フリー入力 / 質問 / 結果 画面
 ```

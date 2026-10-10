@@ -6,7 +6,9 @@ import {
   createSession,
   excludeDish,
   isFinished,
-  removeFreeItem,
+  removeTag,
+  resetEffortShift,
+  shiftEffort,
   skipQuestion,
   withFreeItems,
   type SessionState,
@@ -90,7 +92,7 @@ export default function App() {
           session={session}
           onAnswer={(def, value) => proceed(answerQuestion(session, def, value))}
           onSkip={(def) => proceed(skipQuestion(session, def))}
-          onRemoveTag={(id) => proceed(removeFreeItem(session, id))}
+          onRemoveTag={(id) => proceed(removeTag(session, id))}
           onBack={restart}
         />
       );
@@ -100,7 +102,9 @@ export default function App() {
           dishes={dishes}
           session={session}
           onReject={(name) => setSession(excludeDish(session, name))}
-          onRemoveTag={(id) => proceed(removeFreeItem(session, id))}
+          onRemoveTag={(id) => proceed(removeTag(session, id))}
+          onShift={(delta) => setSession(shiftEffort(session, delta))}
+          onResetShift={() => setSession(resetEffortShift(session))}
           onRestart={restart}
           searchTarget={target}
         />

@@ -1,4 +1,4 @@
-import type { Answer, Attr, Dish, EffortLevel, FreeItem } from './types';
+import type { Answer, Attr, Dish, FreeItem } from './types';
 import { EFFORT_SHORT, questionFor, tagLabel } from './questions';
 import { isHiragana, isKana, normalize, normalizeWidth, toKatakana } from './text';
 
@@ -6,6 +6,10 @@ import { isHiragana, isKana, normalize, normalizeWidth, toKatakana } from './tex
 export type KeywordTags = Partial<Record<Attr, string>> & {
   effortLevel?: number;
   effortMax?: number;
+  /** 範囲を明示する言葉（「凝ったのも見たい」→[3, 4]） */
+  effortRange?: number[];
+  /** 「どっちでもいい」：やる気度で絞らない（質問済みにはする） */
+  effortAny?: boolean;
   knife?: string;
 };
 export type KeywordDict = Record<string, KeywordTags>;
@@ -131,9 +135,20 @@ function keywordItem(hit: Hit, tags: KeywordTags): FreeItem | null {
   for (const [key, raw] of Object.entries(tags)) {
     if (key === 'effortLevel' || key === 'effortMax') {
       if (hit.negate) continue; // 「めんどくさくない」などは扱わない
-      const level = Number(raw) as EffortLevel;
-      answers.push({ kind: 'effort', questionId: 'effort', level });
+      const level = Number(raw);
+      answers.push({ kind: 'effort', questionId: 'effort', sel: { type: 'max', level } });
       if (!tags.method) labels.push(EFFORT_SHORT[level]);
+      kindLabel = 'やる気';
+    } else if (key === 'effortRange') {
+      if (hit.negate) continue;
+      const [min, max] = raw as number[];
+      answers.push({ kind: 'effort', questionId: 'effort', sel: { type: 'range', min, max } });
+      labels.push(`やる気 ${min}〜${max}`);
+      kindLabel = 'やる気';
+    } else if (key === 'effortAny') {
+      if (hit.negate) continue;
+      answers.push({ kind: 'effort', questionId: 'effort', sel: { type: 'any' } });
+      labels.push('手間はどれでも');
       kindLabel = 'やる気';
     } else if (key === 'knife') {
       if (hit.negate) continue;

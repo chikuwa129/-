@@ -1,5 +1,13 @@
 import type { Dish } from './types';
 import { foodMatch, type Evaluation } from './engine';
+import { isDeliDish } from './effort';
+
+/** 外食・お惣菜向きとして出している料理か（レベル0を含む範囲で、自炊の範囲外） */
+function shownAsDeli(d: Dish, ev: Evaluation): boolean {
+  const r = ev.effort;
+  if (!r || !r.deli || !isDeliDish(d)) return false;
+  return !r.cook || d.effort < r.cook.min || d.effort > r.cook.max;
+}
 
 /** 手間のバッジ（［炒めるだけ］など） */
 export function effortBadge(d: Dish): string {
@@ -24,7 +32,7 @@ export function badges(d: Dish, ev: Evaluation): string[] {
   const out = [effortBadge(d)];
   if (d.knife === '不要') out.push('包丁なし');
   else if (d.knife === '少し') out.push('包丁ちょっと');
-  if (ev.effortLevel === 0) out.push(d.deliAlt ? 'お惣菜OK' : '外食向き');
+  if (shownAsDeli(d, ev)) out.push(d.deliAlt ? 'お惣菜OK' : '外食向き');
   return out;
 }
 
@@ -57,8 +65,8 @@ function foodReason(d: Dish, ev: Evaluation): string | null {
 
 /** やる気度を指定したときの理由 */
 function effortReason(d: Dish, ev: Evaluation): string | null {
-  if (ev.effortLevel === null) return null;
-  if (ev.effortLevel === 0) return d.deliAlt ? 'お惣菜やお弁当で買いやすい料理です' : '外食で済ませやすい料理です';
+  if (ev.effort === null) return null;
+  if (shownAsDeli(d, ev)) return d.deliAlt ? 'お惣菜やお弁当で買いやすい料理です' : '外食で済ませやすい料理です';
   const m = d.method;
   switch (d.effort) {
     case 1:

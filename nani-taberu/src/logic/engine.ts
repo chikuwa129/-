@@ -1,4 +1,5 @@
-import type { Answer, Dish, EffortLevel, FoodTarget, FreeItem, QuestionDef, QuestionOption } from './types';
+import type { Answer, Dish, FoodTarget, FreeItem, QuestionDef, QuestionOption } from './types';
+import { combineSels, effortTagLabel, inEffortRange, relaxRange, shiftRange, type EffortRange } from './effort';
 import { EFFORT_QUESTION, MAX_QUESTIONS, QUESTIONS } from './questions';
 import { normalize } from './text';
 import ingredientsJson from '../data/ingredients.json';
@@ -31,12 +32,14 @@ export interface SessionState {
   askedCount: number;
   /** 同点の並びを毎回変えるための乱数（料理名→値） */
   tieBreak: Record<string, number>;
+  /** 結果画面での楽／凝る切り替え（−は楽、＋は凝る）。元の選択は書き換えない */
+  effortShift: number;
 }
 
 export function createSession(dishes: Dish[], random: () => number = Math.random): SessionState {
   const tieBreak: Record<string, number> = {};
   for (const d of dishes) tieBreak[d.name] = random();
-  return { questionAnswers: [], freeItems: [], skipped: [], excluded: [], askedCount: 0, tieBreak };
+  return { questionAnswers: [], freeItems: [], skipped: [], excluded: [], askedCount: 0, tieBreak, effortShift: 0 };
 }
 
 export function allAnswers(state: SessionState): Answer[] {
@@ -102,20 +105,24 @@ export function foodScore(dish: Dish, answers: Answer[]): number {
   return sum;
 }
 
-/** やる気レベルの絞り込み。0 は外食・お惣菜向きのみ、1〜4 は手間がそのレベル以下 */
-export function effortOk(dish: Dish, level: EffortLevel): boolean {
-  if (level === 0) return dish.style.includes('外食') || dish.deliAlt;
-  return dish.effort <= level;
-}
-
 export interface Ranked {
   dish: Dish;
   score: number;
   inCandidates: boolean;
   /** 当たった食材・料理名の指定の数 */
   foodMatches: number;
-  /** 緩和前のやる気レベルの範囲内か */
+  /** 緩和前のやる気の範囲内か */
   inChosenRange: boolean;
+}
+
+/** 結果画面の楽／凝る切り替えの状態 */
+export interface EffortShiftInfo {
+  /** ずらした量（−は楽、＋は凝る、0は元の設定） */
+  n: number;
+  /** ずらす基準（元の選択。指定なしのときは第1候補の手間） */
+  base: EffortRange;
+  canEasier: boolean;
+  canHarder: boolean;
 }
 
 export interface Evaluation {
@@ -127,10 +134,17 @@ export interface Evaluation {
   ranked: Ranked[];
   /** 画面に出す案内 */
   notices: string[];
-  /** 実際に適用したやる気レベル（緩和後）。指定なしは null */
-  effortLevel: EffortLevel | null;
-  /** 検索語用：自炊料理の手間の上限（作らない＝0のみのときや指定なしは null） */
+  /** 当日選んだやる気の範囲（緩和・切り替えの前）。指定なしは null */
+  chosenEffort: EffortRange | null;
+  /** 実際に適用した手間の範囲（緩和・切り替えの後）。指定なしは null */
+  effort: EffortRange | null;
+  /** 外食・お惣菜向きだけを出しているか（レベル0） */
+  deliOnly: boolean;
+  /** 外食・お惣菜の案内を出すか（レベル0、または楽でレベル1を下回った） */
+  deliMode: boolean;
+  /** 検索語用：自炊料理の手間の上限（外食・お惣菜だけのときや指定なしは null） */
   effortMax: number | null;
+  shift: EffortShiftInfo | null;
   /** 包丁の絞り込み（緩和後） */
   knife: 'none' | 'little' | null;
   /** 加点に使った食材・料理名の指定 */
@@ -140,6 +154,14 @@ export interface Evaluation {
 function foodWhat(answers: Extract<Answer, { kind: 'food' }>[]): string {
   const labels = answers.map((a) => `『${a.label}』`).join('');
   return answers.every((a) => a.target.type === 'dish') ? `${labels}の料理` : `${labels}を使う料理`;
+}
+
+export const DELI_NOTICE = '作らない前提で、外食・お惣菜向きの料理を出しています';
+export const RELAX_NOTICE = 'やる気の範囲では候補が少なかったので、少しだけ手間が増える料理も入れています';
+
+export function chosenEffortOf(state: SessionState): EffortRange | null {
+  const sels = allAnswers(state).flatMap((a) => (a.kind === 'effort' ? [a.sel] : []));
+  return combineSels(sels);
 }
 
 export function evaluate(dishes: Dish[], state: SessionState): Evaluation {
@@ -179,25 +201,28 @@ export function evaluate(dishes: Dish[], state: SessionState): Evaluation {
     }
   }
 
-  // 3. やる気度（複数あれば低い方）と食材・料理名の指定
-  const efforts = answers.filter((a): a is Extract<Answer, { kind: 'effort' }> => a.kind === 'effort');
-  const chosen = efforts.length ? (Math.min(...efforts.map((a) => a.level)) as EffortLevel) : null;
+  // 3. やる気度と食材・料理名の指定
+  const chosen = chosenEffortOf(state);
+  const n = state.effortShift ?? 0;
+  let shiftBase: EffortRange | null = null;
+  let range = chosen;
+  if (n !== 0) {
+    // 切り替え中：元の選択（指定なしなら元の第1候補の手間）を基準に、範囲だけをずらす。緩和はしない
+    shiftBase = chosen ?? dishRange(evaluate(dishes, { ...state, effortShift: 0 }).ranked[0]?.dish);
+    range = shiftBase ? shiftRange(shiftBase, n) : null;
+  }
   const isHit = (d: Dish) => foodScore(d, posFood) > 0;
   const baseHits = posFood.length ? base.filter(isHit).length : 0;
   const wantHits = Math.min(MIN_POOL, baseHits);
 
-  let level = chosen;
   let pool: Dish[];
   let guaranteed: Dish[] = [];
   for (;;) {
-    // レベル0から緩和するときは、外食・お惣菜向きの料理も残したまま広げる
-    const inRange =
-      level === null
-        ? base
-        : base.filter((d) => effortOk(d, level!) || (chosen === 0 && effortOk(d, 0)));
+    const inRange = range === null ? base : base.filter((d) => inEffortRange(d, range!));
     const hits = wantHits > 0 ? inRange.filter(isHit) : [];
     const enough = inRange.length >= MIN_POOL && hits.length >= wantHits;
-    if (enough || level === null || level >= 4) {
+    const relaxed = n === 0 && range !== null && !enough ? relaxRange(range) : null;
+    if (!relaxed) {
       if (hits.length >= MIN_POOL) {
         pool = hits; // 3品以上当たったら、当たった料理だけに絞る
       } else {
@@ -207,12 +232,14 @@ export function evaluate(dishes: Dish[], state: SessionState): Evaluation {
       }
       break;
     }
-    level = (level + 1) as EffortLevel;
+    range = relaxed; // 範囲の上限を1つ上げる（下限は動かさない）
   }
-  if (chosen !== null && level !== chosen) {
-    notices.push('やる気の範囲では候補が少なかったので、少しだけ手間が増える料理も入れています');
-  }
-  if (level === 0) notices.push('作らない前提で、外食・お惣菜向きの料理を出しています');
+  if (n === 0 && chosen !== null && JSON.stringify(range) !== JSON.stringify(chosen)) notices.push(RELAX_NOTICE);
+  if (n !== 0 && pool.length < MIN_POOL) notices.push(`このレベルの料理は${pool.length}品でした`);
+  const deliOnly = range !== null && range.deli && range.cook === null;
+  // 楽でレベル1を下回ったときも、外食・お惣菜の案内に切り替える
+  const deliMode = deliOnly || (n < 0 && range !== null && range.deli && !(shiftBase?.deli ?? false));
+  if (deliMode) notices.push(DELI_NOTICE);
 
   // 4. 残り候補 = 属性スコアが最高の料理（＋必ず残す料理）
   const attr = new Map(pool.map((d) => [d.name, attrScore(d, answers)]));
@@ -222,7 +249,7 @@ export function evaluate(dishes: Dish[], state: SessionState): Evaluation {
     .map((dish) => ({
       dish,
       score: attr.get(dish.name)! + foodScore(dish, posFood) + methodBonus(dish, answers),
-      inChosenRange: chosen === null || effortOk(dish, chosen),
+      inChosenRange: n !== 0 || chosen === null || inEffortRange(dish, chosen),
       inCandidates: candidates.includes(dish),
       foodMatches: foodMatchCount(dish, posFood),
     }))
@@ -236,16 +263,36 @@ export function evaluate(dishes: Dish[], state: SessionState): Evaluation {
         (state.tieBreak[a.dish.name] ?? 0) - (state.tieBreak[b.dish.name] ?? 0),
     );
 
+  // 楽／凝るの基準：元の選択、指定なしなら第1候補の手間
+  if (!shiftBase) shiftBase = chosen ?? dishRange(ranked[0]?.dish);
+  const shift = shiftBase
+    ? {
+        n,
+        base: shiftBase,
+        canEasier: shiftRange(shiftBase, n - 1) !== null && !deliOnly,
+        canHarder: shiftRange(shiftBase, n + 1) !== null,
+      }
+    : null;
+
   return {
     pool,
     candidates,
     ranked,
     notices,
-    effortLevel: level,
-    effortMax: level === null || level === 0 ? null : level,
+    chosenEffort: chosen,
+    effort: range,
+    deliOnly,
+    deliMode,
+    effortMax: range?.cook ? range.cook.max : null,
+    shift,
     knife,
     foodAnswers: posFood,
   };
+}
+
+/** 料理1品の手間ちょうどの範囲（やる気度の指定がないときの切り替えの基準） */
+function dishRange(d: Dish | undefined): EffortRange | null {
+  return d ? { deli: false, cook: { min: d.effort, max: d.effort }, upperOnly: false } : null;
 }
 
 export const rank = (dishes: Dish[], state: SessionState) => evaluate(dishes, state).ranked;
@@ -321,10 +368,11 @@ export function isFinished(dishes: Dish[], state: SessionState): boolean {
   return nextQuestion(dishes, state) === null;
 }
 
+/** 質問への回答。やる気度は複数選択で、value は "1,3" のようにカンマ区切り */
 export function answerQuestion(state: SessionState, def: QuestionDef, value: string): SessionState {
   const answer: Answer =
     def.attr === 'effort'
-      ? { kind: 'effort', questionId: 'effort', level: Number(value) as EffortLevel }
+      ? { kind: 'effort', questionId: 'effort', sel: { type: 'levels', levels: value.split(',').map(Number) } }
       : { kind: 'attr', questionId: def.id, attr: def.attr, value, negate: false };
   return { ...state, questionAnswers: [...state.questionAnswers, answer], askedCount: state.askedCount + 1 };
 }
@@ -343,4 +391,31 @@ export function withFreeItems(state: SessionState, items: FreeItem[]): SessionSt
 
 export function removeFreeItem(state: SessionState, id: string): SessionState {
   return { ...state, freeItems: state.freeItems.filter((i) => i.id !== id) };
+}
+
+/** 結果画面の［もっと楽なのも見る］(-1)［もっと凝ったのも見る］(+1)。手間の範囲だけをずらす */
+export function shiftEffort(state: SessionState, delta: number): SessionState {
+  return { ...state, effortShift: (state.effortShift ?? 0) + delta };
+}
+
+export function resetEffortShift(state: SessionState): SessionState {
+  return { ...state, effortShift: 0 };
+}
+
+export const EFFORT_TAG_ID = 'q:effort';
+
+/** 画面上部に出すタグ：フリー入力の言葉＋質問で選んだやる気の範囲 */
+export function sessionTags(state: SessionState): FreeItem[] {
+  const q = state.questionAnswers.filter((a) => a.kind === 'effort');
+  if (q.length === 0) return state.freeItems;
+  const label = effortTagLabel(combineSels(q.flatMap((a) => (a.kind === 'effort' ? [a.sel] : []))));
+  return [...state.freeItems, { id: EFFORT_TAG_ID, label, note: '', negate: false, answers: [] }];
+}
+
+/** タグを外す（質問で選んだやる気の範囲も外せる） */
+export function removeTag(state: SessionState, id: string): SessionState {
+  if (id === EFFORT_TAG_ID) {
+    return { ...state, questionAnswers: state.questionAnswers.filter((a) => a.kind !== 'effort'), effortShift: 0 };
+  }
+  return removeFreeItem(state, id);
 }

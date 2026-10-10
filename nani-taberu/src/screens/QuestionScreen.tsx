@@ -1,5 +1,6 @@
 import type { Dish, QuestionDef } from '../logic/types';
-import { evaluate, nextQuestion, questionLimit, type SessionState } from '../logic/engine';
+import { evaluate, nextQuestion, questionLimit, sessionTags, type SessionState } from '../logic/engine';
+import EffortPicker from './EffortPicker';
 import Tags from './Tags';
 import Notices from './Notices';
 
@@ -33,18 +34,22 @@ export default function QuestionScreen({ dishes, session, onAnswer, onSkip, onRe
       <div className="progress" aria-hidden="true">
         <div className="progress-bar" style={{ width: `${(current / limit) * 100}%` }} />
       </div>
-      <Tags items={session.freeItems} onRemove={onRemoveTag} />
+      <Tags items={sessionTags(session)} onRemove={onRemoveTag} />
       <Notices notices={ev.notices} />
       <h2 className="question">{q.def.text}</h2>
       <p className="hint">候補 あと{ev.candidates.length}品</p>
-      <div className="stack">
-        {q.options.map((o) => (
-          <button key={o.value} className="btn btn-option" onClick={() => onAnswer(q.def, o.value)}>
-            <span className="btn-title">{o.label}</span>
-            {o.sub && <span className="btn-sub">{o.sub}</span>}
-          </button>
-        ))}
-      </div>
+      {q.def.id === 'effort' ? (
+        <EffortPicker options={q.options} onDecide={(levels) => onAnswer(q.def, levels.join(','))} />
+      ) : (
+        <div className="stack">
+          {q.options.map((o) => (
+            <button key={o.value} className="btn btn-option" onClick={() => onAnswer(q.def, o.value)}>
+              <span className="btn-title">{o.label}</span>
+              {o.sub && <span className="btn-sub">{o.sub}</span>}
+            </button>
+          ))}
+        </div>
+      )}
       <button className="btn btn-ghost" onClick={() => onSkip(q.def)}>
         スキップ（どれでもいい）
       </button>

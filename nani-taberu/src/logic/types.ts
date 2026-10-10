@@ -1,3 +1,5 @@
+import type { EffortSel } from './effort';
+
 export type Genre = '和' | '洋' | '中' | '韓' | 'エスニック';
 export type Weight = '軽い' | '普通' | '重い';
 export type Temp = '温' | '冷';
@@ -44,13 +46,13 @@ export type FoodTarget =
 /**
  * 回答1件。質問への回答もフリー入力の解釈結果も同じ形で扱う。
  * - attr: 属性の一致で ±1（negate=true は「それ以外がいい」）
- * - effort: やる気レベルによる絞り込み（level=ちょうどその段階 / max=上限の指定。どちらも上限として効く）
+ * - effort: やる気度による絞り込み（effort.ts の EffortSel：質問の複数選択・上限・範囲・指定なし）
  * - knife: 包丁なしの絞り込み
  * - food: 食材・料理名の指定（加点＋絞り込み。negate=true はその料理を除外）
  */
 export type Answer =
   | { kind: 'attr'; questionId: string; attr: Attr; value: string; negate: boolean }
-  | { kind: 'effort'; questionId: 'effort'; level: EffortLevel }
+  | { kind: 'effort'; questionId: 'effort'; sel: EffortSel }
   | { kind: 'knife' }
   | { kind: 'food'; target: FoodTarget; label: string; negate: boolean };
 

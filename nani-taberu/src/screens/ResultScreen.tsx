@@ -1,5 +1,6 @@
 import type { Dish } from '../logic/types';
-import { evaluate, type SessionState } from '../logic/engine';
+import { evaluate, sessionTags, type SessionState } from '../logic/engine';
+import { rangeNumbers } from '../logic/effort';
 import { tagLabel } from '../logic/questions';
 import { badges, reasonLine } from '../logic/display';
 import { conditionQuery, conditionsFrom, dishQuery, type RecipeTarget } from '../logic/search';
@@ -12,6 +13,8 @@ interface Props {
   session: SessionState;
   onReject: (name: string) => void;
   onRemoveTag: (id: string) => void;
+  onShift: (delta: number) => void;
+  onResetShift: () => void;
   onRestart: () => void;
   searchTarget: RecipeTarget;
 }
@@ -27,15 +30,51 @@ function describe(d: Dish): string[] {
   ];
 }
 
-export default function ResultScreen({ dishes, session, onReject, onRemoveTag, onRestart, searchTarget }: Props) {
+export default function ResultScreen({
+  dishes,
+  session,
+  onReject,
+  onRemoveTag,
+  onShift,
+  onResetShift,
+  onRestart,
+  searchTarget,
+}: Props) {
   const ev = evaluate(dishes, session);
   const cond = conditionsFrom(session, ev);
   const [first, ...rest] = ev.ranked;
 
+  const shift = ev.shift;
+  const shiftBar = shift && shift.n !== 0 && ev.effort && (
+    <div className="shift-bar" role="status">
+      <p>
+        いまの表示：『{Math.abs(shift.n) > 1 ? 'さらに' : 'もう少し'}
+        {shift.n < 0 ? '楽な' : '凝った'}（{rangeNumbers(ev.effort)}）』で出し直しました
+      </p>
+      <button type="button" className="btn btn-ghost btn-reset" onClick={onResetShift}>
+        元の設定に戻す
+      </button>
+    </div>
+  );
+  const shiftButtons = shift && (
+    <div className="shift-buttons">
+      <button type="button" className="btn btn-shift" disabled={!shift.canEasier} onClick={() => onShift(-1)}>
+        もっと楽なのも見る
+      </button>
+      <button type="button" className="btn btn-shift" disabled={!shift.canHarder} onClick={() => onShift(1)}>
+        もっと凝ったのも見る
+      </button>
+      {!shift.canHarder && <p className="hint shift-note">これ以上凝ったものはデータにありません</p>}
+      {!shift.canEasier && <p className="hint shift-note">これ以上楽な表示はありません</p>}
+    </div>
+  );
+
   if (!first) {
     return (
       <main className="screen">
-        <Tags items={session.freeItems} onRemove={onRemoveTag} />
+        <Tags items={sessionTags(session)} onRemove={onRemoveTag} />
+        {shiftBar}
+        <Notices notices={ev.notices} />
         <h2 className="question">候補がなくなりました…</h2>
         <p className="hint">アプリの料理データでは見つかりませんでした。条件をまとめて検索できます。</p>
         <SearchAction
@@ -45,6 +84,7 @@ export default function ResultScreen({ dishes, session, onReject, onRemoveTag, o
           query={conditionQuery(cond, 'recipe', searchTarget)}
           variant="primary"
         />
+        {shiftButtons}
         <button className="btn btn-secondary btn-big" onClick={onRestart}>
           もう一度
         </button>
@@ -53,7 +93,7 @@ export default function ResultScreen({ dishes, session, onReject, onRemoveTag, o
   }
 
   const reason = reasonLine(first.dish, ev);
-  const lazy = ev.effortLevel === 0;
+  const lazy = ev.deliMode;
   const dishSearches = (d: Dish) => (
     <div className="search-row">
       <SearchAction label="レシピを探す" kind="recipe" target={searchTarget} query={dishQuery(d.name, cond, 'recipe', searchTarget)} />
@@ -66,7 +106,8 @@ export default function ResultScreen({ dishes, session, onReject, onRemoveTag, o
 
   return (
     <main className="screen result">
-      <Tags items={session.freeItems} onRemove={onRemoveTag} />
+      <Tags items={sessionTags(session)} onRemove={onRemoveTag} />
+      {shiftBar}
       <Notices notices={ev.notices} />
       {lazy && nearby('primary')}
       <p className="result-lead">今日のごはんは…</p>
@@ -120,6 +161,8 @@ export default function ResultScreen({ dishes, session, onReject, onRemoveTag, o
           variant="secondary"
         />
       )}
+
+      {shiftButtons}
 
       <div className="stack">
         <button className="btn btn-secondary btn-big" onClick={() => onReject(first.dish.name)}>

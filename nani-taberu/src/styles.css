@@ -637,3 +637,91 @@ h1 {
 .search-small:has(.search-panel) {
   flex-basis: 100%;
 }
+
+/* --- やる気度の複数選択・楽／凝る切り替え --- */
+.btn-check {
+  position: relative;
+  padding-left: 52px;
+}
+.btn-check .check {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: var(--on-accent);
+}
+.btn-check.is-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.btn-check.is-on .check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.btn-check.is-suggested {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+}
+.range-text {
+  margin: 0;
+  text-align: center;
+  font-weight: 700;
+  color: var(--accent-strong);
+}
+.shift-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 2px solid var(--accent);
+  background: var(--accent-soft);
+}
+.shift-bar p {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+.btn-reset {
+  min-height: 44px;
+  align-self: flex-start;
+  padding: 6px 4px;
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+.shift-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.btn-shift {
+  min-height: 52px;
+  font-size: 15px;
+  padding: 8px 10px;
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+.shift-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 13px;
+}
+.picker-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0 max(10px, env(safe-area-inset-bottom, 0px));
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+}
