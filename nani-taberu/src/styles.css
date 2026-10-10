@@ -1,0 +1,357 @@
+:root {
+  --bg: #fff8f0;
+  --surface: #ffffff;
+  --text: #2b2118;
+  --muted: #7a6a5c;
+  --accent: #e8692b;
+  --accent-strong: #c9531a;
+  --accent-soft: #fde3d3;
+  --border: #f0dccb;
+  --neg: #6b7a8f;
+  --neg-soft: #e6ebf2;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1d1814;
+    --surface: #2a231d;
+    --text: #f5ece3;
+    --muted: #b7a796;
+    --accent: #f08a50;
+    --accent-strong: #ff9d66;
+    --accent-soft: #4a2e1f;
+    --border: #3d3229;
+    --neg: #aab8cc;
+    --neg-soft: #2f3640;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.screen {
+  max-width: 520px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.start {
+  justify-content: center;
+  gap: 40px;
+}
+
+.hero {
+  text-align: center;
+}
+.hero-icon {
+  font-size: 64px;
+  line-height: 1;
+}
+h1 {
+  font-size: 32px;
+  line-height: 1.3;
+  margin: 12px 0 8px;
+}
+.accent {
+  color: var(--accent);
+}
+.lead,
+.hint {
+  color: var(--muted);
+  margin: 0;
+}
+.hint {
+  font-size: 15px;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.btn {
+  appearance: none;
+  border: 2px solid transparent;
+  border-radius: 16px;
+  min-height: 56px;
+  padding: 12px 20px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.08s ease, background-color 0.15s ease;
+}
+.btn:active {
+  transform: scale(0.98);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.btn:focus-visible,
+.chip:focus-visible,
+.link:focus-visible,
+.mic:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.btn-big {
+  min-height: 68px;
+  font-size: 19px;
+}
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+.btn-primary:active:not(:disabled) {
+  background: var(--accent-strong);
+}
+.btn-secondary {
+  background: var(--surface);
+  color: var(--accent-strong);
+  border-color: var(--accent);
+}
+.btn-option {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+  font-size: 19px;
+  min-height: 64px;
+}
+.btn-option:active {
+  border-color: var(--accent);
+}
+/* タップ後に hover が残らないよう、マウス操作の端末だけで効かせる */
+@media (hover: hover) {
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-strong);
+  }
+  .btn-option:hover {
+    border-color: var(--accent);
+  }
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--muted);
+  font-weight: 500;
+}
+.btn-title,
+.btn-sub {
+  display: block;
+}
+.btn-sub {
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 44px;
+}
+.link {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 15px;
+  padding: 10px 4px;
+  cursor: pointer;
+}
+.progress-label {
+  font-weight: 700;
+  color: var(--accent-strong);
+  font-variant-numeric: tabular-nums;
+}
+.progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+
+.question {
+  font-size: 24px;
+  line-height: 1.4;
+  margin: 8px 0 0;
+}
+
+.tags {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+}
+.tag {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.tag::before {
+  content: '［';
+}
+.tag::after {
+  content: '］';
+}
+.tag-neg {
+  background: var(--neg-soft);
+  color: var(--neg);
+}
+
+.free-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.input-row {
+  display: flex;
+  gap: 8px;
+}
+.free-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 20px;
+  min-height: 64px;
+  padding: 12px 16px;
+  border-radius: 16px;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+.free-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.mic {
+  flex: none;
+  width: 64px;
+  border-radius: 16px;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  font-size: 26px;
+  cursor: pointer;
+}
+.mic-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  animation: pulse 1s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    transform: scale(1.05);
+  }
+}
+.examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 14px;
+  min-height: 44px;
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+.notice {
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.notice p {
+  margin: 0;
+  font-weight: 700;
+}
+.notice .hint {
+  font-weight: 400;
+}
+
+.result {
+  gap: 20px;
+}
+.result-lead {
+  margin: 16px 0 0;
+  text-align: center;
+  color: var(--muted);
+}
+.result-main {
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  border-radius: 24px;
+  padding: 28px 16px;
+  text-align: center;
+}
+.dish-name {
+  font-size: clamp(32px, 10vw, 44px);
+  line-height: 1.25;
+  margin: 0 0 12px;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.dish-tags {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.dish-tags li {
+  font-size: 13px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+.result-sub h3 {
+  font-size: 15px;
+  color: var(--muted);
+  margin: 0 0 4px;
+}
+.result-sub ol {
+  margin: 0;
+  padding-left: 1.6em;
+  font-size: 20px;
+  font-weight: 700;
+}
