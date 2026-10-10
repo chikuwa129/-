@@ -62,11 +62,12 @@
       s1third: { base: 0.25, spd: 0.3, arm: 0.2 }, // 単打:一塁走者が三塁まで進む確率(三塁が空いたとき。残りは二塁へ)
       x1home: { base: 0.45, spd: 0.3, arm: 0.2 },  // 長打:一塁走者が生還する確率(残りは三塁へ)
       triple: { base: 0.1, spd: 0.1 },             // 長打のうち、三塁打の割合(打者の走力)
+      sacFly: { base: 0.6, spd: 0.3, arm: 0.2 },   // T1g:フライのアウト(2アウト未満)で、三塁走者が生還する確率(null で T1f までの動き:進まない)
       pMin: 0.05, pMax: 0.95,
     },
     // 得点期待値の基準の打者・投手・守備(能力はすべて中位)
     reBase: 50,
-    // 終盤の接戦(inning 回以降、点差が diff 以内)は、最善の指示を「1点以上取る(取られる)確率」で選ぶ。それ以外は得点期待値
+    // (T1f まで)終盤の接戦(inning 回以降、点差が diff 以内)は「1点以上の確率」、それ以外は得点期待値。T1g からは rating.metric が 'legacy' のときだけ使う
     lateClose: { inning: 7, diff: 2 },
     // 介入場面の判定(isKeyScene)のプリセット。winRange:試合の事前勝率がこの範囲の外なら、介入しない(勝負にならない試合)
     keyScene: {
@@ -84,7 +85,11 @@
     // 期待値の評価(1〜7):通常を base にし、通常との差を step ごとに1段階(ev:得点期待値の点、p1:1点以上の確率)。投手は、失点が小さいほど高い
     //   round:'round'(四捨五入)か 'trunc'(切り捨て。差が step に届くまで同じ段階)
     //   仕様の仮の値(ev 0.05・p1 0.02)では、4 が 7 割を超えたため、細かくした(T1d)
-    rating: { base: 4, min: 1, max: 7, step: { ev: 0.02, p1: 0.008 }, round: 'round' },
+    //   T1g:metric 'win'(既定)は、打席のあとの試合の勝率の期待値で比べる(点差・回・アウト・走者がすべて効く)。'legacy' は T1f までの得点期待値 / 1点以上の確率
+    //   段階の幅(win):levRel > 0 なら、その打席の重要度(「通常」で打席のあとの勝率が動く量の平均 lev)× levRel(下限 minWin)。
+    //     勝率の差は、序盤や大差では小さい(中央値 0.1 ポイント)ため、絶対の幅では 4 が 8 割を超える。重要度に比べてどれだけ得かで段階を決める
+    //   levRel を 0 にすると、絶対の幅 step.win(0.005 = 0.5 ポイント)ごとに1段階
+    rating: { base: 4, min: 1, max: 7, step: { ev: 0.02, p1: 0.008, win: 0.005 }, levRel: 0.03, minWin: 0.0005, round: 'round', metric: 'win' },
     // カードの特徴の一言:通常との差が min(ポイント)以上、または相対で rel 以上(ただし floor ポイント以上)の結果を、増える・減るから各 maxEach 個まで(変化の相対の大きい順)
     //   rel を 0 にすると、仕様の仮の値(2ポイント以上だけ)になる
     feature: { min: 0.02, rel: 0.1, floor: 0.002, maxEach: 2, label: { K: '三振', BB: '四球', GO: 'ゴロ', FO: 'フライ', S: '単打', XB: '長打', HR: '本塁打' },
@@ -99,6 +104,23 @@
     strength: { under: 0.4, over: 0.6 },
     // 試合の勝率の推定(簡易):半イニングの得点の分散 v(仮)。残りイニングの得点は、得点期待値 μ(無死走者なし)と、事前勝率から逆算した力の差で見込む
     winModel: { v: 0.9 },
+    // 能力の型(T1g):能力 = 強さの基準 + 型の差 + ばらつき(±jitter)。0〜max に収める。値はすべて仮
+    //   場面のモードの強さは levels(すべての能力に同じ基準)。試合のモードは game.teams の基準に、型の差を足す
+    types: {
+      levels: { strong: 57, normal: 50, weak: 43 }, jitter: 8, max: 150, quick: { base: 50, jitter: 10 },
+      batter: {
+        balance: { label: 'バランス型', contact: 0, power: 0, speed: 0 },
+        contact: { label: '巧打型', contact: 30, power: -10, speed: 0 },
+        slugger: { label: '長距離型', contact: -10, power: 30, speed: -5 },
+        speed:   { label: '俊足型', contact: 0, power: -10, speed: 30 },
+      },
+      pitcher: {
+        balance:  { label: 'バランス型', velocity: 0, control: 0, breaking: 0 },
+        fastball: { label: '速球型', velocity: 30, control: -5, breaking: -10 },
+        breaker:  { label: '変化球型', velocity: -10, control: 0, breaking: 30 },
+        control:  { label: '制球型', velocity: -10, control: 30, breaking: 0 },
+      },
+    },
     // 左右(表示だけ。確率には効かせない):右の割合。両打ちは作らない。場面のシードから決める(試作専用の乱数)
     hands: { right: 0.75 },
     // 指示の選択肢:敬遠は、次の打者の能力を持たないため、出さない(true で戻す)
@@ -111,6 +133,10 @@
       maxKeys: 2,          // 1試合の介入の上限(先の2つで止まる。以降は「通常」で自動)
       priorN: 300,         // 事前勝率の見積もり:同じ編成で、自動の試合を priorN 回(別系統の乱数)。引き分けは 0.5 勝
       jitter: 10,          // 編成の能力のばらつき(±)
+      // 打順ごとの型の候補(T1g。候補から同じ重みで選ぶ。同じ型を並べると、その型が出やすい)。先発投手は pitTypes から
+      lineupTypes: [['speed'], ['contact'], ['contact', 'slugger'], ['contact', 'slugger'], ['contact', 'slugger'],
+        ['balance', 'balance', 'contact', 'slugger', 'speed'], ['balance', 'balance', 'contact', 'slugger', 'speed'], ['balance', 'balance', 'contact', 'slugger', 'speed'], ['balance', 'balance', 'contact', 'slugger', 'speed']],
+      pitTypes: ['balance', 'fastball', 'breaker', 'control'],
       // チームの強さのプリセット(打者9人の基準、先発投手、守備・肩)。強いと弱いの差は、事前勝率の多くが 30〜80% に入る程度(T1e で調整)
       teams: {
         strong: { bat: { contact: 57, power: 56, speed: 55 }, pit: { velocity: 58, control: 57, breaking: 56, quick: 53 }, def: 55 },
@@ -258,6 +284,13 @@
     const bs = b.map((x) => (x == null ? null : x));
     const bat = sc.batter.speed;
     const pr = (P, spd) => p01(C, P.base + P.spd * z(spd) - (P.arm || 0) * arm);
+    // 犠牲フライ(T1g):フライのアウト(2アウト未満)で三塁走者がいれば、確率 sacFly で生還(他の走者は進まない)
+    if (kind === 'FO' && outs < 2 && bs[2] != null && R.sacFly) {
+      const ps = pr(R.sacFly, bs[2]);
+      add(ps, outs + 1, [bs[0], bs[1], null], 1);
+      add(1 - ps, outs + 1, bs, 0);
+      return out;
+    }
     if (kind === 'K' || kind === 'FO') { add(1, outs + 1, bs, 0); return out; }
     if (kind === 'GO') {
       if (outs < 2 && bs.some((x) => x != null)) {
@@ -396,6 +429,32 @@
     return re;
   }
   function reOf(outs, b, cfg) { return outs >= 3 ? 0 : reTable(cfg)[stateKey(outs, b)]; }
+  // そのイニングの残りの得点の分布(T1g。基準の打者・投手)。[0点, 1点, …, RD_MAX 点以上] の確率
+  const RD_MAX = 15, rdCache = new Map();
+  function runsDistTable(cfg) {
+    const C = cfg || CONFIG;
+    if (rdCache.has(C)) return rdCache.get(C);
+    const trans = baseTrans(C);
+    let D = Array.from({ length: 24 }, () => new Array(RD_MAX + 1).fill(0));
+    for (let it = 0; it < 400; it++) {
+      const nx = trans.map((list) => {
+        const d = new Array(RD_MAX + 1).fill(0);
+        for (const x of list) {
+          if (x.outs >= 3) { d[Math.min(RD_MAX, x.runs)] += x.q; continue; }
+          const nd = D[stateKey(x.outs, x.b)];
+          for (let k = 0; k <= RD_MAX; k++) if (nd[k]) d[Math.min(RD_MAX, k + x.runs)] += x.q * nd[k];
+        }
+        return d;
+      });
+      let diff = 0;
+      for (let i = 0; i < 24; i++) for (let k = 0; k <= RD_MAX; k++) diff = Math.max(diff, Math.abs(nx[i][k] - D[i][k]));
+      D = nx;
+      if (diff < 1e-12) break;
+    }
+    rdCache.set(C, D);
+    return D;
+  }
+  function runsDistOf(outs, b, cfg) { return outs >= 3 ? [1] : runsDistTable(cfg)[stateKey(outs, b)]; }
   // 指示の見込み:この打席(または盗塁)の得点 + 次の状態の得点期待値の期待値。攻撃側から見た値
   function expectOrder(sc, order, cfg) {
     const br = orderBranches(sc, order, cfg);
@@ -406,8 +465,14 @@
     const br = orderBranches(sc, order, cfg);
     return br.reduce((a, x) => a + x.q * (x.runs > 0 ? 1 : p1Of(x.outs, x.b, cfg)), 0);
   }
+  // 試合の勝率の見込み(T1g):分岐ごとに、打席のあとの状態(アウト・走者・点差)の試合の勝率を出し、確率で重みづけした期待値。自校から見た値
+  function expectOrderWin(sc, order, cfg) {
+    const sg = sc.side === 'pitch' ? -1 : 1;
+    return orderBranches(sc, order, cfg).reduce((a, x) => a + x.q * winRaw(sc, { outs: x.outs, bases: x.b, diff: sc.diff + sg * x.runs }, cfg), 0);
+  }
   const isLateClose = (sc, C) => sc.inning >= C.lateClose.inning && Math.abs(sc.diff) <= C.lateClose.diff;
-  // 全指示の見込み(確率の変化つき)。best:攻撃は最大、守備(投手)は最小。終盤の接戦は「1点以上の確率」、それ以外は得点期待値で比べる
+  // 全指示の見込み(確率の変化つき)。T1g:試合の勝率の期待値(win)で比べる(攻守とも大きいほど良い)
+  //   rating.metric が 'legacy' なら T1f まで:best は攻撃は最大、守備(投手)は最小。終盤の接戦は「1点以上の確率」、それ以外は得点期待値
   function evaluate(sc, cfg) {
     const C = cfg || CONFIG;
     const now = reOf(sc.outs, sc.bases, C);
@@ -418,22 +483,30 @@
       const delta = P ? OUTCOMES.reduce((d, k) => (d[k] = P[k] - p0[k], d), {}) : null;
       const succ = o === 'bunt' ? buntP(sc, C) : o === 'squeeze' ? squeezeP(sc, C) : o === 'steal' ? stealP(sc, C) : null;
       const gb = goodBadOf(sc, o, C), gb0 = goodBadOf(sc, 'normal', C);
-      return { order: o, label: ORDER_LABEL[sc.side === 'pitch' ? 'pitch' : 'bat'][o], ev: expectOrder(sc, o, C), p1: expectOrderP1(sc, o, C), probs: P, delta: delta, success: succ,
+      return { order: o, label: ORDER_LABEL[sc.side === 'pitch' ? 'pitch' : 'bat'][o], ev: expectOrder(sc, o, C), p1: expectOrderP1(sc, o, C), win: expectOrderWin(sc, o, C), probs: P, delta: delta, success: succ,
         good: gb ? gb.good : null, bad: gb ? gb.bad : null, dGood: gb && gb.kind === 'outcome' ? gb.good - gb0.good : null, dBad: gb && gb.kind === 'outcome' ? gb.bad - gb0.bad : null };
     });
-    const metric = isLateClose(sc, C) ? 'p1' : 'ev';
-    const pick = sc.side === 'pitch' ? (a, b) => (b[metric] < a[metric] ? b : a) : (a, b) => (b[metric] > a[metric] ? b : a);
+    const metric = C.rating.metric === 'legacy' ? (isLateClose(sc, C) ? 'p1' : 'ev') : 'win';
+    const flip = sc.side === 'pitch' && metric !== 'win';   // 得点期待値と1点以上の確率は、守備では小さいほど良い
+    const pick = flip ? (a, b) => (b[metric] < a[metric] ? b : a) : (a, b) => (b[metric] > a[metric] ? b : a);
     const n = rows.find((r) => r.order === 'normal');
+    const w0 = winRaw(sc, null, C), lev = metric === 'win' ? levOf(sc, w0, C) : null;
+    const step = metric === 'win' && C.rating.levRel > 0 ? Math.max(C.rating.minWin, lev * C.rating.levRel) : null;
     for (const r of rows) {
-      r.dm = (r[metric] - n[metric]) * (sc.side === 'pitch' ? -1 : 1);   // 通常との差(得をする向きが正)
-      r.rating = ratingOf(r.dm, metric, C);
+      r.dm = (r[metric] - n[metric]) * (flip ? -1 : 1);   // 通常との差(得をする向きが正)
+      r.rating = ratingOf(r.dm, metric, C, step);
       r.feature = featureOf(r, C);
     }
-    return { side: sc.side === 'pitch' ? 'pitch' : 'bat', re: now, p1: p1Of(sc.outs, sc.bases, C), metric: metric, rows: rows, best: rows.reduce(pick).order };
+    return { side: sc.side === 'pitch' ? 'pitch' : 'bat', re: now, p1: p1Of(sc.outs, sc.bases, C), win: w0, lev: lev, step: step || C.rating.step[metric], metric: metric, rows: rows, best: rows.reduce(pick).order };
   }
-  // 期待値の評価(1〜7)。dm:通常との差(得をする向きが正)
-  function ratingOf(dm, metric, cfg) {
-    const R = (cfg || CONFIG).rating, x = dm / R.step[metric] + 1e-9 * Math.sign(dm);
+  // 打席の重要度:「通常」で、打席のあとの勝率が、いまの勝率から動く量の平均
+  function levOf(sc, w0, C) {
+    const sg = sc.side === 'pitch' ? -1 : 1;
+    return orderBranches(sc, 'normal', C).reduce((a, x) => a + x.q * Math.abs(winRaw(sc, { outs: x.outs, bases: x.b, diff: sc.diff + sg * x.runs }, C) - w0), 0);
+  }
+  // 期待値の評価(1〜7)。dm:通常との差(得をする向きが正)。step:段階の幅(省略で rating.step[metric])
+  function ratingOf(dm, metric, cfg, step) {
+    const R = (cfg || CONFIG).rating, x = dm / (step || R.step[metric]) + 1e-9 * Math.sign(dm);
     return clamp(R.base + (R.round === 'trunc' ? Math.trunc(x) : Math.round(x)), R.min, R.max);
   }
   // 特徴の一言:{ up:[結果], down:[結果], text }。確率の変化(row.delta)から作る。バント・スクイズ・盗塁は、仕組みの文
@@ -501,17 +574,43 @@
     { name: '一死一塁(守備)・強打者', inning: 6, side: 'pitch', outs: 1, bases: [R, null, null], diff: -1, batter: Object.assign({}, PRESETS.batter.strong) },
     { name: '先頭打者', inning: 1, outs: 0, bases: [null, null, null], diff: 0 },
   ].map((s) => makeScene(s));
-  // シードから場面を作る(試作専用の乱数)
-  function randomScene(seed) {
+  // ---------- 能力の型(T1g) ----------
+  const ABIL = { batter: ['contact', 'power', 'speed'], pitcher: ['velocity', 'control', 'breaking'] };
+  const LEVELS = ['strong', 'normal', 'weak'];
+  // 型の能力:基準(能力ごと)+ 型の差 + ばらつき(±jit)。0〜max
+  function typedAbility(kind, type, base, r, jit, cfg) {
+    const C = cfg || CONFIG, T = C.types[kind][type] || C.types[kind].balance, x = {};
+    for (const k of ABIL[kind]) x[k] = clamp(Math.round(base[k] + (T[k] || 0) + (jit ? r.int(-jit, jit) : 0)), 0, C.types.max);
+    return x;
+  }
+  const typeKeys = (kind, C) => Object.keys((C || CONFIG).types[kind]);
+  const typeLabel = (kind, type, C) => { const T = (C || CONFIG).types[kind][type]; return T ? T.label : ''; };
+  // 打者と投手を、型と強さから作る(場面のモード)。o:{ batType, pitType, batLevel, pitLevel }('random' か省略でランダム)
+  //   乱数は、場面のシードから別系統で。型と強さは、指定があっても同じ数だけ引く(指定を変えても、他の値がずれない)
+  function playersOf(seed, o, cfg) {
+    const C = cfg || CONFIG, r = new Rng(mix(seed >>> 0, 0x7193)), o2 = o || {};
+    const one = (kind, type, level) => {
+      const ks = typeKeys(kind, C), t0 = ks[r.int(0, ks.length - 1)], l0 = LEVELS[r.int(0, 2)];
+      const t = type && type !== 'random' && C.types[kind][type] ? type : t0;
+      const l = level && level !== 'random' && C.types.levels[level] != null ? level : l0;
+      const base = {}; for (const k of ABIL[kind]) base[k] = C.types.levels[l];
+      const ab = typedAbility(kind, t, base, r, C.types.jitter, C);
+      const q = C.types.quick, qv = clamp(q.base + r.int(-q.jitter, q.jitter), 0, C.types.max);
+      if (kind === 'pitcher') ab.quick = qv;
+      return { ab: ab, type: t, level: l };
+    };
+    const b = one('batter', o2.batType, o2.batLevel), p = one('pitcher', o2.pitType, o2.pitLevel);
+    return { batter: b.ab, pitcher: p.ab, batType: b.type, pitType: p.type, batLevel: b.level, pitLevel: p.level };
+  }
+  // シードから場面を作る(試作専用の乱数)。T1g:打者と投手は、型と強さから(o は playersOf と同じ)
+  function randomScene(seed, o) {
     const r = new Rng(seed);
-    const pick = (o) => { const ks = Object.keys(o); return o[ks[r.int(0, ks.length - 1)]]; };
-    const jit = (o) => { const x = {}; for (const k of Object.keys(o)) x[k] = clamp(o[k] + r.int(-10, 10), 1, 100); return x; };
     const bases = [0, 1, 2].map(() => (r.chance(0.4) ? r.int(30, 80) : null));
     const winP = Math.round((0.15 + r.next() * 0.75) * 100) / 100;   // 事前勝率 15〜90%
     const late = r.chance(CONFIG.lateCloseShare);   // 終盤の接戦
     const sc = makeScene({ name: 'シード ' + seed, inning: late ? r.int(7, 9) : r.int(1, 9), half: (r.next(), null), winP: winP, side: r.chance(0.5) ? 'bat' : 'pitch', outs: r.int(0, 2), bases: bases, diff: late ? r.int(-2, 2) : r.int(-4, 4),
-      batter: jit(pick(PRESETS.batter)), pitcher: jit(pick(PRESETS.pitcher)), defense: r.int(30, 70), arm: r.int(30, 70), hero: r.chance(0.6), focus: r.chance(0.3) });
-    return Object.assign(sc, handsOf(seed));
+      defense: r.int(30, 70), arm: r.int(30, 70), hero: r.chance(0.6), focus: r.chance(0.3) });
+    return Object.assign(sc, playersOf(seed, o), handsOf(seed));
   }
   // 左右(場面のシードから決める。別系統の乱数。表示だけ)
   function handsOf(seed) {
@@ -551,10 +650,12 @@
   function phi(x) { const t = 1 / (1 + 0.2316419 * Math.abs(x)); const d = 0.3989423 * Math.exp(-x * x / 2); const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return x > 0 ? 1 - p : p; }
   function phiInv(p) { let lo = -8, hi = 8; for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (phi(m) < p) lo = m; else hi = m; } return (lo + hi) / 2; }
   // 試合の勝率(自校から見て。簡易):
-  //   D = 点差 + 今の半イニングの見込み(攻撃中は +RE、守備中は −RE) + 自校の残り半イニング数 ×(μ + δ/2) − 相手の残り ×(μ − δ/2)
-  //   Var = (残り半イニング数の合計 + 今の半イニングの割合) × v。勝率 = Φ(D ÷ √Var)。δ は、事前勝率 = Φ(9δ ÷ √(18v)) から逆算
-  //   表裏:自校が攻撃で表なら先攻。残りの数は、9回で終わる前提(延長とサヨナラは無視)
-  function gameWinProb(sc, st, cfg) {
+  //   この半イニングの残りの得点 k は、分布(runsDistOf。基準の打者)で数える。それより先の半イニングは正規分布で近似する
+  //   F(d) = Φ((d + M) ÷ √V)、M = 自校の残り半イニング数 ×(μ + δ/2) − 相手の残り ×(μ − δ/2)、V = 残り半イニング数の合計 × v
+  //   勝率 = Σ P(k) × F(点差 ± k)(攻撃中は +k、守備中は −k)。V が 0(9回裏の守備など、先がない)なら、勝ち 1・引き分け 0.5・負け 0
+  //   δ は、事前勝率 = Φ(9δ ÷ √(18v)) から逆算。表裏:自校が攻撃で表なら先攻。残りの数は、9回で終わる前提(延長とサヨナラは無視)
+  //   T1g の変更:T1f までは、この半イニングの残りを得点期待値(平均)だけで見て、分散に足していた。1点を取りにいく価値(バント・スクイズ)を勝率に出すため、分布にした
+  function winRaw(sc, st, cfg) {
     const C = cfg || CONFIG, v = C.winModel.v;
     const mu = reOf(0, [null, null, null], C);
     const delta = phiInv(clamp(sc.winP == null ? 0.5 : sc.winP, 0.01, 0.99)) * Math.sqrt(18 * v) / 9;
@@ -563,14 +664,15 @@
     // この半イニングのあとの残り:自校(my)、相手(op)
     const weAway = bat ? top : !top;   // 自校が先攻か
     // 表の途中なら、後攻のチームには、この回の裏が残る
-    const my = 9 - i + (top && !weAway ? 1 : 0), op = 9 - i + (top && weAway ? 1 : 0);
-    const cur = s.outs >= 3 ? 0 : reOf(s.outs, s.bases, C);
-    const curShare = s.outs >= 3 ? 0 : Math.min(1, cur / Math.max(0.01, mu));
-    const D = s.diff + (bat ? cur : -cur) + my * (mu + delta / 2) - op * (mu - delta / 2);
-    const Var = (my + op + curShare) * v;
-    if (Var < 1e-9) return D > 0 ? 1 : D < 0 ? 0 : 0.5;
-    return clamp(phi(D / Math.sqrt(Var)), 0.001, 0.999);
+    const my = Math.max(0, 9 - i + (top && !weAway ? 1 : 0)), op = Math.max(0, 9 - i + (top && weAway ? 1 : 0));
+    const M = my * (mu + delta / 2) - op * (mu - delta / 2), V = (my + op) * v, sd = Math.sqrt(V);
+    const F = (d) => (V < 1e-9 ? (d > 1e-9 ? 1 : d < -1e-9 ? 0 : 0.5) : phi(d / sd));
+    const R = runsDistOf(s.outs, s.bases, C), sg = bat ? 1 : -1;
+    let w = 0;
+    for (let k = 0; k < R.length; k++) if (R[k]) w += R[k] * F(s.diff + sg * k + M);
+    return w;
   }
+  function gameWinProb(sc, st, cfg) { return clamp(winRaw(sc, st, cfg), 0.001, 0.999); }
 
   // ---------- 介入場面の判定 ----------
   //   rule:プリセット名('success' / 'manager')か、{ bat:{ who:'all'|'focus', minInning, chance }, pitch:{ pinch, maxDiff, minInning } }
@@ -604,17 +706,23 @@
     if (on.length === 3) return '満塁';
     return on.length === 1 ? BASE_NAME[on[0]] : on.map((i) => '一二三'[i]).join('') + '塁';
   }
-  function makeTeam(lv, r, C) {
-    const G = C.game, T = G.teams[lv] || G.teams.normal, j = (o) => { const x = {}; for (const k of Object.keys(o)) x[k] = clamp(o[k] + r.int(-G.jitter, G.jitter), 1, 100); return x; };
+  // チームの編成(T1g:打順ごとの型は game.lineupTypes、先発投手は game.pitTypes から)。fix:{ bat:{ 打順の添字: 型 }, pit: 型 }(指定で上書き)
+  //   型は先に全員ぶん引く(指定があっても同じ数だけ引くので、他の選手の値はずれない)
+  function makeTeam(lv, r, C, fix) {
+    const G = C.game, T = G.teams[lv] || G.teams.normal, f = fix || {};
     const hand = () => (r.next() < C.hands.right ? 'R' : 'L');
-    const lineup = Array.from({ length: 9 }, () => Object.assign(j(T.bat), { bats: hand() }));
-    return { level: lv, lineup: lineup, pitcher: Object.assign(j(T.pit), { throws: hand() }), defense: clamp(T.def + r.int(-5, 5), 1, 100), arm: clamp(T.def + r.int(-5, 5), 1, 100) };
+    const bt = G.lineupTypes.map((c, i) => { const t = c[r.int(0, c.length - 1)]; const x = f.bat && f.bat[i]; return x && x !== 'random' && C.types.batter[x] ? x : t; });
+    const pt0 = G.pitTypes[r.int(0, G.pitTypes.length - 1)], pt = f.pit && f.pit !== 'random' && C.types.pitcher[f.pit] ? f.pit : pt0;
+    const lineup = bt.map((t) => Object.assign(typedAbility('batter', t, T.bat, r, G.jitter, C), { bats: hand(), type: t }));
+    const pitcher = Object.assign(typedAbility('pitcher', pt, T.pit, r, G.jitter, C), { quick: clamp(T.pit.quick + r.int(-G.jitter, G.jitter), 0, C.types.max), throws: hand(), type: pt });
+    return { level: lv, lineup: lineup, pitcher: pitcher, defense: clamp(T.def + r.int(-5, 5), 1, 100), arm: clamp(T.def + r.int(-5, 5), 1, 100) };
   }
-  // o:{ seed, mode:'bat'|'pitch', my, op(強さ), winP(省略で見積もる) }
+  // o:{ seed, mode:'bat'|'pitch', my, op(強さ), myType(自分の型。野手は打者の型、投手は投手の型。'random' か省略でランダム), winP(省略で見積もる) }
   function newGame(o, cfg) {
     const C = cfg || CONFIG, seed = (o.seed >>> 0);
     const r = new Rng(mix(seed, 0x7e41));
-    const G = { seed: seed, mode: o.mode === 'pitch' ? 'pitch' : 'bat', myLevel: o.my || 'normal', opLevel: o.op || 'normal', my: o.teams ? o.teams.my : makeTeam(o.my || 'normal', r, C), op: o.teams ? o.teams.op : makeTeam(o.op || 'normal', r, C),
+    const mode = o.mode === 'pitch' ? 'pitch' : 'bat', fix = mode === 'pitch' ? { pit: o.myType } : { bat: { [C.game.myOrder - 1]: o.myType } };
+    const G = { seed: seed, mode: mode, myLevel: o.my || 'normal', opLevel: o.op || 'normal', myType: o.myType || 'random', my: o.teams ? o.teams.my : makeTeam(o.my || 'normal', r, C, fix), op: o.teams ? o.teams.op : makeTeam(o.op || 'normal', r, C),
       paSeed: o.paSeed != null ? o.paSeed : mix(seed, 1), quiet: !!o.quiet, plain: !!o.plain, C: C };
     resetGame(G);
     G.winP = o.winP != null ? o.winP : priorWinP(G);
@@ -642,7 +750,7 @@
     const batMy = G.top, key = batMy ? 'my' : 'op', bt = G[key], ft = batMy ? G.op : G.my, i = G.idx[key];
     return makeScene({ inning: G.inning, half: G.top ? 'top' : 'bottom', side: batMy ? 'bat' : 'pitch', outs: G.outs, bases: G.bases.slice(), diff: G.score.my - G.score.op,
       batter: bt.lineup[i], pitcher: ft.pitcher, defense: ft.defense, arm: ft.arm, winP: G.winP, hero: G.mode === 'bat' && batMy && i === G.C.game.myOrder - 1, focus: false,
-      bats: bt.lineup[i].bats, throws: ft.pitcher.throws, order: i + 1, name: '' });
+      bats: bt.lineup[i].bats, throws: ft.pitcher.throws, order: i + 1, name: '', batType: bt.lineup[i].type, pitType: ft.pitcher.type });
   }
   function isGameKey(G, sc) {
     if (G.plain || G.keysUsed >= G.C.game.maxKeys) return false;
@@ -752,8 +860,9 @@
 
   return {
     CONFIG: CONFIG, newGame: newGame, advance: advance, choose: choose, finishPlain: finishPlain, playGame: playGame, gameWin: gameWin, curScene: curScene, priorWinP: priorWinP, basesText: basesText, mixSeed: mix, OUTCOMES: OUTCOMES, OUTCOME_LABEL: OUTCOME_LABEL, ORDER_LABEL: ORDER_LABEL, PRESETS: PRESETS, SCENES: SCENES,
-    Rng: Rng, probs: probs, orderBranches: orderBranches, legalOrders: legalOrders, reTable: reTable, reOf: reOf, p1Table: p1Table, p1Of: p1Of, expectOrderP1: expectOrderP1, expectOrder: expectOrder,
+    Rng: Rng, probs: probs, runsDistOf: runsDistOf, expectOrderWin: expectOrderWin, orderBranches: orderBranches, legalOrders: legalOrders, reTable: reTable, reOf: reOf, p1Table: p1Table, p1Of: p1Of, expectOrderP1: expectOrderP1, expectOrder: expectOrder,
     evaluate: evaluate, ratingOf: ratingOf, featureOf: featureOf, twoChoice: twoChoice, cardsOf: cardsOf, resolve: resolve, goodBadOf: goodBadOf, gameWinProb: gameWinProb, strengthLabel: strengthLabel, inWinRange: inWinRange, makeScene: makeScene, randomScene: randomScene, handsOf: handsOf, tagsOf: tagsOf, uiStep: uiStep, isKeyScene: isKeyScene,
+    playersOf: playersOf, typedAbility: typedAbility, typeKeys: typeKeys, typeLabel: typeLabel, LEVELS: LEVELS,
     buntP: buntP, squeezeP: squeezeP, stealP: stealP, rankOf: rankOf, kmh: kmh, breakTotal: breakTotal,
   };
 });
