@@ -188,13 +188,14 @@ function ingredientItem(hit: Hit, index: ParserIndex): FreeItem {
   const category = index.dicts.ingredients[name].category;
   console.warn(`[nani-taberu] 食材「${name}」は ingredients.json にありますが、dishes.json の料理には使われていません`);
   if (hit.negate) {
-    return { id, label: `${name} 以外`, note: `『${name}』を使う料理はもともとデータにありません`, negate: true, answers: [] };
+    return { id, label: `${name} 以外`, note: `『${name}』を使う料理はもともとデータにありません`, negate: true, answers: [], notFound: true };
   }
   return {
     id,
     label: name,
     note: `『${name}』を使う料理はデータにありませんでした。代わりに${category}を使う料理を探します`,
     negate: false,
+    notFound: true,
     answers: [
       { kind: 'food', target: { type: 'category', category, fallbackFor: name }, label: name, negate: false },
     ],

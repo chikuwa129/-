@@ -1,12 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FreeItem } from '../logic/types';
 import Tags from './Tags';
+import SearchAction from './SearchAction';
+import type { RecipeTarget } from '../logic/search';
 
 interface Props {
   interpret: (text: string) => Promise<FreeItem[]>;
   onConfirm: (items: FreeItem[]) => void;
   onAkinator: () => void;
   onBack: () => void;
+  searchTarget: RecipeTarget;
+  /** 読み取った条件から作る検索語（該当なしのとき） */
+  conditionQueryFor: (items: FreeItem[]) => string;
 }
 
 const EXAMPLES = [
@@ -36,7 +41,14 @@ const SpeechRecognitionCtor: (new () => Recognition) | undefined =
         | undefined
     : undefined;
 
-export default function FreeInputScreen({ interpret, onConfirm, onAkinator, onBack }: Props) {
+export default function FreeInputScreen({
+  interpret,
+  onConfirm,
+  onAkinator,
+  onBack,
+  searchTarget,
+  conditionQueryFor,
+}: Props) {
   const [text, setText] = useState('');
   const [failed, setFailed] = useState(false);
   /** 決定後に読み取った言葉。null は未決定 */
@@ -139,6 +151,15 @@ export default function FreeInputScreen({ interpret, onConfirm, onAkinator, onBa
               <li key={i.id}>{i.note}</li>
             ))}
           </ul>
+          {items.some((i) => i.notFound) && (
+            <SearchAction
+              label="検索で探す"
+              kind="recipe"
+              target={searchTarget}
+              query={conditionQueryFor(items)}
+              variant="secondary"
+            />
+          )}
           {items.length > 0 ? (
             <>
               <p className="hint">違うものはタップで外せます</p>
@@ -163,6 +184,7 @@ export default function FreeInputScreen({ interpret, onConfirm, onAkinator, onBa
           <button className="btn btn-secondary" onClick={onAkinator}>
             質問に答えて決める
           </button>
+          <SearchAction label="この言葉で検索する" kind="recipe" target="google" query={text.trim()} variant="secondary" />
         </div>
       )}
     </main>

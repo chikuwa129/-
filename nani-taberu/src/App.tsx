@@ -17,14 +17,20 @@ import FreeInputScreen from './screens/FreeInputScreen';
 import QuestionScreen from './screens/QuestionScreen';
 import ResultScreen from './screens/ResultScreen';
 import DataScreen from './screens/DataScreen';
+import SettingsScreen from './screens/SettingsScreen';
+import { loadSettings, saveSettings, type Settings } from './settings';
+import { conditionQuery, conditionsFrom } from './logic/search';
+import { evaluate } from './logic/engine';
 
 const dishes = dishesJson as Dish[];
 
-type Screen = 'start' | 'free' | 'question' | 'result' | 'data';
+type Screen = 'start' | 'free' | 'question' | 'result' | 'data' | 'settings';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('start');
   const [session, setSession] = useState<SessionState>(() => createSession(dishes));
+  const [settings, setSettings] = useState<Settings>(loadSettings);
+  const target = settings.recipeSearch;
 
   /** 状態を更新し、終了条件を満たしていれば結果画面へ */
   const proceed = (next: SessionState) => {
@@ -42,7 +48,23 @@ export default function App() {
   switch (screen) {
     case 'start':
       return (
-        <StartScreen onAkinator={startAkinator} onFree={() => setScreen('free')} onData={() => setScreen('data')} />
+        <StartScreen
+          onAkinator={startAkinator}
+          onFree={() => setScreen('free')}
+          onData={() => setScreen('data')}
+          onSettings={() => setScreen('settings')}
+        />
+      );
+    case 'settings':
+      return (
+        <SettingsScreen
+          settings={settings}
+          onChange={(next) => {
+            setSettings(next);
+            saveSettings(next);
+          }}
+          onBack={() => setScreen('start')}
+        />
       );
     case 'data':
       return <DataScreen dishes={dishes} onBack={() => setScreen('start')} />;
@@ -52,6 +74,11 @@ export default function App() {
           // 入力文はここで解釈して捨てる（保存しない）
           interpret={(text) => dictionaryInterpreter.interpret(text)}
           onConfirm={(items: FreeItem[]) => proceed(withFreeItems(createSession(dishes), items))}
+          searchTarget={target}
+          conditionQueryFor={(items: FreeItem[]) => {
+            const s = withFreeItems(createSession(dishes), items);
+            return conditionQuery(conditionsFrom(s, evaluate(dishes, s)), 'recipe', target);
+          }}
           onAkinator={startAkinator}
           onBack={restart}
         />
@@ -75,6 +102,7 @@ export default function App() {
           onReject={(name) => setSession(excludeDish(session, name))}
           onRemoveTag={(id) => proceed(removeFreeItem(session, id))}
           onRestart={restart}
+          searchTarget={target}
         />
       );
   }

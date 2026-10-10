@@ -2,8 +2,10 @@ import type { Dish } from '../logic/types';
 import { evaluate, type SessionState } from '../logic/engine';
 import { tagLabel } from '../logic/questions';
 import { badges, reasonLine } from '../logic/display';
+import { conditionQuery, conditionsFrom, dishQuery, type RecipeTarget } from '../logic/search';
 import Tags from './Tags';
 import Notices from './Notices';
+import SearchAction from './SearchAction';
 
 interface Props {
   dishes: Dish[];
@@ -11,6 +13,7 @@ interface Props {
   onReject: (name: string) => void;
   onRemoveTag: (id: string) => void;
   onRestart: () => void;
+  searchTarget: RecipeTarget;
 }
 
 const GENRE_LABEL: Record<string, string> = { 和: '和食', 洋: '洋食', 中: '中華', 韓: '韓国', エスニック: 'エスニック' };
@@ -24,15 +27,25 @@ function describe(d: Dish): string[] {
   ];
 }
 
-export default function ResultScreen({ dishes, session, onReject, onRemoveTag, onRestart }: Props) {
+export default function ResultScreen({ dishes, session, onReject, onRemoveTag, onRestart, searchTarget }: Props) {
   const ev = evaluate(dishes, session);
+  const cond = conditionsFrom(session, ev);
   const [first, ...rest] = ev.ranked;
 
   if (!first) {
     return (
       <main className="screen">
+        <Tags items={session.freeItems} onRemove={onRemoveTag} />
         <h2 className="question">候補がなくなりました…</h2>
-        <button className="btn btn-primary btn-big" onClick={onRestart}>
+        <p className="hint">アプリの料理データでは見つかりませんでした。条件をまとめて検索できます。</p>
+        <SearchAction
+          label="検索で探す"
+          kind="recipe"
+          target={searchTarget}
+          query={conditionQuery(cond, 'recipe', searchTarget)}
+          variant="primary"
+        />
+        <button className="btn btn-secondary btn-big" onClick={onRestart}>
           もう一度
         </button>
       </main>
@@ -40,11 +53,22 @@ export default function ResultScreen({ dishes, session, onReject, onRemoveTag, o
   }
 
   const reason = reasonLine(first.dish, ev);
+  const lazy = ev.effortLevel === 0;
+  const dishSearches = (d: Dish) => (
+    <div className="search-row">
+      <SearchAction label="レシピを探す" kind="recipe" target={searchTarget} query={dishQuery(d.name, cond, 'recipe', searchTarget)} />
+      <SearchAction label="画像を見る" kind="image" query={dishQuery(d.name, cond, 'image')} />
+    </div>
+  );
+  const nearby = (variant: 'primary' | 'secondary') => (
+    <SearchAction label="近くのお店で探す" kind="maps" query={dishQuery(first.dish.name, cond, 'maps')} variant={variant} />
+  );
 
   return (
     <main className="screen result">
       <Tags items={session.freeItems} onRemove={onRemoveTag} />
       <Notices notices={ev.notices} />
+      {lazy && nearby('primary')}
       <p className="result-lead">今日のごはんは…</p>
       <section className="result-main" aria-live="polite">
         <h2 className="dish-name">{first.dish.name}</h2>
@@ -59,6 +83,7 @@ export default function ResultScreen({ dishes, session, onReject, onRemoveTag, o
             <li key={t}>{t}</li>
           ))}
         </ul>
+        {dishSearches(first.dish)}
       </section>
 
       {rest.length > 0 && (
@@ -78,11 +103,22 @@ export default function ResultScreen({ dishes, session, onReject, onRemoveTag, o
                     ))}
                   </span>
                   {why && <span className="sub-reason">{why}</span>}
+                  {dishSearches(r.dish)}
                 </li>
               );
             })}
           </ol>
         </section>
+      )}
+
+      {session.freeItems.some((i) => i.notFound) && (
+        <SearchAction
+          label="検索で探す（入力した条件で）"
+          kind="recipe"
+          target={searchTarget}
+          query={conditionQuery(cond, 'recipe', searchTarget)}
+          variant="secondary"
+        />
       )}
 
       <div className="stack">
@@ -93,6 +129,7 @@ export default function ResultScreen({ dishes, session, onReject, onRemoveTag, o
           もう一度
         </button>
       </div>
+      {!lazy && nearby('secondary')}
     </main>
   );
 }

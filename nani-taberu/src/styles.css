@@ -527,3 +527,113 @@ h1 {
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
+
+/* --- 外部検索 --- */
+.search-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: center;
+}
+.result-sub .search-row {
+  justify-content: flex-start;
+  margin-top: 6px;
+}
+.search-action {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.search-small {
+  flex: 1 1 140px;
+}
+.btn-search {
+  min-height: 44px;
+  padding: 8px 14px;
+  font-size: 15px;
+  background: var(--surface);
+  color: var(--accent-strong);
+  border-color: var(--border);
+}
+.search-secondary .btn-search {
+  min-height: 56px;
+  border-color: var(--accent);
+}
+.search-primary .btn-search {
+  min-height: 60px;
+  font-size: 18px;
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+.search-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  text-align: left;
+}
+.search-input {
+  font: inherit;
+  font-size: 16px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  min-width: 0;
+}
+.btn-open {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  min-height: 48px;
+  font-size: 16px;
+}
+.btn-open.is-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.offline-hint {
+  font-size: 13px;
+}
+.footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+.field {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--surface);
+}
+.field legend {
+  font-weight: 700;
+  padding: 0 4px;
+}
+.radio {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 17px;
+}
+.radio input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--accent);
+}
+/* 検索語のパネルを開いたら、その行いっぱいに広げる */
+.search-small:has(.search-panel) {
+  flex-basis: 100%;
+}

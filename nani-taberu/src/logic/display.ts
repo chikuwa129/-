@@ -11,7 +11,7 @@ export function effortBadge(d: Dish): string {
       if (m.includes('炒める')) return '炒めるだけ';
       if (m.includes('焼く')) return '焼くだけ';
       if (m.includes('煮る')) return '煮るだけ';
-      if (m.includes('茹でる')) return '茹でて和えるだけ';
+      if (m.includes('茹でる')) return m.includes('和える') || m.includes('混ぜる') ? '茹でて和えるだけ' : '茹でるだけ';
       return 'のせる・和えるだけ';
     case 3:
       return 'ふつうに作る';
@@ -67,7 +67,7 @@ function effortReason(d: Dish, ev: Evaluation): string | null {
       if (m.includes('炒める')) return 'フライパン1つで炒めるだけです';
       if (m.includes('焼く')) return 'フライパンで焼くだけです';
       if (m.includes('煮る')) return '鍋1つで煮るだけです';
-      if (m.includes('茹でる')) return '茹でて和えるだけです';
+      if (m.includes('茹でる')) return m.includes('和える') || m.includes('混ぜる') ? '茹でて和えるだけです' : '茹でるだけです';
       return 'のせる・和えるだけです';
     case 3:
       return 'ふつうの手間で作れます';

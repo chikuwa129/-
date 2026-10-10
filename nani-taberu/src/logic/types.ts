@@ -78,4 +78,6 @@ export interface FreeItem {
   note: string;
   negate: boolean;
   answers: Answer[];
+  /** 辞書にはあるが料理データにない食材（外部検索のボタンを出す） */
+  notFound?: boolean;
 }

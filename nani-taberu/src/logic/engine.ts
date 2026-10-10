@@ -129,6 +129,8 @@ export interface Evaluation {
   notices: string[];
   /** 実際に適用したやる気レベル（緩和後）。指定なしは null */
   effortLevel: EffortLevel | null;
+  /** 検索語用：自炊料理の手間の上限（作らない＝0のみのときや指定なしは null） */
+  effortMax: number | null;
   /** 包丁の絞り込み（緩和後） */
   knife: 'none' | 'little' | null;
   /** 加点に使った食材・料理名の指定 */
@@ -234,7 +236,16 @@ export function evaluate(dishes: Dish[], state: SessionState): Evaluation {
         (state.tieBreak[a.dish.name] ?? 0) - (state.tieBreak[b.dish.name] ?? 0),
     );
 
-  return { pool, candidates, ranked, notices, effortLevel: level, knife, foodAnswers: posFood };
+  return {
+    pool,
+    candidates,
+    ranked,
+    notices,
+    effortLevel: level,
+    effortMax: level === null || level === 0 ? null : level,
+    knife,
+    foodAnswers: posFood,
+  };
 }
 
 export const rank = (dishes: Dish[], state: SessionState) => evaluate(dishes, state).ranked;
