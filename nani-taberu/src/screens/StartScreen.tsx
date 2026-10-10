@@ -1,9 +1,10 @@
 interface Props {
   onAkinator: () => void;
   onFree: () => void;
+  onData: () => void;
 }
 
-export default function StartScreen({ onAkinator, onFree }: Props) {
+export default function StartScreen({ onAkinator, onFree, onData }: Props) {
   return (
     <main className="screen start">
       <div className="hero">
@@ -13,7 +14,7 @@ export default function StartScreen({ onAkinator, onFree }: Props) {
           <br />
           <span className="accent">アキネーター</span>
         </h1>
-        <p className="lead">いくつかの質問に答えるだけで、今日食べたい料理を当てます。</p>
+        <p className="lead">今日のやる気に合わせて、食べたい料理を当てます。</p>
       </div>
       <div className="stack">
         <button className="btn btn-primary btn-big" onClick={onAkinator}>
@@ -22,9 +23,12 @@ export default function StartScreen({ onAkinator, onFree }: Props) {
         </button>
         <button className="btn btn-secondary btn-big" onClick={onFree}>
           <span className="btn-title">ざっくり言ってみる</span>
-          <span className="btn-sub">フリー入力モード</span>
+          <span className="btn-sub">フリー入力モード（食材や料理名でもOK）</span>
         </button>
       </div>
+      <button className="link footer-link" onClick={onData}>
+        料理データ一覧
+      </button>
     </main>
   );
 }

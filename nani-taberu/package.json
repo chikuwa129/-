@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc -b",
-    "build:single": "vite build --config vite.artifact.config.ts && node scripts-inline.mjs"
+    "build:single": "vite build --config vite.artifact.config.ts && node scripts-inline.mjs",
+    "data:table": "node tools/dish-table.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

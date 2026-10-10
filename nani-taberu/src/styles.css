@@ -6,6 +6,7 @@
   --accent: #e8692b;
   --accent-strong: #c9531a;
   --accent-soft: #fde3d3;
+  --on-accent: #ffffff;
   --border: #f0dccb;
   --neg: #6b7a8f;
   --neg-soft: #e6ebf2;
@@ -21,6 +22,7 @@
     --accent: #f08a50;
     --accent-strong: #ff9d66;
     --accent-soft: #4a2e1f;
+    --on-accent: #1d1814;
     --border: #3d3229;
     --neg: #aab8cc;
     --neg-soft: #2f3640;
@@ -36,6 +38,7 @@
   --accent: #f08a50;
   --accent-strong: #ff9d66;
   --accent-soft: #4a2e1f;
+  --on-accent: #1d1814;
   --border: #3d3229;
   --neg: #aab8cc;
   --neg-soft: #2f3640;
@@ -369,4 +372,158 @@ h1 {
   padding-left: 1.6em;
   font-size: 20px;
   font-weight: 700;
+}
+
+/* --- 第1段階＋：タグ外し・案内・やる気バッジ・データ一覧 --- */
+.tags li {
+  display: contents;
+}
+.tag-btn {
+  border: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.tag-btn::after {
+  content: none;
+}
+.tag-btn .tag-x {
+  font-size: 13px;
+  opacity: 0.7;
+}
+.tag-btn::before {
+  content: none;
+}
+.notices {
+  list-style: none;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--neg-soft);
+  color: var(--text);
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.btn-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+.btn-option .btn-sub {
+  color: var(--muted);
+  opacity: 1;
+}
+.confirm .readings {
+  margin: 0;
+  padding-left: 1.2em;
+  font-size: 15px;
+}
+.effort-badges {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 10px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.effort-badges li,
+.mini-badge {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: 6px;
+  padding: 2px 10px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.mini-badge {
+  font-size: 12px;
+  padding: 1px 6px;
+}
+.reason {
+  margin: 0 0 12px;
+  font-size: 15px;
+  color: var(--text);
+}
+.result-sub li {
+  margin-bottom: 8px;
+}
+.sub-name {
+  margin-right: 8px;
+}
+.sub-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  vertical-align: middle;
+}
+.sub-reason {
+  display: block;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.footer-link {
+  align-self: center;
+}
+.seg {
+  display: flex;
+  gap: 0;
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.seg button {
+  flex: 1;
+  min-height: 44px;
+  border: none;
+  font: inherit;
+  font-weight: 700;
+  background: var(--surface);
+  color: var(--accent-strong);
+  cursor: pointer;
+}
+.seg button[aria-selected='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.table-wrap table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 14px;
+}
+.table-wrap th,
+.table-wrap td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.table-wrap thead th {
+  position: sticky;
+  top: 0;
+  background: var(--accent-soft);
+  white-space: nowrap;
+}
+.table-wrap tbody th {
+  white-space: nowrap;
+}
+.table-wrap .num {
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }

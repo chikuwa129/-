@@ -1,78 +1,238 @@
-import type { Answer, Attr } from './types';
-import { questionFor } from './questions';
+import type { Answer, Attr, Dish, EffortLevel, FreeItem } from './types';
+import { EFFORT_SHORT, questionFor, tagLabel } from './questions';
+import { isHiragana, isKana, normalize, normalizeWidth, toKatakana } from './text';
 
-/** keywords.json の形式: 言葉 → { 属性: 値 } */
-export type KeywordDict = Record<string, Partial<Record<Attr, string>>>;
+/** keywords.json の形式: 言葉 → 属性タグ・やる気・包丁 */
+export type KeywordTags = Partial<Record<Attr, string>> & {
+  effortLevel?: number;
+  effortMax?: number;
+  knife?: string;
+};
+export type KeywordDict = Record<string, KeywordTags>;
+/** ingredients.json の形式: 正規名 → 別名とカテゴリ */
+export type IngredientDict = Record<string, { aliases: string[]; category: string }>;
+/** categories.json の形式: カテゴリ → カテゴリ語 */
+export type CategoryDict = Record<string, string[]>;
 
-/** キーワードの直後にこれが続いたら否定（「肉じゃない」「肉以外」「肉は嫌」「辛くない」など） */
-const NEGATION =
-  /^(?:の|もの|物|系|料理|っぽいの|みたいなの)?(?:は|が|も|で)?\s*く?(?:じゃな|ではな|でな|以外|嫌|いや|イヤ|やだ|ヤダ|いらな|要らな|抜き|ぬき|なし|無し|ない|苦手|NG|やめ|パス|気分じゃ)/;
+export interface Dictionaries {
+  keywords: KeywordDict;
+  ingredients: IngredientDict;
+  categories: CategoryDict;
+  dishes: Dish[];
+}
 
-export interface KeywordHit {
+type EntryKind = 'keyword' | 'ingredient' | 'category' | 'dish';
+
+interface Entry {
+  /** 正規化済みの言葉 */
   word: string;
+  kind: EntryKind;
+  /** keyword=辞書の言葉 / ingredient=正規名 / category=カテゴリ名 / dish=照合語 */
+  key: string;
+  /**
+   * 同じ長さで当たったときの優先度（小さいほど優先）。
+   * 属性語 > 食材 > 料理名。属性語には「肉」「魚」「麺」のような主材料の言葉だけを置き、
+   * 具体的な食材・料理名は ingredients.json と料理名照合に任せる。
+   */
+  priority: number;
+}
+
+const PRIORITY: Record<EntryKind, number> = { keyword: 0, ingredient: 1, category: 1, dish: 2 };
+
+export interface ParserIndex {
+  entries: Entry[];
+  dicts: Dictionaries;
+  usedIngredients: Set<string>;
+}
+
+/** 料理名の照合語：料理名・別名に加えて、名前の中のカタカナ語・漢字語（「カレー」「丼」など） */
+function dishWords(dish: Dish): string[] {
+  const words = new Set<string>([dish.name, ...dish.aliases]);
+  for (const name of [dish.name, ...dish.aliases]) {
+    for (const m of name.match(/[ァ-ヺー]{2,}/g) ?? []) words.add(m);
+    for (const m of name.match(/[一-鿿々]+/g) ?? []) {
+      if (m.length >= 2 || m === '丼' || m === '鍋') words.add(m);
+    }
+  }
+  return [...words];
+}
+
+export function buildIndex(dicts: Dictionaries): ParserIndex {
+  const entries: Entry[] = [];
+  const add = (word: string, kind: EntryKind, key: string) => {
+    const w = normalize(word);
+    if (w) entries.push({ word: w, kind, key, priority: PRIORITY[kind] });
+  };
+  for (const word of Object.keys(dicts.keywords)) add(word, 'keyword', word);
+  for (const [name, ing] of Object.entries(dicts.ingredients)) {
+    add(name, 'ingredient', name);
+    for (const a of ing.aliases) add(a, 'ingredient', name);
+  }
+  for (const [cat, words] of Object.entries(dicts.categories)) for (const w of words) add(w, 'category', cat);
+  for (const dish of dicts.dishes) for (const w of dishWords(dish)) add(w, 'dish', normalize(w));
+  entries.sort((a, b) => b.word.length - a.word.length || a.priority - b.priority);
+
+  const usedIngredients = new Set(dicts.dishes.flatMap((d) => d.ingredients.map((i) => i.name)));
+  return { entries, dicts, usedIngredients };
+}
+
+/** キーワードの直後にこれが続いたら否定（「肉じゃない」「肉以外」「トマト抜き」「辛くない」など） */
+const NEGATION = new RegExp(
+  toKatakana(
+    '^(?:の|もの|物|系|料理|っぽいの|みたいなの|は使わ|を使わ|入り)?(?:は|が|も|で)?\\s*く?' +
+      '(?:じゃな|ではな|でな|以外|嫌|いや|やだ|いらな|要らな|抜き|ぬき|なし|無し|ない|苦手|ng|やめ|パス|気分じゃ)',
+  ),
+);
+
+/** 2文字以下のかなの言葉（「いか」「なす」「タイ」）は、文の途中のひらがなに埋もれた一致を拾わない */
+const PARTICLES = new Set(['と', 'や', 'の', 'で', 'に', 'を', 'は', 'が', 'も']);
+function boundaryOk(entry: Entry, base: string, start: number): boolean {
+  if (entry.word.length > 2 || !isKana(entry.word)) return true;
+  const prev = base[start - 1];
+  return !prev || !isHiragana(prev) || PARTICLES.has(prev);
+}
+
+export interface Hit {
+  entry: Entry;
   start: number;
   end: number;
+  /** 入力されたままの表記 */
+  typed: string;
   negate: boolean;
 }
 
-/**
- * 入力文から辞書の言葉を探す。左から順に、その位置で一番長い言葉を採用する
- * （「甘辛い」は「甘辛」として拾い、「辛い」とは重複させない）。
- */
-export function findKeywords(text: string, dict: KeywordDict): KeywordHit[] {
-  const words = Object.keys(dict).sort((a, b) => b.length - a.length);
-  const hits: KeywordHit[] = [];
+/** 左から順に、その位置で一番長い言葉を採用する（「甘辛い」は「甘辛」、「タコス」は「たこ」ではなく料理名） */
+export function findHits(text: string, index: ParserIndex): Hit[] {
+  const base = normalizeWidth(text);
+  const kata = toKatakana(base);
+  const hits: Hit[] = [];
   let i = 0;
-  while (i < text.length) {
-    const word = words.find((w) => text.startsWith(w, i));
-    if (word) {
-      hits.push({ word, start: i, end: i + word.length, negate: false });
-      i += word.length;
+  while (i < kata.length) {
+    const entry = index.entries.find((e) => kata.startsWith(e.word, i) && boundaryOk(e, base, i));
+    if (entry) {
+      const end = i + entry.word.length;
+      hits.push({ entry, start: i, end, typed: base.slice(i, end), negate: false });
+      i = end;
     } else {
       i += 1;
     }
   }
-  // 否定判定: キーワードの直後から次のキーワードまでの文字列を見る
   hits.forEach((h, idx) => {
-    const until = idx + 1 < hits.length ? hits[idx + 1].start : text.length;
-    h.negate = NEGATION.test(text.slice(h.end, until));
+    const until = idx + 1 < hits.length ? hits[idx + 1].start : kata.length;
+    h.negate = NEGATION.test(kata.slice(h.end, until));
   });
   return hits;
 }
 
-export interface ParsedInput {
-  answers: Answer[];
-  /** 画面上部に出すタグ */
-  tags: { attr: Attr; value: string; negate: boolean }[];
-}
-
-/**
- * 入力文を回答の列に変換する。
- * 肯定の属性はその質問を「質問済み」にし、否定の属性は質問済みにしない
- * （「辛くない」と言われても、さっぱり／こってりはまだ聞く価値があるため）。
- */
-export function parseFreeText(text: string, dict: KeywordDict): ParsedInput {
-  const normalized = text.normalize('NFKC').trim();
+function keywordItem(hit: Hit, tags: KeywordTags): FreeItem | null {
   const answers: Answer[] = [];
-  const seen = new Set<string>();
-  for (const hit of findKeywords(normalized, dict)) {
-    for (const [attr, value] of Object.entries(dict[hit.word]) as [Attr, string][]) {
-      const key = `${attr}:${value}`;
-      if (seen.has(key)) continue; // 同じタグは一度だけ数える
-      seen.add(key);
+  const labels: string[] = [];
+  let kindLabel = '条件';
+  for (const [key, raw] of Object.entries(tags)) {
+    if (key === 'effortLevel' || key === 'effortMax') {
+      if (hit.negate) continue; // 「めんどくさくない」などは扱わない
+      const level = Number(raw) as EffortLevel;
+      answers.push({ kind: 'effort', questionId: 'effort', level });
+      if (!tags.method) labels.push(EFFORT_SHORT[level]);
+      kindLabel = 'やる気';
+    } else if (key === 'knife') {
+      if (hit.negate) continue;
+      answers.push({ kind: 'knife' });
+      labels.push('包丁なし');
+      kindLabel = 'やる気';
+    } else if (key === 'method') {
+      const value = String(raw);
+      answers.push({ kind: 'attr', questionId: 'method', attr: 'method', value, negate: hit.negate });
+      labels.push(`${value}だけ`);
+    } else {
+      const attr = key as Attr;
+      const value = String(raw);
       const q = questionFor(attr, value);
       if (!q) continue;
       answers.push({
+        kind: 'attr',
+        // 肯定の属性はその質問を「質問済み」にする。否定は質問済みにしない
+        // （「辛くない」と言われても、さっぱり／こってりはまだ聞く価値があるため）
         questionId: hit.negate ? `${q.id}:not:${value}` : q.id,
         attr,
         value,
         negate: hit.negate,
-        source: 'free',
       });
+      labels.push(tagLabel(attr, value));
     }
   }
+  if (answers.length === 0) return null;
+  const label = labels.join('・') + (hit.negate ? ' 以外' : '');
   return {
+    id: `kw:${hit.entry.key}:${hit.negate}`,
+    label,
+    note: hit.negate ? `『${hit.typed}』を除外する条件として読み取りました` : `『${hit.typed}』を${kindLabel}として読み取りました`,
+    negate: hit.negate,
     answers,
-    tags: answers.map((a) => ({ attr: a.attr, value: a.value, negate: a.negate })),
   };
+}
+
+function ingredientItem(hit: Hit, index: ParserIndex): FreeItem {
+  const name = hit.entry.key;
+  const id = `ing:${name}:${hit.negate}`;
+  if (index.usedIngredients.has(name)) {
+    return {
+      id,
+      label: name + (hit.negate ? ' 以外' : ''),
+      note: hit.negate ? `『${name}』を使う料理を除外します` : `『${name}』を食材として読み取りました`,
+      negate: hit.negate,
+      answers: [{ kind: 'food', target: { type: 'ingredient', name }, label: name, negate: hit.negate }],
+    };
+  }
+  // 辞書にはあるが料理データに出てこない食材：同じカテゴリの料理で代わりに探す
+  const category = index.dicts.ingredients[name].category;
+  console.warn(`[nani-taberu] 食材「${name}」は ingredients.json にありますが、dishes.json の料理には使われていません`);
+  if (hit.negate) {
+    return { id, label: `${name} 以外`, note: `『${name}』を使う料理はもともとデータにありません`, negate: true, answers: [] };
+  }
+  return {
+    id,
+    label: name,
+    note: `『${name}』を使う料理はデータにありませんでした。代わりに${category}を使う料理を探します`,
+    negate: false,
+    answers: [
+      { kind: 'food', target: { type: 'category', category, fallbackFor: name }, label: name, negate: false },
+    ],
+  };
+}
+
+/**
+ * 入力文を「拾った言葉」の列に変換する。入力文そのものは保存しない。
+ * 同じものを指す言葉は一度だけ数える。
+ */
+export function parseFreeText(text: string, index: ParserIndex): FreeItem[] {
+  const items: FreeItem[] = [];
+  const seen = new Set<string>();
+  for (const hit of findHits(text, index)) {
+    let item: FreeItem | null = null;
+    const { kind, key } = hit.entry;
+    if (kind === 'keyword') item = keywordItem(hit, index.dicts.keywords[key]);
+    else if (kind === 'ingredient') item = ingredientItem(hit, index);
+    else if (kind === 'category') {
+      item = {
+        id: `cat:${key}:${hit.negate}`,
+        label: key + (hit.negate ? ' 以外' : ''),
+        note: hit.negate ? `『${hit.typed}』を使う料理を除外します` : `『${hit.typed}』を食材の種類として読み取りました`,
+        negate: hit.negate,
+        answers: [{ kind: 'food', target: { type: 'category', category: key }, label: key, negate: hit.negate }],
+      };
+    } else {
+      item = {
+        id: `dish:${key}:${hit.negate}`,
+        label: hit.typed + (hit.negate ? ' 以外' : ''),
+        note: hit.negate ? `『${hit.typed}』の料理を除外します` : `『${hit.typed}』を料理名として読み取りました`,
+        negate: hit.negate,
+        answers: [{ kind: 'food', target: { type: 'dish', word: key }, label: hit.typed, negate: hit.negate }],
+      };
+    }
+    if (!item || seen.has(item.id)) continue;
+    seen.add(item.id);
+    items.push(item);
+  }
+  return items;
 }

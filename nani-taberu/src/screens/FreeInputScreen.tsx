@@ -1,12 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
+import type { FreeItem } from '../logic/types';
+import Tags from './Tags';
 
 interface Props {
-  onSubmit: (text: string) => Promise<boolean>;
+  interpret: (text: string) => Promise<FreeItem[]>;
+  onConfirm: (items: FreeItem[]) => void;
   onAkinator: () => void;
   onBack: () => void;
 }
 
-const EXAMPLES = ['こってりした肉系', 'あったかくてさっぱり', '麺で辛いの'];
+const EXAMPLES = [
+  'こってりした肉系',
+  'あったかくてさっぱり',
+  '麺で辛いの',
+  '炒めるだけで',
+  'トマト系',
+  '卵を使ったやつ',
+  'カレー以外で',
+];
 
 // Web Speech API（対応ブラウザのみマイクボタンを出す）
 type Recognition = {
@@ -25,18 +36,27 @@ const SpeechRecognitionCtor: (new () => Recognition) | undefined =
         | undefined
     : undefined;
 
-export default function FreeInputScreen({ onSubmit, onAkinator, onBack }: Props) {
+export default function FreeInputScreen({ interpret, onConfirm, onAkinator, onBack }: Props) {
   const [text, setText] = useState('');
   const [failed, setFailed] = useState(false);
+  /** 決定後に読み取った言葉。null は未決定 */
+  const [items, setItems] = useState<FreeItem[] | null>(null);
   const [listening, setListening] = useState(false);
   const recRef = useRef<Recognition | null>(null);
 
   useEffect(() => () => recRef.current?.stop(), []);
 
-  const submit = async (value = text) => {
-    if (!value.trim()) return;
-    const ok = await onSubmit(value);
-    if (!ok) setFailed(true);
+  const edit = (value: string) => {
+    setText(value);
+    setFailed(false);
+    setItems(null);
+  };
+
+  const submit = async () => {
+    if (!text.trim()) return;
+    const found = await interpret(text);
+    if (found.length === 0) setFailed(true);
+    else setItems(found);
   };
 
   const toggleMic = () => {
@@ -48,11 +68,7 @@ export default function FreeInputScreen({ onSubmit, onAkinator, onBack }: Props)
     const rec = new SpeechRecognitionCtor();
     rec.lang = 'ja-JP';
     rec.interimResults = false;
-    rec.onresult = (e) => {
-      const said = e.results[0]?.[0]?.transcript ?? '';
-      setText(said);
-      setFailed(false);
-    };
+    rec.onresult = (e) => edit(e.results[0]?.[0]?.transcript ?? '');
     rec.onend = () => setListening(false);
     recRef.current = rec;
     setListening(true);
@@ -67,7 +83,7 @@ export default function FreeInputScreen({ onSubmit, onAkinator, onBack }: Props)
         </button>
       </header>
       <h2 className="question">今日はどんな気分？</h2>
-      <p className="hint">ざっくりでOK。思いついた言葉をそのまま入れてください。</p>
+      <p className="hint">ざっくりでOK。食材や料理名だけでも大丈夫です。</p>
       <form
         className="free-form"
         onSubmit={(e) => {
@@ -77,17 +93,15 @@ export default function FreeInputScreen({ onSubmit, onAkinator, onBack }: Props)
       >
         <div className="input-row">
           <input
+            id="free-text"
             className="free-input"
             type="text"
             inputMode="text"
             enterKeyHint="go"
             autoComplete="off"
-            placeholder="例：こってりした肉系"
+            placeholder="例：トマト系、炒めるだけで"
             value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              setFailed(false);
-            }}
+            onChange={(e) => edit(e.target.value)}
             aria-label="食べたいものをざっくり入力"
           />
           {SpeechRecognitionCtor && (
@@ -101,25 +115,46 @@ export default function FreeInputScreen({ onSubmit, onAkinator, onBack }: Props)
             </button>
           )}
         </div>
-        <div className="examples">
-          {EXAMPLES.map((ex) => (
-            <button
-              type="button"
-              key={ex}
-              className="chip"
-              onClick={() => {
-                setText(ex);
-                setFailed(false);
-              }}
-            >
-              {ex}
+        {items === null && (
+          <>
+            <div className="examples">
+              {EXAMPLES.map((ex) => (
+                <button type="button" key={ex} className="chip" onClick={() => edit(ex)}>
+                  {ex}
+                </button>
+              ))}
+            </div>
+            <button type="submit" className="btn btn-primary btn-big" disabled={!text.trim()}>
+              決定
             </button>
-          ))}
-        </div>
-        <button type="submit" className="btn btn-primary btn-big" disabled={!text.trim()}>
-          決定
-        </button>
+          </>
+        )}
       </form>
+
+      {items !== null && (
+        <section className="notice confirm" aria-live="polite">
+          <p>こう読み取りました</p>
+          <ul className="readings">
+            {items.map((i) => (
+              <li key={i.id}>{i.note}</li>
+            ))}
+          </ul>
+          {items.length > 0 ? (
+            <>
+              <p className="hint">違うものはタップで外せます</p>
+              <Tags items={items} onRemove={(id) => setItems(items.filter((i) => i.id !== id))} />
+              <button className="btn btn-primary btn-big" onClick={() => onConfirm(items)}>
+                この条件で探す
+              </button>
+            </>
+          ) : (
+            <p className="hint">条件がなくなりました。書き直すか、質問に答えて決めてください。</p>
+          )}
+          <button className="btn btn-ghost" onClick={() => setItems(null)}>
+            書き直す
+          </button>
+        </section>
+      )}
 
       {failed && (
         <div className="notice" role="alert">

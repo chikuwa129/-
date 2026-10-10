@@ -1,14 +1,15 @@
 import type { Dish } from '../logic/types';
-import type { ParsedInput } from '../logic/freeText';
-import { rank, type SessionState } from '../logic/engine';
+import { evaluate, type SessionState } from '../logic/engine';
 import { tagLabel } from '../logic/questions';
+import { badges, reasonLine } from '../logic/display';
 import Tags from './Tags';
+import Notices from './Notices';
 
 interface Props {
   dishes: Dish[];
   session: SessionState;
-  tags: ParsedInput['tags'];
   onReject: (name: string) => void;
+  onRemoveTag: (id: string) => void;
   onRestart: () => void;
 }
 
@@ -23,9 +24,9 @@ function describe(d: Dish): string[] {
   ];
 }
 
-export default function ResultScreen({ dishes, session, tags, onReject, onRestart }: Props) {
-  const ranked = rank(dishes, session);
-  const [first, ...rest] = ranked;
+export default function ResultScreen({ dishes, session, onReject, onRemoveTag, onRestart }: Props) {
+  const ev = evaluate(dishes, session);
+  const [first, ...rest] = ev.ranked;
 
   if (!first) {
     return (
@@ -38,12 +39,21 @@ export default function ResultScreen({ dishes, session, tags, onReject, onRestar
     );
   }
 
+  const reason = reasonLine(first.dish, ev);
+
   return (
     <main className="screen result">
-      <Tags tags={tags} />
+      <Tags items={session.freeItems} onRemove={onRemoveTag} />
+      <Notices notices={ev.notices} />
       <p className="result-lead">今日のごはんは…</p>
       <section className="result-main" aria-live="polite">
         <h2 className="dish-name">{first.dish.name}</h2>
+        <ul className="effort-badges" aria-label="手間">
+          {badges(first.dish, ev).map((b) => (
+            <li key={b}>{b}</li>
+          ))}
+        </ul>
+        {reason && <p className="reason">{reason}</p>}
         <ul className="dish-tags">
           {describe(first.dish).map((t) => (
             <li key={t}>{t}</li>
@@ -55,9 +65,22 @@ export default function ResultScreen({ dishes, session, tags, onReject, onRestar
         <section className="result-sub">
           <h3>ほかの候補</h3>
           <ol start={2}>
-            {rest.slice(0, 2).map((r) => (
-              <li key={r.dish.name}>{r.dish.name}</li>
-            ))}
+            {rest.slice(0, 2).map((r) => {
+              const why = reasonLine(r.dish, ev);
+              return (
+                <li key={r.dish.name}>
+                  <span className="sub-name">{r.dish.name}</span>
+                  <span className="sub-badges">
+                    {badges(r.dish, ev).map((b) => (
+                      <span key={b} className="mini-badge">
+                        {b}
+                      </span>
+                    ))}
+                  </span>
+                  {why && <span className="sub-reason">{why}</span>}
+                </li>
+              );
+            })}
           </ol>
         </section>
       )}

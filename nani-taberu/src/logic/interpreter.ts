@@ -1,6 +1,9 @@
-import type { ParsedInput } from './freeText';
-import { parseFreeText } from './freeText';
+import type { Dish, FreeItem } from './types';
+import { buildIndex, parseFreeText, type CategoryDict, type IngredientDict, type KeywordDict } from './freeText';
 import keywords from '../data/keywords.json';
+import ingredients from '../data/ingredients.json';
+import categories from '../data/categories.json';
+import dishes from '../data/dishes.json';
 
 /**
  * フリー入力の解釈器。今は辞書ベースだけだが、将来 LLM API で
@@ -8,11 +11,18 @@ import keywords from '../data/keywords.json';
  * 入力文はどこにも保存しない。
  */
 export interface FreeTextInterpreter {
-  interpret(text: string): Promise<ParsedInput>;
+  interpret(text: string): Promise<FreeItem[]>;
 }
+
+export const dictionaryIndex = buildIndex({
+  keywords: keywords as KeywordDict,
+  ingredients: ingredients as IngredientDict,
+  categories: categories as CategoryDict,
+  dishes: dishes as Dish[],
+});
 
 export const dictionaryInterpreter: FreeTextInterpreter = {
   async interpret(text) {
-    return parseFreeText(text, keywords);
+    return parseFreeText(text, dictionaryIndex);
   },
 };
