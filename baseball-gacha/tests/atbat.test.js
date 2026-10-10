@@ -107,17 +107,20 @@ test('成功と失敗は補数(合計 1)。成功確率は 5〜90% に収まる(
   for (const side of ['bat', 'pitch']) { const G = A.CONFIG.goodBad[side]; assert.deepStrictEqual(G.good.concat(G.bad).sort(), A.OUTCOMES.slice().sort(), side + ' 7つの結果を必ずどちらかに'); }
 });
 
-test('評価の写像(1〜7):通常が 4。得なら大きく、損なら小さく。範囲外は 1・7。投手は失点が小さいほど高い', () => {
+test('評価の写像(1〜7):通常が 4。得なら大きく、損なら小さく。範囲外は 1・7。T1g:勝率の期待値で、攻守とも勝率が高いほど高い', () => {
   const R = A.CONFIG.rating, st = R.step.ev;
   assert.strictEqual(A.ratingOf(0, 'ev'), 4);
   assert.strictEqual(A.ratingOf(st, 'ev'), 5); assert.strictEqual(A.ratingOf(2 * st, 'ev'), 6); assert.strictEqual(A.ratingOf(-st, 'ev'), 3);
   assert.strictEqual(A.ratingOf(99, 'ev'), 7); assert.strictEqual(A.ratingOf(-99, 'ev'), 1);
   assert.strictEqual(A.ratingOf(R.step.p1, 'p1'), 5);
+  assert.strictEqual(A.ratingOf(0.01, 'win', null, 0.005), 6, '段階の幅を渡せる');
   for (let i = 0; i < 200; i++) {
     const e = A.evaluate(A.randomScene(i)), n = e.rows.find((r) => r.order === 'normal');
+    assert.strictEqual(e.metric, 'win');
     assert.strictEqual(n.rating, 4, '通常は 4');
+    assert.ok(e.rows.every((r) => r.win >= n.win - 1e-12) ? e.best === n.order || e.rows.find((r) => r.order === e.best).win >= n.win : true);
     for (const r of e.rows) {
-      const better = e.rows[0] && (A.randomScene(i).side === 'pitch' ? r[e.metric] < n[e.metric] : r[e.metric] > n[e.metric]);
+      const better = r.win > n.win;
       if (r.rating > 4) assert.ok(better, '得なのに 5 以上でない');
       if (r.rating < 4) assert.ok(!better, '損なのに 3 以下でない');
     }
@@ -381,16 +384,101 @@ test('試合のモードの画面:スキップのボタンがなく、スコア�
 test('本編の出力(play.html・play-hero.html)が、試作の前と一致する', () => {
   const cp = require('child_process');
   const root = path.join(__dirname, '..');
-  let tagOk = true;
-  try { cp.execFileSync('git', ['rev-parse', '-q', '--verify', 'refs/tags/v-before-T1'], { cwd: root, stdio: 'ignore' }); } catch (e) { tagOk = false; }
-  if (!tagOk) { console.log('   (タグ v-before-T1 がないので、比較を省略)'); return; }
-  for (const tag of ['v-before-T1', 'v-before-T1d']) {
+  for (const tag of ['v-before-T1', 'v-before-T1d', 'v-before-T1g']) {
     try { cp.execFileSync('git', ['rev-parse', '-q', '--verify', 'refs/tags/' + tag], { cwd: root, stdio: 'ignore' }); } catch (e) { console.log('   (タグ ' + tag + ' がないので、比較を省略)'); continue; }
     for (const f of ['play.html', 'play-hero.html']) {
       const before = cp.execFileSync('git', ['show', tag + ':baseball-gacha/' + f], { cwd: root, encoding: 'utf8', maxBuffer: 64 << 20 });
       assert.ok(before === fs.readFileSync(path.join(root, f), 'utf8'), f + ' が ' + tag + ' から変わっている');
     }
   }
+});
+
+// ---------- T1g ----------
+test('能力の型:型の表が能力に反映される(型の差 ± ばらつき。0〜150)。傾向タグが型に合う', () => {
+  const C = A.CONFIG, T = C.types, j = T.jitter;
+  const tagOf = { contact: '巧打', slugger: '長打力', speed: '俊足' }, ptag = { fastball: '速球派', breaker: '変化球が多彩', control: '制球が良い' };
+  let tagHit = 0, tagN = 0;
+  for (let i = 0; i < 300; i++) {
+    const p = A.playersOf(i, {});
+    for (const [kind, ab, t, l] of [['batter', p.batter, p.batType, p.batLevel], ['pitcher', p.pitcher, p.pitType, p.pitLevel]]) {
+      const keys = kind === 'batter' ? ['contact', 'power', 'speed'] : ['velocity', 'control', 'breaking'];
+      for (const k of keys) { const want = T.levels[l] + (T[kind][t][k] || 0); assert.ok(ab[k] >= Math.max(0, want - j) && ab[k] <= Math.min(T.max, want + j), kind + ' ' + t + ' ' + k + ' ' + ab[k] + ' / ' + want); }
+      const w = kind === 'batter' ? tagOf[t] : ptag[t];
+      if (w && l !== 'weak') { tagN++; if (A.tagsOf(kind, ab).indexOf(w) >= 0) tagHit++; }
+    }
+  }
+  assert.ok(tagHit / tagN >= 0.9, '型に合う傾向タグ ' + tagHit + '/' + tagN);
+  // 指定した型と強さが使われる。指定を変えても、相手の側の値はずれない
+  const a = A.playersOf(7, { batType: 'slugger', batLevel: 'strong' }), b = A.playersOf(7, { batType: 'speed', batLevel: 'weak' });
+  assert.ok(a.batType === 'slugger' && a.batLevel === 'strong' && b.batType === 'speed' && b.batLevel === 'weak');
+  assert.deepStrictEqual(a.pitcher, b.pitcher);
+  assert.ok(a.batter.power > b.batter.power && b.batter.speed > a.batter.speed);
+  // 場面は型から(歯車のプリセットで C C C に固定されない)
+  const ranks = new Set(Array.from({ length: 30 }, (_, i) => { const s = A.randomScene(i); return ['contact', 'power', 'speed'].map((k) => A.rankOf(s.batter[k])).join(''); }));
+  assert.ok(ranks.size >= 10, '能力のランクの組み合わせ ' + ranks.size);
+});
+
+test('場面のモード:結果のあとは別の場面になる(同じ打者が3アウトまで続かない)。型と強さの選択。新入部員と監督の切り替えを出さない', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'atbat.html'), 'utf8');
+  const ns = html.slice(html.indexOf('function nextScene()'), html.indexOf('// ---------- 舞台'));
+  assert.ok(/S\.seed = \(S\.seed \+ 1\)/.test(ns) && /newScene\(true\)/.test(ns) && !/result\.outs < 3/.test(ns), '結果のあとは次のシードの場面');
+  assert.ok(!/applyPresets/.test(html) && !/PRESETS\.batter\[S\./.test(html), '歯車のプリセットで能力を上書きしない');
+  assert.ok(/typeChips\('batType'/.test(html) && /typeChips\('pitType'/.test(html) && /chip\('lv', 'random'/.test(html) && /typeChips\('myType'/.test(html), '型と強さの選択');
+  assert.ok(!/chip\('key', 'success'/.test(html), '新入部員と監督の切り替えを出さない');
+  // 次の場面(シード+1)は、型・走者・アウト・点差・回のどれかが違う
+  let diff = 0;
+  for (let i = 1; i < 40; i++) { const x = A.randomScene(i), y = A.randomScene(i + 1); if (JSON.stringify([x.batter, x.pitcher, x.bases, x.outs, x.diff, x.inning]) !== JSON.stringify([y.batter, y.pitcher, y.bases, y.outs, y.diff, y.inning])) diff++; }
+  assert.strictEqual(diff, 39);
+});
+
+test('試合の編成:打順ごとの型が割り当てどおり。自分の型を選べる。投手のモードでは相手の打者の型が打順で変わる', () => {
+  const G0 = A.CONFIG.game;
+  const seen = new Set();
+  for (let s = 0; s < 30; s++) {
+    const G = A.newGame({ seed: s, mode: 'bat', winP: 0.5 });
+    for (const t of [G.my, G.op]) {
+      t.lineup.forEach((b, i) => assert.ok(G0.lineupTypes[i].indexOf(b.type) >= 0, (i + 1) + '番 ' + b.type));
+      assert.ok(G0.pitTypes.indexOf(t.pitcher.type) >= 0);
+      seen.add(t.lineup.map((b) => b.type).join(','));
+    }
+    assert.strictEqual(G.my.lineup[0].type, 'speed'); assert.strictEqual(G.my.lineup[1].type, 'contact');
+  }
+  assert.ok(seen.size >= 20, '試合ごとに型の組み合わせが変わる ' + seen.size);
+  const g1 = A.newGame({ seed: 4, mode: 'bat', myType: 'slugger', winP: 0.5 }), g2 = A.newGame({ seed: 4, mode: 'bat', myType: 'speed', winP: 0.5 });
+  assert.ok(g1.my.lineup[2].type === 'slugger' && g2.my.lineup[2].type === 'speed', '自分(3番)の型');
+  assert.deepStrictEqual(g1.op, g2.op, '自分の型を変えても、相手の編成は同じ');
+  assert.strictEqual(A.newGame({ seed: 4, mode: 'pitch', myType: 'breaker', winP: 0.5 }).my.pitcher.type, 'breaker', '投手のモードは投手の型');
+  assert.deepStrictEqual(A.newGame({ seed: 4, mode: 'bat', winP: 0.5 }).my, A.newGame({ seed: 4, mode: 'bat', winP: 0.5 }).my, '同じシードで同じ編成');
+  // 投手のモード:介入場面の相手の打者の型(curScene が打順の型を持つ)
+  const G = A.newGame({ seed: 11, mode: 'pitch', winP: 0.5 }), types = new Set();
+  for (let i = 0; i < 9; i++) { G.idx.op = i; G.top = false; const sc = A.curScene(G); assert.strictEqual(sc.batType, G.op.lineup[i].type); types.add(sc.batType); }
+  assert.ok(types.size >= 2, '打順で型が変わる');
+});
+
+test('評価は勝率ベース:型で最善が変わり、点差で長打狙いと短打狙いの順が入れかわる。終盤の同点でバントの評価が上がる', () => {
+  const R = 50, P = { velocity: 50, control: 50, breaking: 50, quick: 50 };
+  const ev = (o) => A.evaluate(A.makeScene(Object.assign({ pitcher: P }, o)));
+  const w = (e, k) => e.rows.find((r) => r.order === k).win;
+  // 型:巧打型は短打狙い、長距離型は長打狙い(一死二塁・5回・同点)
+  const st = { inning: 5, outs: 1, bases: [null, R, null] };
+  assert.strictEqual(ev(Object.assign({ batter: { contact: 80, power: 40, speed: 50 } }, st)).best, 'contact');
+  assert.strictEqual(ev(Object.assign({ batter: { contact: 40, power: 80, speed: 45 } }, st)).best, 'power');
+  // 点差:同じ打者・同じ状態(9回・一死満塁)で、大差で負けていれば長打狙い > 短打狙い、リードしていれば逆
+  const b = { contact: 55, power: 60, speed: 50 }, full = { inning: 9, outs: 1, bases: [R, R, R], batter: b };
+  const lose = ev(Object.assign({ diff: -3 }, full)), lead = ev(Object.assign({ diff: 1 }, full));
+  assert.ok(w(lose, 'power') > w(lose, 'contact'), '負けている終盤は長打狙い');
+  assert.ok(w(lead, 'contact') > w(lead, 'power'), 'リードしている終盤は短打狙い');
+  // 送りバント:9回・同点・無死二塁は評価 5 以上、3回・無死一塁は 3 以下
+  const bal = { contact: 50, power: 50, speed: 50 };
+  assert.ok(ev({ inning: 9, outs: 0, bases: [null, R, null], batter: bal }).rows.find((r) => r.order === 'bunt').rating >= 5, '終盤の同点のバント');
+  assert.ok(ev({ inning: 3, outs: 0, bases: [R, null, null], batter: bal }).rows.find((r) => r.order === 'bunt').rating <= 3, '序盤のバント');
+  // 投手の型:速球型は直球中心、変化球型は変化球中心
+  const dp = { side: 'pitch', inning: 7, outs: 1, bases: [null, R, null], batter: bal };
+  assert.strictEqual(ev(Object.assign({}, dp, { pitcher: { velocity: 80, control: 45, breaking: 40, quick: 50 } })).best, 'fast');
+  assert.strictEqual(ev(Object.assign({}, dp, { pitcher: { velocity: 40, control: 50, breaking: 80, quick: 50 } })).best, 'breaking');
+  // 勝率の推定:9回裏の守備で、先がないときは、勝ち・引き分け・負けで決まる
+  const last = A.makeScene({ side: 'pitch', inning: 9, half: 'bottom', outs: 2, bases: [null, null, null], diff: 1 });
+  assert.ok(A.gameWinProb(last, { outs: 3, bases: [null, null, null], diff: 1 }) > 0.99 && A.gameWinProb(last, { outs: 3, bases: [null, null, null], diff: 0 }) === 0.5);
 });
 
 console.log(failed ? '\n失敗 ' + failed + '件' : '\nすべて成功(' + passed + '件)');

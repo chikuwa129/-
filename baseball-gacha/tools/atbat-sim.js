@@ -7,6 +7,136 @@ const fs = require('fs');
 const path = require('path');
 const A = require(path.join(__dirname, '..', 'atbat-engine.js'));
 
+// 能力の型と勝率ベースの評価(T1g):node tools/atbat-sim.js --t1g N → tools/atbat-t1g-N.txt に保存(N はランダムな場面の数。試合の一覧は5試合)
+const ti = process.argv.indexOf('--t1g');
+if (ti >= 0) { runT1g(Number(process.argv[ti + 1]) || 200); process.exit(0); }
+function runT1g(N) {
+  const t0 = Date.now(), L = [], S = [], pc = (v) => (v * 100).toFixed(0) + '%', p1 = (v) => (v * 100).toFixed(1);
+  const C = A.CONFIG, lv = C.types.levels.normal;
+  const flat = (kind, t, base) => { const b = {}; for (const k of (kind === 'batter' ? ['contact', 'power', 'speed'] : ['velocity', 'control', 'breaking'])) b[k] = base; return A.typedAbility(kind, t, b, null, 0); };
+  const P0 = Object.assign(flat('pitcher', 'balance', lv), { quick: 50 }), B0 = flat('batter', 'balance', lv);
+  const R = 50, E = [null, null, null];
+  const row = (e, r) => r.label + ' ' + pc(r.good) + '・' + r.rating + (r.order === e.best ? '★' : '');
+  const evs = (e) => e.rows.filter((r) => r.good != null).map((r) => row(e, r)).join(' | ');
+  // 1. 打者の型 × 場面
+  const scenes = [
+    ['無死一塁(3回・同点)', { inning: 3, outs: 0, bases: [R, null, null], diff: 0 }],
+    ['一死二塁(5回・同点)', { inning: 5, outs: 1, bases: [null, R, null], diff: 0 }],
+    ['二死満塁・1点差で負け(8回)', { inning: 8, outs: 2, bases: [R, R, R], diff: -1 }],
+    ['9回・同点・無死二塁', { inning: 9, outs: 0, bases: [null, R, null], diff: 0 }],
+    ['9回・3点差で負け・一死走者なし', { inning: 9, outs: 1, bases: E, diff: -3 }],
+    ['9回・3点差でリード・一死走者なし', { inning: 9, outs: 1, bases: E, diff: 3 }],
+    ['(追加)9回・3点差で負け・一死満塁', { inning: 9, outs: 1, bases: [R, R, R], diff: -3 }],
+    ['(追加)9回・1点リード・一死満塁', { inning: 9, outs: 1, bases: [R, R, R], diff: 1 }],
+  ];
+  L.push('## 1. 打者の型 × 場面(打者は強さ「普通」+ 型の差、ばらつきなし。投手はバランス型・普通。各指示:成功確率・評価、★は勝率の期待値が最大)');
+  const bestBy = {};
+  for (const t of A.typeKeys('batter')) {
+    const b = flat('batter', t, lv);
+    L.push('### ' + A.typeLabel('batter', t) + ' ' + JSON.stringify(b));
+    for (const [nm, o] of scenes) {
+      const e = A.evaluate(A.makeScene(Object.assign({ batter: b, pitcher: P0 }, o)));
+      L.push(nm + ':' + evs(e) + '(通常の勝率 ' + p1(e.win) + '%)');
+      (bestBy[nm] = bestBy[nm] || []).push(A.typeLabel('batter', t) + '→' + A.ORDER_LABEL.bat[e.best]);
+    }
+  }
+  S.push('1. 型 × 場面の最善:' + scenes.slice(0, 4).map(([nm]) => nm + '[' + bestBy[nm].join('、') + ']').join(' / '));
+  // 2. 点差と回(同じ打者で、負けている終盤とリードしている終盤)。長打狙いの評価 − 短打狙いの評価
+  L.push('## 2. 点差と回で最善が変わるか(8・9回、アウト0〜2 × 走者8通り = 48 状態。打者は各型。「長打狙い > 短打狙い」の状態の数と、評価の差の平均)');
+  const st = [];
+  for (const inn of [8, 9]) for (let o = 0; o < 3; o++) for (let m = 0; m < 8; m++) st.push({ inning: inn, outs: o, bases: [m & 1 ? R : null, m & 2 ? R : null, m & 4 ? R : null] });
+  const s2 = [];
+  for (const t of A.typeKeys('batter').concat(['b55'])) {
+    const b = t === 'b55' ? { contact: 55, power: 60, speed: 50 } : flat('batter', t, lv);
+    const cells = [-3, -2, 0, 1, 3].map((d) => {
+      let n = 0, dr = 0;
+      for (const x of st) { const e = A.evaluate(A.makeScene(Object.assign({ batter: b, pitcher: P0, diff: d }, x))); const pw = e.rows.find((r) => r.order === 'power'), ct = e.rows.find((r) => r.order === 'contact'); if (pw.win > ct.win) n++; dr += pw.rating - ct.rating; }
+      return '差' + (d > 0 ? '+' : '') + d + ' ' + n + '/' + st.length + '(' + (dr / st.length >= 0 ? '+' : '') + (dr / st.length).toFixed(2) + ')';
+    });
+    const nm = t === 'b55' ? '少し強い打者(55・60・50)' : A.typeLabel('batter', t);
+    L.push(nm + ':' + cells.join('、'));
+    s2.push(nm + ' ' + cells[0] + ' / ' + cells[3]);
+  }
+  S.push('2. 長打狙い>短打狙いの状態(48中。−3点 / +1点):' + s2.join('、'));
+  // 3. バント・スクイズ・盗塁の評価が 4 以上になる場面
+  L.push('## 3. バント・スクイズ・盗塁の評価が 4 以上になる場面(回 3・7・8・9 × 点差 −2〜+2 × アウト × 走者 × 打者の型 × 強さ。盗塁は一塁走者の走力 50 / 80)');
+  const tac = { bunt: { n: 0, ok: 0, cases: {} }, squeeze: { n: 0, ok: 0, cases: {} }, steal: { n: 0, ok: 0, cases: {} } };
+  for (const inn of [3, 7, 8, 9]) for (let d = -2; d <= 2; d++) for (let o = 0; o < 2; o++) for (let m = 1; m < 8; m++) for (const t of A.typeKeys('batter')) for (const l of A.LEVELS) for (const rs of [50, 80]) {
+    const bs = [m & 1 ? rs : null, m & 2 ? R : null, m & 4 ? R : null];
+    const sc = A.makeScene({ inning: inn, diff: d, outs: o, bases: bs, batter: flat('batter', t, C.types.levels[l]), pitcher: P0 });
+    const e = A.evaluate(sc);
+    for (const r of e.rows) if (tac[r.order]) {
+      if (r.order !== 'steal' && rs === 80) continue;
+      const T = tac[r.order]; T.n++;
+      if (r.rating >= 4) { T.ok++; const k = inn + '回・' + (d > 0 ? '+' : '') + d + '・' + o + '死' + A.basesText(bs) + (r.order === 'steal' ? '・走力' + rs : ''); T.cases[k] = T.cases[k] || []; T.cases[k].push(A.typeLabel('batter', t).replace('型', '') + '/' + { strong: '強', normal: '普', weak: '弱' }[l] + ':' + r.rating); }
+    }
+  }
+  const s3 = [];
+  for (const k of Object.keys(tac)) {
+    const T = tac[k], ks = Object.keys(T.cases);
+    L.push('### ' + A.ORDER_LABEL.bat[k] + ':評価 4 以上 ' + T.ok + '/' + T.n + '(' + pc(T.ok / Math.max(1, T.n)) + ')。場面 ' + ks.length + ' 通り');
+    for (const c of ks) L.push('  ' + c + ' … ' + T.cases[c].join(' '));
+    const late = ks.filter((c) => /^(7|8|9)回・(0|[+-]1)・/.test(c)).length;
+    s3.push(A.ORDER_LABEL.bat[k] + ' ' + T.ok + '/' + T.n + '(場面 ' + ks.length + '、うち7回以降で同点か1点差 ' + late + ')' + (T.ok ? '' : ' ✕ すべて 1〜3'));
+  }
+  S.push('3. 評価 4 以上:' + s3.join('、'));
+  // 4. 投手の型 × 配球の指示
+  L.push('## 4. 投手の型 × 配球の指示(投手は強さ「普通」+ 型の差。打者はバランス型・普通。守備の場面 48 状態(7〜9回は同点、裏)で、最善になった回数と、評価の平均)');
+  const s4 = [];
+  for (const t of A.typeKeys('pitcher')) {
+    const p = Object.assign(flat('pitcher', t, lv), { quick: 50 }), cnt = {}, rs = {};
+    let n = 0;
+    for (const x of st.concat(st.map((y) => Object.assign({}, y, { inning: 7 })))) {
+      const e = A.evaluate(A.makeScene(Object.assign({ side: 'pitch', batter: B0, pitcher: p, diff: 0 }, x))); n++;
+      cnt[e.best] = (cnt[e.best] || 0) + 1;
+      for (const r of e.rows) rs[r.order] = (rs[r.order] || 0) + r.rating;
+    }
+    const top = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]);
+    L.push(A.typeLabel('pitcher', t) + ' ' + JSON.stringify(p) + ':最善 ' + top.map((k) => A.ORDER_LABEL.pitch[k] + ' ' + cnt[k]).join('、') + ' / 評価の平均 ' + Object.keys(rs).map((k) => A.ORDER_LABEL.pitch[k] + ' ' + (rs[k] / n).toFixed(1)).join('、'));
+    s4.push(A.typeLabel('pitcher', t) + '→' + A.ORDER_LABEL.pitch[top[0]] + '(' + cnt[top[0]] + '/' + n + ')');
+  }
+  S.push('4. 投手の型の最善:' + s4.join('、'));
+  // 5. 最善の指示の割合(型をランダムに混ぜた N 場面)
+  const res = { bat: {}, pitch: {} }, legal = { bat: {}, pitch: {} }, rd = {};
+  let rn = 0;
+  for (let i = 0; i < N; i++) {
+    const sc = A.randomScene(5000 + i), e = A.evaluate(sc), sd = e.side;
+    res[sd][e.best] = (res[sd][e.best] || 0) + 1;
+    for (const r of e.rows) { legal[sd][r.order] = (legal[sd][r.order] || 0) + 1; rd[r.rating] = (rd[r.rating] || 0) + 1; rn++; }
+  }
+  L.push('## 5. 最善の指示の割合(ランダムな場面 ' + N + '、型と強さもランダム。その指示が使える場面のうち、最善になった割合。目標 10〜40%)');
+  for (const sd of ['bat', 'pitch']) {
+    const t = Object.keys(legal[sd]).map((k) => { const v = (res[sd][k] || 0) / legal[sd][k]; return A.ORDER_LABEL[sd][k] + ' ' + pc(v) + '(' + (res[sd][k] || 0) + '/' + legal[sd][k] + ')' + (v >= 0.1 && v <= 0.4 ? '✓' : '✕'); });
+    L.push((sd === 'bat' ? '野手' : '投手') + ':' + t.join('、'));
+    S.push('5. 最善の割合(' + (sd === 'bat' ? '野手' : '投手') + '):' + t.join('、'));
+  }
+  const dist = [1, 2, 3, 4, 5, 6, 7].map((k) => k + ':' + pc((rd[k] || 0) / rn)).join(' ');
+  L.push('評価の分布(場面×指示 ' + rn + '):' + dist);
+  S.push('5b. 評価の分布:' + dist);
+  // 6. 試合(通し):介入場面のカード(5試合 × 野手・投手)
+  L.push('## 6. 試合(通し)の介入場面のカード(5試合 × 野手・投手。強さはどちらも普通。自分の型はランダム。各カード:成功確率・評価)');
+  const s6 = {};
+  for (const mode of ['bat', 'pitch']) {
+    const rng = [];
+    for (let g = 0; g < 5; g++) {
+      const G = A.newGame({ seed: 300 + g, mode: mode, my: 'normal', op: 'normal' });
+      const me = mode === 'bat' ? G.my.lineup[C.game.myOrder - 1].type : G.my.pitcher.type;
+      L.push('### ' + (mode === 'bat' ? '野手' : '投手') + ' シード ' + (300 + g) + '(自分:' + A.typeLabel(mode === 'bat' ? 'batter' : 'pitcher', me) + '、相手の先発:' + A.typeLabel('pitcher', G.op.pitcher.type) + '、事前勝率 ' + pc(G.winP) + ')');
+      A.playGame(G, (sc, e) => {
+        const rs = e.rows.filter((r) => r.good != null);
+        rng.push(Math.max.apply(null, rs.map((r) => r.rating)) - Math.min.apply(null, rs.map((r) => r.rating)));
+        L.push('  ' + sc.inning + '回' + (sc.half === 'bottom' ? '裏' : '表') + ' ' + ['無死', '一死', '二死'][sc.outs] + A.basesText(sc.bases) + ' 点差' + (sc.diff > 0 ? '+' : '') + sc.diff + ' 打者:' + A.typeLabel('batter', sc.batType) + '(' + sc.order + '番)/ ' + evs(e));
+        return e.best;
+      });
+    }
+    s6[mode] = rng.length ? '介入 ' + rng.length + ' 回、カードの評価の幅(最高−最低)の平均 ' + (rng.reduce((a, b) => a + b, 0) / rng.length).toFixed(1) : '介入なし';
+  }
+  S.push('6. 試合の介入場面:野手 ' + s6.bat + ' / 投手 ' + s6.pitch);
+  const file = path.join(__dirname, 'atbat-t1g-' + N + '.txt');
+  fs.writeFileSync(file, '# T1g の検証(能力の型、勝率ベースの評価):ランダムな場面 ' + N + '。所要 ' + ((Date.now() - t0) / 1000).toFixed(1) + ' 秒\n# 評価:勝率の期待値の、通常との差 ÷ 段階の幅(重要度 × ' + C.rating.levRel + '、下限 ' + C.rating.minWin + ')\n\n## 要約\n' + S.join('\n') + '\n\n' + L.join('\n') + '\n');
+  console.log(S.join('\n')); console.log('全出力:' + path.relative(process.cwd(), file));
+}
+
 // 試合の通し(T1e):node tools/atbat-sim.js --games N → tools/atbat-game-N.txt に保存(この部分だけを回す)
 const gi = process.argv.indexOf('--games');
 if (gi >= 0) { runGames(Number(process.argv[gi + 1]) || 200); process.exit(0); }
