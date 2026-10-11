@@ -92,6 +92,29 @@ export default function SettingsScreen({ settings, onChange, profile, onProfileC
           </label>
         ))}
       </fieldset>
+      <fieldset className="field">
+        <legend>甘いものに引き継ぐ方針</legend>
+        <label className="radio">
+          <input
+            type="radio"
+            name="sweetCarryOver"
+            id="carry-both"
+            checked={settings.sweetCarryOver === 'fatAndCalorie'}
+            onChange={() => onChange({ ...settings, sweetCarryOver: 'fatAndCalorie' })}
+          />
+          ごはんで選んだとおり（脂質＋カロリー）
+        </label>
+        <label className="radio">
+          <input
+            type="radio"
+            name="sweetCarryOver"
+            id="carry-fat"
+            checked={settings.sweetCarryOver === 'fatOnly'}
+            onChange={() => onChange({ ...settings, sweetCarryOver: 'fatOnly' })}
+          />
+          脂質のみ
+        </label>
+      </fieldset>
       <p className="hint">
         画像は Google 画像検索、お店は Google マップで開きます。外部のサイトに渡るのは検索語だけです。設定はこの端末の中だけに保存します。
       </p>

@@ -57,7 +57,18 @@ export interface Dish {
 }
 
 /** スコアの加減算に使う属性。method は質問はしないがフリー入力（「茹でるだけ」）で効く */
-export type Attr = 'genre' | 'amount' | 'temp' | 'taste' | 'main' | 'style' | 'method';
+export type Attr =
+  | 'genre'
+  | 'amount'
+  | 'temp'
+  | 'taste'
+  | 'main'
+  | 'style'
+  | 'method'
+  // スイーツ用
+  | 'family'
+  | 'sweetness'
+  | 'refresh';
 
 export type FoodTarget =
   | { type: 'ingredient'; name: string }
@@ -107,4 +118,6 @@ export interface FreeItem {
   answers: Answer[];
   /** 辞書にはあるが料理データにない食材（外部検索のボタンを出す） */
   notFound?: boolean;
+  /** スイーツでしか使わない食材（「甘いものとして探しますか？」と確認する） */
+  sweetOnly?: string;
 }

@@ -1,9 +1,10 @@
 // 料理データの付与結果（食材・やる気度）を docs/dishes.md に一覧で書き出す
 import fs from 'node:fs';
 const dishes = JSON.parse(fs.readFileSync('src/data/dishes.json', 'utf8'));
+const sweets = JSON.parse(fs.readFileSync('src/data/sweets.json', 'utf8'));
 const ingredients = JSON.parse(fs.readFileSync('src/data/ingredients.json', 'utf8'));
 const names = (d, role) => d.ingredients.filter((i) => i.role === role).map((i) => i.name).join('、') || '—';
-const used = new Set(dishes.flatMap((d) => d.ingredients.map((i) => i.name)));
+const used = new Set([...dishes, ...sweets].flatMap((d) => d.ingredients.map((i) => i.name)));
 const unused = Object.keys(ingredients).filter((k) => !used.has(k));
 const lines = [
   '# 料理データ一覧',
@@ -38,9 +39,20 @@ const lines = [
   '|---|:-:|:-:|:-:|',
   ...dishes.map((d) => `| ${d.name} | ${d.amount} | ${d.fat} | ${d.calorie} |`),
   '',
+  '## スイーツ（sweets.json）',
+  '',
+  `全${sweets.length}品。買う前提なので手間・包丁・調理法は持たない。脂質・カロリーは品名からの目安。`,
+  '',
+  '| 品名 | 系統 | 甘さ | 味わい | 脂質 | カロリー | 量 | 温度 | 買える場所 | 食材 | 別名 |',
+  '|---|---|---|---|:-:|:-:|---|---|---|---|---|',
+  ...sweets.map(
+    (x) =>
+      `| ${x.name} | ${x.family} | ${x.sweetness} | ${x.refresh} | ${x.fat} | ${x.calorie} | ${x.amount} | ${x.temp} | ${x.buy.join('、')} | ${x.ingredients.map((i) => i.name).join('、')} | ${x.aliases.join('、')} |`,
+  ),
+  '',
   '## 料理データに出てこない食材',
   '',
-  '辞書（ingredients.json）にはあるが、どの料理にも使われていない食材。入力されると「データにありませんでした」と表示し、同じカテゴリの料理を代わりに出します。',
+  '辞書（ingredients.json）にはあるが、食事にもスイーツにも使われていない食材。入力されると「データにありませんでした」と表示し、同じカテゴリの料理を代わりに出します。',
   '',
   ...unused.map((k) => `- ${k}（${ingredients[k].category}）`),
   '',

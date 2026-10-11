@@ -12,11 +12,12 @@ interface Props {
   onPolicies: (p: PolicyKey[]) => void;
   onAkinator: () => void;
   onFree: () => void;
+  onSweets: () => void;
   onData: () => void;
   onSettings: () => void;
 }
 
-export default function StartScreen({ policies, onPolicies, onAkinator, onFree, onData, onSettings }: Props) {
+export default function StartScreen({ policies, onPolicies, onAkinator, onFree, onSweets, onData, onSettings }: Props) {
   return (
     <main className="screen start">
       <div className="hero">
@@ -36,6 +37,10 @@ export default function StartScreen({ policies, onPolicies, onAkinator, onFree, 
         <button className="btn btn-secondary btn-big" onClick={onFree}>
           <span className="btn-title">ざっくり言ってみる</span>
           <span className="btn-sub">フリー入力モード（食材や料理名でもOK）</span>
+        </button>
+        <button className="btn btn-secondary btn-big btn-sweet" onClick={onSweets}>
+          <span className="btn-title">甘いものを探す</span>
+          <span className="btn-sub">スイーツモード（買う前提）</span>
         </button>
       </div>
       <fieldset className="policy">

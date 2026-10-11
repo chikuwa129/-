@@ -4,6 +4,7 @@ import keywords from '../data/keywords.json';
 import ingredients from '../data/ingredients.json';
 import type { Dish } from './types';
 import { QUESTIONS, MAX_QUESTIONS, EFFORT_QUESTION } from './questions';
+import { SWEET_QUESTIONS } from './sweets';
 import {
   answerQuestion,
   createSession,
@@ -96,7 +97,9 @@ describe('data', () => {
         else if (attr === 'knife') expect(value, word).toBe('不要');
         else if (attr === 'method') expect(typeof value).toBe('string');
         else {
-          const ok = QUESTIONS.some((q) => q.attr === attr && q.options.some((o) => o.value === value));
+          const ok = [...QUESTIONS, ...SWEET_QUESTIONS].some(
+            (q) => q.attr === attr && q.options.some((o) => o.value === value),
+          );
           expect(ok, `${word} -> ${attr}:${value}`).toBe(true);
         }
       }

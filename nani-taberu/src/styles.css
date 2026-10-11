@@ -882,3 +882,35 @@ h1 {
   font-size: 13px;
   font-weight: 700;
 }
+
+/* --- スイーツ --- */
+.btn-sweet {
+  border-style: dashed;
+}
+.buy-badges {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 8px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.result-sub .buy-badges {
+  justify-content: flex-start;
+  margin: 4px 0;
+}
+.buy-badges li {
+  background: var(--neg-soft);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 1px 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.buy-badges li::before {
+  content: '［';
+}
+.buy-badges li::after {
+  content: '］';
+}

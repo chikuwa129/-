@@ -35,6 +35,20 @@ import DishDetailScreen from './screens/DishDetailScreen';
 import type { SessionContext } from './logic/engine';
 import { conditionQuery, conditionsFrom } from './logic/search';
 import { evaluate } from './logic/engine';
+import {
+  answerSweet,
+  createSweetSession,
+  excludeSweet,
+  isSweetFinished,
+  removeSweetTag,
+  setCarryUse,
+  setPairingUse,
+  skipSweet,
+  type SweetSession,
+} from './logic/sweets';
+import { sweets, interpretSweet } from './logic/sweetIndex';
+import SweetQuestionScreen from './screens/SweetQuestionScreen';
+import SweetResultScreen from './screens/SweetResultScreen';
 
 const dishes = dishesJson as Dish[];
 
@@ -43,7 +57,16 @@ function policyItem(key: PolicyKey): FreeItem {
   return { id: `pol:${key}`, label: POLICY_LABEL[key], note: '', negate: false, answers: [{ kind: 'policy', key }] };
 }
 
-type Screen = 'start' | 'free' | 'question' | 'result' | 'data' | 'settings' | 'detail';
+type Screen =
+  | 'start'
+  | 'free'
+  | 'question'
+  | 'result'
+  | 'data'
+  | 'settings'
+  | 'detail'
+  | 'sweetQuestion'
+  | 'sweetResult';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('start');
@@ -75,12 +98,58 @@ export default function App() {
 
   const startAkinator = () => proceed(newSession());
 
+  // --- スイーツ ---
+  const [sweetSession, setSweetSession] = useState<SweetSession>(() => createSweetSession(sweets));
+  const proceedSweet = (next: SweetSession) => {
+    setSweetSession(next);
+    setScreen(isSweetFinished(sweets, next) ? 'sweetResult' : 'sweetQuestion');
+  };
+  /** スイーツモードを始める。スタート画面の方針（脂質・カロリー）は、その場で選んだものとして弱く効かせる */
+  const startSweets = (items: FreeItem[] = [], opts: Parameters<typeof createSweetSession>[1] = {}) => {
+    const direct = policies.filter((p) => p !== 'bigAmount').map(policyItem);
+    proceedSweet(createSweetSession(sweets, { ...opts, items: [...(opts.carry ? [] : direct), ...items] }));
+  };
+  /** 説明画面の［食後の甘いものも探す］：食べ合わせと、ごはんの方針（脂質・カロリー）を引き継ぐ */
+  const startAfterMeal = (dish: Dish) => {
+    const meal = [...evaluate(dishes, session).policies];
+    const carry = meal.filter((p) => p === 'lowFat' || (p === 'lowCalorie' && settings.sweetCarryOver === 'fatAndCalorie'));
+    startSweets([], { pairing: dish, carry });
+  };
+
   const restart = () => {
     setSession(newSession());
     setScreen('start');
   };
 
+  const restartSweets = () => {
+    setSweetSession(createSweetSession(sweets));
+    setScreen('start');
+  };
+
   switch (screen) {
+    case 'sweetQuestion':
+      return (
+        <SweetQuestionScreen
+          sweets={sweets}
+          session={sweetSession}
+          onAnswer={(def, value) => proceedSweet(answerSweet(sweetSession, def, value))}
+          onSkip={(def) => proceedSweet(skipSweet(sweetSession, def))}
+          onRemoveTag={(id) => proceedSweet(removeSweetTag(sweetSession, id))}
+          onBack={restartSweets}
+        />
+      );
+    case 'sweetResult':
+      return (
+        <SweetResultScreen
+          sweets={sweets}
+          session={sweetSession}
+          onReject={(name) => setSweetSession(excludeSweet(sweetSession, name))}
+          onRemoveTag={(id) => proceedSweet(removeSweetTag(sweetSession, id))}
+          onPairing={(use) => setSweetSession(setPairingUse(sweetSession, use))}
+          onCarry={(use) => setSweetSession(setCarryUse(sweetSession, use))}
+          onRestart={restartSweets}
+        />
+      );
     case 'start':
       return (
         <StartScreen
@@ -88,6 +157,7 @@ export default function App() {
           onPolicies={setPolicies}
           onAkinator={startAkinator}
           onFree={() => setScreen('free')}
+          onSweets={() => startSweets()}
           onData={() => setScreen('data')}
           onSettings={() => setScreen('settings')}
         />
@@ -125,6 +195,7 @@ export default function App() {
           }}
           searchTarget={target}
           onBack={() => setScreen('result')}
+          onSweets={() => startAfterMeal(dish)}
         />
       );
     }
@@ -136,6 +207,8 @@ export default function App() {
           // 入力文はここで解釈して捨てる（保存しない）
           interpret={(text) => dictionaryInterpreter.interpret(text)}
           onConfirm={(items: FreeItem[]) => proceed(newSession(items))}
+          interpretSweet={(text) => interpretSweet(text)}
+          onConfirmSweet={(items: FreeItem[]) => startSweets(items)}
           searchTarget={target}
           conditionQueryFor={(items: FreeItem[]) => {
             const s = newSession(items);

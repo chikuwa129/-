@@ -9,6 +9,8 @@ export interface Settings {
   useToolFilter: boolean;
   /** 脂質とカロリーが食い違うときの優先 */
   fatCalorieOrder: FatOrder;
+  /** スイーツに引き継ぐ方針の範囲（食事で選んだとおり＝脂質＋カロリー／脂質のみ） */
+  sweetCarryOver: 'fatAndCalorie' | 'fatOnly';
 }
 
 /** プロフィール（今回は持っている調理器具だけ。未登録は undefined） */
@@ -19,7 +21,12 @@ export interface Profile {
 const SETTINGS_KEY = 'nani-taberu:settings';
 const PROFILE_KEY = 'nani-taberu:profile';
 const PANTRY_KEY = 'nani-taberu:pantry';
-export const DEFAULT_SETTINGS: Settings = { recipeSearch: 'google', useToolFilter: true, fatCalorieOrder: 'fatFirst' };
+export const DEFAULT_SETTINGS: Settings = {
+  recipeSearch: 'google',
+  useToolFilter: true,
+  fatCalorieOrder: 'fatFirst',
+  sweetCarryOver: 'fatAndCalorie',
+};
 
 function read<T>(key: string): Partial<T> {
   try {
@@ -48,6 +55,7 @@ export function loadSettings(): Settings {
     fatCalorieOrder: ['fatFirst', 'calorieFirst', 'equal'].includes(p.fatCalorieOrder ?? '')
       ? (p.fatCalorieOrder as FatOrder)
       : DEFAULT_SETTINGS.fatCalorieOrder,
+    sweetCarryOver: p.sweetCarryOver === 'fatOnly' ? 'fatOnly' : 'fatAndCalorie',
   };
 }
 

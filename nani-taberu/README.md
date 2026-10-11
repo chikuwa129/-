@@ -4,7 +4,7 @@
 今日のやる気（作りたくない〜凝りたい）で無理なく作れる料理に絞り、
 「こってりした肉系」「トマト系」「カレー以外で」「炒めるだけで」のようにざっくり入力して始めることもできる。
 
-仕様は [SPEC.md](SPEC.md)、料理データの一覧は [docs/dishes.md](docs/dishes.md)。
+仕様は [SPEC.md](SPEC.md)、料理データの一覧は [docs/dishes.md](docs/dishes.md)、精度改善ケースは [tests/accuracy-cases.json](tests/accuracy-cases.json)。
 
 ## 開発
 
@@ -27,7 +27,8 @@ src/
   data/dishes.json      料理データ（63品。属性タグ・食材・やる気度）
   data/ingredients.json 食材辞書（正規名 → 別名・カテゴリ）
   data/categories.json  カテゴリ語（「きのこ」「豆腐系」など）
-  data/keywords.json    フリー入力の辞書（言葉 → 属性タグ・やる気・包丁）
+  data/keywords.json    フリー入力の辞書（言葉 → 属性タグ・やる気・包丁・方針・モード）
+  data/sweets.json      スイーツ（18品。買う前提）
   logic/types.ts        型定義
   logic/questions.ts    質問の定義（主材料は「主食」「メイン食材」の2問に分割）
   logic/engine.ts       絞り込み・スコア計算・次の質問の選択・終了判定（純粋関数）
@@ -36,6 +37,8 @@ src/
   logic/display.ts      結果画面のやる気バッジと理由の1行
   logic/effort.ts       やる気度の範囲（複数選択・緩和・楽／凝る切り替え）
   logic/search.ts       外部検索の検索語と URL の組み立て
+  logic/sweets.ts       スイーツの質問・食べ合わせ・方針の引き継ぎ
+  logic/sweetIndex.ts   スイーツモード用の辞書
   settings.ts           設定（レシピ検索の開く先。localStorage）
   logic/interpreter.ts  フリー入力解釈のインターフェース（将来 LLM 実装を差し込む場所）
   screens/              スタート / フリー入力 / 質問 / 結果 画面

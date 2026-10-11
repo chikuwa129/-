@@ -1,5 +1,9 @@
 import { useState } from 'react';
 import type { Dish } from '../logic/types';
+import sweetsJson from '../data/sweets.json';
+import type { Sweet } from '../logic/sweets';
+
+const sweets = sweetsJson as Sweet[];
 
 interface Props {
   dishes: Dish[];
@@ -8,7 +12,7 @@ interface Props {
 
 /** 料理データの確認用一覧（食材・やる気度の付与結果を人が見て直せるように） */
 export default function DataScreen({ dishes, onBack }: Props) {
-  const [tab, setTab] = useState<'ingredients' | 'effort' | 'nutrition'>('ingredients');
+  const [tab, setTab] = useState<'ingredients' | 'effort' | 'nutrition' | 'sweets'>('ingredients');
   const names = (d: Dish, role: 'main' | 'sub') =>
     d.ingredients
       .filter((i) => i.role === role)
@@ -21,7 +25,9 @@ export default function DataScreen({ dishes, onBack }: Props) {
         <button className="link" onClick={onBack}>
           ← もどる
         </button>
-        <span className="progress-label">全{dishes.length}品</span>
+        <span className="progress-label">
+          {tab === 'sweets' ? `甘いもの ${sweets.length}品` : `全${dishes.length}品`}
+        </span>
       </header>
       <h2 className="question">料理データ一覧</h2>
       <div className="seg" role="tablist">
@@ -34,9 +40,45 @@ export default function DataScreen({ dishes, onBack }: Props) {
         <button role="tab" aria-selected={tab === 'nutrition'} onClick={() => setTab('nutrition')}>
           量・脂質
         </button>
+        <button role="tab" aria-selected={tab === 'sweets'} onClick={() => setTab('sweets')}>
+          スイーツ
+        </button>
       </div>
       <div className="table-wrap">
-        {tab === 'nutrition' ? (
+        {tab === 'sweets' ? (
+          <table>
+            <thead>
+              <tr>
+                <th>品名</th>
+                <th>系統</th>
+                <th>甘さ</th>
+                <th>味わい</th>
+                <th>脂質</th>
+                <th>カロリー</th>
+                <th>量</th>
+                <th>温度</th>
+                <th>買える場所</th>
+                <th>食材</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sweets.map((x) => (
+                <tr key={x.name}>
+                  <th scope="row">{x.name}</th>
+                  <td>{x.family}</td>
+                  <td>{x.sweetness}</td>
+                  <td>{x.refresh}</td>
+                  <td>{x.fat}</td>
+                  <td>{x.calorie}</td>
+                  <td>{x.amount}</td>
+                  <td>{x.temp}</td>
+                  <td>{x.buy.join('、')}</td>
+                  <td>{x.ingredients.map((i) => i.name).join('、')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : tab === 'nutrition' ? (
           <table>
             <thead>
               <tr>

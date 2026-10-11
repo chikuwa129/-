@@ -238,5 +238,22 @@
  "おやつ": {"mode": "sweet"},
  "デザート": {"mode": "sweet"},
  "スイーツ": {"mode": "sweet"},
- "甘味": {"mode": "sweet"}
+ "甘味": {"mode": "sweet"},
+ "甘さ控えめ": {"sweetness": "控えめ", "mode": "sweet"},
+ "甘さひかえめ": {"sweetness": "控えめ", "mode": "sweet"},
+ "甘すぎない": {"sweetness": "控えめ", "mode": "sweet"},
+ "控えめな甘さ": {"sweetness": "控えめ", "mode": "sweet"},
+ "甘さ少なめ": {"sweetness": "控えめ", "mode": "sweet"},
+ "甘め": {"sweetness": "強め", "mode": "sweet"},
+ "うんと甘い": {"sweetness": "強め", "mode": "sweet"},
+ "激甘": {"sweetness": "強め", "mode": "sweet"},
+ "甘いのがいい": {"sweetness": "強め", "mode": "sweet"},
+ "甘々": {"sweetness": "強め", "mode": "sweet"},
+ "和菓子": {"family": "和", "mode": "sweet"},
+ "洋菓子": {"family": "洋,焼き菓子", "mode": "sweet"},
+ "ケーキ系": {"family": "洋,焼き菓子", "mode": "sweet"},
+ "焼き菓子": {"family": "洋,焼き菓子", "mode": "sweet"},
+ "冷たいデザート": {"temp": "冷", "mode": "sweet"},
+ "冷たいスイーツ": {"temp": "冷", "mode": "sweet"},
+ "冷たい甘いもの": {"temp": "冷", "mode": "sweet"}
 }

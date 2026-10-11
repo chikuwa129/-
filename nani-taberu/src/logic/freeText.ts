@@ -1,4 +1,4 @@
-import type { Answer, Attr, Dish, FreeItem, PolicyKey } from './types';
+import type { Answer, Attr, FreeItem, PolicyKey } from './types';
 import { EFFORT_SHORT, POLICY_LABEL, questionFor, tagLabel } from './questions';
 import { isHiragana, isKana, normalize, normalizeWidth, toKatakana } from './text';
 
@@ -22,11 +22,32 @@ export type IngredientDict = Record<string, { aliases: string[]; category: strin
 /** categories.json の形式: カテゴリ → カテゴリ語 */
 export type CategoryDict = Record<string, string[]>;
 
+/** 名前照合の対象（食事 dishes.json もスイーツ sweets.json もこの形を満たす） */
+export interface Matchable {
+  name: string;
+  aliases: string[];
+  ingredients: { name: string }[];
+}
+
 export interface Dictionaries {
   keywords: KeywordDict;
   ingredients: IngredientDict;
   categories: CategoryDict;
-  dishes: Dish[];
+  dishes: Matchable[];
+}
+
+/** 属性語をそのモードの質問に当てはめる（食事とスイーツで変える） */
+export type AttrMapper = (attr: Attr, value: string) => { attr: Attr; value: string; questionId: string; label: string } | null;
+
+const mealAttr: AttrMapper = (attr, value) => {
+  const q = questionFor(attr, value);
+  return q ? { attr, value, questionId: q.id, label: tagLabel(attr, value) } : null;
+};
+
+export interface IndexOptions {
+  mapAttr?: AttrMapper;
+  /** 別のモード（スイーツ）でだけ使う食材。辞書にあってこのモードのデータにないとき、警告を出さず sweetOnly にする */
+  otherModeIngredients?: Set<string>;
 }
 
 type EntryKind = 'keyword' | 'ingredient' | 'category' | 'dish';
@@ -51,10 +72,12 @@ export interface ParserIndex {
   entries: Entry[];
   dicts: Dictionaries;
   usedIngredients: Set<string>;
+  mapAttr: AttrMapper;
+  otherModeIngredients: Set<string>;
 }
 
 /** 料理名の照合語：料理名・別名に加えて、名前の中のカタカナ語・漢字語（「カレー」「丼」など） */
-function dishWords(dish: Dish): string[] {
+function dishWords(dish: Matchable): string[] {
   const words = new Set<string>([dish.name, ...dish.aliases]);
   for (const name of [dish.name, ...dish.aliases]) {
     for (const m of name.match(/[ァ-ヺー]{2,}/g) ?? []) words.add(m);
@@ -65,7 +88,7 @@ function dishWords(dish: Dish): string[] {
   return [...words];
 }
 
-export function buildIndex(dicts: Dictionaries): ParserIndex {
+export function buildIndex(dicts: Dictionaries, opts: IndexOptions = {}): ParserIndex {
   const entries: Entry[] = [];
   const add = (word: string, kind: EntryKind, key: string) => {
     const w = normalize(word);
@@ -81,7 +104,13 @@ export function buildIndex(dicts: Dictionaries): ParserIndex {
   entries.sort((a, b) => b.word.length - a.word.length || a.priority - b.priority);
 
   const usedIngredients = new Set(dicts.dishes.flatMap((d) => d.ingredients.map((i) => i.name)));
-  return { entries, dicts, usedIngredients };
+  return {
+    entries,
+    dicts,
+    usedIngredients,
+    mapAttr: opts.mapAttr ?? mealAttr,
+    otherModeIngredients: opts.otherModeIngredients ?? new Set(),
+  };
 }
 
 /** キーワードの直後にこれが続いたら否定（「肉じゃない」「肉以外」「トマト抜き」「辛くない」など） */
@@ -140,7 +169,7 @@ export function findHits(text: string, index: ParserIndex): Hit[] {
   return hits;
 }
 
-function keywordItem(hit: Hit, tags: KeywordTags): FreeItem | null {
+function keywordItem(hit: Hit, tags: KeywordTags, mapAttr: AttrMapper): FreeItem | null {
   const answers: Answer[] = [];
   const labels: string[] = [];
   let kindLabel = '条件';
@@ -184,20 +213,18 @@ function keywordItem(hit: Hit, tags: KeywordTags): FreeItem | null {
       answers.push({ kind: 'attr', questionId: 'method', attr: 'method', value, negate: hit.negate });
       labels.push(`${value}だけ`);
     } else {
-      const attr = key as Attr;
-      const value = String(raw);
-      const q = questionFor(attr, value);
-      if (!q) continue;
+      const m = mapAttr(key as Attr, String(raw));
+      if (!m) continue;
       answers.push({
         kind: 'attr',
         // 肯定の属性はその質問を「質問済み」にする。否定は質問済みにしない
         // （「辛くない」と言われても、さっぱり／こってりはまだ聞く価値があるため）
-        questionId: hit.negate ? `${q.id}:not:${value}` : q.id,
-        attr,
-        value,
+        questionId: hit.negate ? `${m.questionId}:not:${m.value}` : m.questionId,
+        attr: m.attr,
+        value: m.value,
         negate: hit.negate,
       });
-      labels.push(tagLabel(attr, value));
+      labels.push(m.label);
     }
   }
   if (answers.length === 0) return null;
@@ -225,9 +252,12 @@ function ingredientItem(hit: Hit, index: ParserIndex): FreeItem {
   }
   // 辞書にはあるが料理データに出てこない食材：同じカテゴリの料理で代わりに探す
   const category = index.dicts.ingredients[name].category;
-  console.warn(`[nani-taberu] 食材「${name}」は ingredients.json にありますが、dishes.json の料理には使われていません`);
+  const sweetOnly = index.otherModeIngredients.has(name);
+  if (!sweetOnly) {
+    console.warn(`[nani-taberu] 食材「${name}」は ingredients.json にありますが、このモードの料理データには使われていません`);
+  }
   if (hit.negate) {
-    return { id, label: `${name} 以外`, note: `『${name}』を使う料理はもともとデータにありません`, negate: true, answers: [], notFound: true };
+    return { id, label: `${name} 以外`, note: `『${name}』を使う料理はもともとデータにありません`, negate: true, answers: [], notFound: true, sweetOnly: sweetOnly ? name : undefined };
   }
   return {
     id,
@@ -235,6 +265,7 @@ function ingredientItem(hit: Hit, index: ParserIndex): FreeItem {
     note: `『${name}』を使う料理はデータにありませんでした。代わりに${category}を使う料理を探します`,
     negate: false,
     notFound: true,
+    sweetOnly: sweetOnly ? name : undefined,
     answers: [
       { kind: 'food', target: { type: 'category', category, fallbackFor: name }, label: name, negate: false },
     ],
@@ -251,7 +282,7 @@ export function parseFreeText(text: string, index: ParserIndex): FreeItem[] {
   for (const hit of findHits(text, index)) {
     let item: FreeItem | null = null;
     const { kind, key } = hit.entry;
-    if (kind === 'keyword') item = keywordItem(hit, index.dicts.keywords[key]);
+    if (kind === 'keyword') item = keywordItem(hit, index.dicts.keywords[key], index.mapAttr);
     else if (kind === 'ingredient') item = ingredientItem(hit, index);
     else if (kind === 'category') {
       item = {
