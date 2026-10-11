@@ -17,6 +17,9 @@ interface Props {
   onResetShift: () => void;
   onRestart: () => void;
   searchTarget: RecipeTarget;
+  /** ［これにする］で説明画面へ */
+  onChoose: (name: string) => void;
+  onSettings: () => void;
 }
 
 const GENRE_LABEL: Record<string, string> = { 和: '和食', 洋: '洋食', 中: '中華', 韓: '韓国', エスニック: 'エスニック' };
@@ -39,6 +42,8 @@ export default function ResultScreen({
   onResetShift,
   onRestart,
   searchTarget,
+  onChoose,
+  onSettings,
 }: Props) {
   const ev = evaluate(dishes, session);
   const cond = conditionsFrom(session, ev);
@@ -77,6 +82,11 @@ export default function ResultScreen({
         <Notices notices={ev.notices} />
         <h2 className="question">候補がなくなりました…</h2>
         <p className="hint">アプリの料理データでは見つかりませんでした。条件をまとめて検索できます。</p>
+        {ev.toolShort && (
+          <button type="button" className="btn btn-ghost" onClick={onSettings}>
+            設定で器具を見直す
+          </button>
+        )}
         <SearchAction
           label="検索で探す"
           kind="recipe"
@@ -96,6 +106,9 @@ export default function ResultScreen({
   const lazy = ev.deliMode;
   const dishSearches = (d: Dish) => (
     <div className="search-row">
+      <button type="button" className="btn btn-primary btn-choose" onClick={() => onChoose(d.name)}>
+        これにする
+      </button>
       <SearchAction label="レシピを探す" kind="recipe" target={searchTarget} query={dishQuery(d.name, cond, 'recipe', searchTarget)} />
       <SearchAction label="画像を見る" kind="image" query={dishQuery(d.name, cond, 'image')} />
     </div>
@@ -152,7 +165,15 @@ export default function ResultScreen({
         </section>
       )}
 
-      {session.freeItems.some((i) => i.notFound) && (
+      {ev.toolShort && (
+        <div className="notice">
+          <p>持っている器具では候補が少なめです。</p>
+          <button type="button" className="btn btn-ghost" onClick={onSettings}>
+            設定で器具を見直す
+          </button>
+        </div>
+      )}
+      {(ev.toolShort || session.freeItems.some((i) => i.notFound)) && (
         <SearchAction
           label="検索で探す（入力した条件で）"
           kind="recipe"

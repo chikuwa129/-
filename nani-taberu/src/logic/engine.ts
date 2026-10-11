@@ -1,5 +1,5 @@
-import type { Answer, Dish, FoodTarget, FreeItem, QuestionDef, QuestionOption } from './types';
-import { combineSels, effortTagLabel, inEffortRange, relaxRange, shiftRange, type EffortRange } from './effort';
+import type { Answer, Dish, FoodTarget, FreeItem, QuestionDef, QuestionOption, Tool } from './types';
+import { combineSels, effortTagLabel, inEffortRange, isDeliDish, relaxRange, shiftRange, type EffortRange } from './effort';
 import { EFFORT_QUESTION, MAX_QUESTIONS, QUESTIONS } from './questions';
 import { normalize } from './text';
 import ingredientsJson from '../data/ingredients.json';
@@ -34,12 +34,39 @@ export interface SessionState {
   tieBreak: Record<string, number>;
   /** 結果画面での楽／凝る切り替え（−は楽、＋は凝る）。元の選択は書き換えない */
   effortShift: number;
+  /** 設定・プロフィールから来る条件 */
+  ctx: SessionContext;
 }
 
-export function createSession(dishes: Dish[], random: () => number = Math.random): SessionState {
+/** 設定・プロフィール由来の条件（セッション開始時に渡す） */
+export interface SessionContext {
+  /** 持っている調理器具。未登録、または「器具で絞り込む」がオフなら null（絞り込まない） */
+  tools: Tool[] | null;
+}
+
+export const DEFAULT_CTX: SessionContext = { tools: null };
+
+/** 持っていない必須器具 */
+export function missingRequiredTools(d: Dish, tools: Tool[] | null): Tool[] {
+  return tools ? d.toolsRequired.filter((t) => !tools.includes(t)) : [];
+}
+
+/** 持っていない「あれば便利」な器具 */
+export function missingOptionalTools(d: Dish, tools: Tool[] | null): Tool[] {
+  return tools ? d.toolsOptional.filter((t) => !tools.includes(t)) : [];
+}
+
+/** あれば便利な器具が足りない料理の減点（1つにつき） */
+export const OPTIONAL_TOOL_PENALTY = 0.5;
+
+export function createSession(
+  dishes: Dish[],
+  random: () => number = Math.random,
+  ctx: SessionContext = DEFAULT_CTX,
+): SessionState {
   const tieBreak: Record<string, number> = {};
   for (const d of dishes) tieBreak[d.name] = random();
-  return { questionAnswers: [], freeItems: [], skipped: [], excluded: [], askedCount: 0, tieBreak, effortShift: 0 };
+  return { questionAnswers: [], freeItems: [], skipped: [], excluded: [], askedCount: 0, tieBreak, effortShift: 0, ctx };
 }
 
 export function allAnswers(state: SessionState): Answer[] {
@@ -147,6 +174,10 @@ export interface Evaluation {
   shift: EffortShiftInfo | null;
   /** 包丁の絞り込み（緩和後） */
   knife: 'none' | 'little' | null;
+  /** 器具の絞り込みで候補が足りない（検索と設定見直しの案内を出す） */
+  toolShort: boolean;
+  /** 器具の絞り込みに使った持ち物（未登録・オフは null） */
+  tools: Tool[] | null;
   /** 加点に使った食材・料理名の指定 */
   foodAnswers: Extract<Answer, { kind: 'food' }>[];
 }
@@ -215,10 +246,18 @@ export function evaluate(dishes: Dish[], state: SessionState): Evaluation {
   const baseHits = posFood.length ? base.filter(isHit).length : 0;
   const wantHits = Math.min(MIN_POOL, baseHits);
 
+  // 持っていない必須器具の料理は除外（緩和しない）。外食・お惣菜として出す料理には適用しない
+  const tools = state.ctx?.tools ?? null;
+  const toolOk = (d: Dish, r: EffortRange | null) =>
+    missingRequiredTools(d, tools).length === 0 || (r !== null && r.deli && isDeliDish(d));
+  let toolCut = false;
+
   let pool: Dish[];
   let guaranteed: Dish[] = [];
   for (;;) {
-    const inRange = range === null ? base : base.filter((d) => inEffortRange(d, range!));
+    const byEffort = range === null ? base : base.filter((d) => inEffortRange(d, range!));
+    const inRange = byEffort.filter((d) => toolOk(d, range));
+    toolCut = inRange.length < byEffort.length;
     const hits = wantHits > 0 ? inRange.filter(isHit) : [];
     const enough = inRange.length >= MIN_POOL && hits.length >= wantHits;
     const relaxed = n === 0 && range !== null && !enough ? relaxRange(range) : null;
@@ -236,6 +275,8 @@ export function evaluate(dishes: Dish[], state: SessionState): Evaluation {
   }
   if (n === 0 && chosen !== null && JSON.stringify(range) !== JSON.stringify(chosen)) notices.push(RELAX_NOTICE);
   if (n !== 0 && pool.length < MIN_POOL) notices.push(`このレベルの料理は${pool.length}品でした`);
+  const toolShort = toolCut && pool.length < MIN_POOL;
+  if (toolShort) notices.push(`持っている器具で作れる料理は${pool.length}品でした`);
   const deliOnly = range !== null && range.deli && range.cook === null;
   // 楽でレベル1を下回ったときも、外食・お惣菜の案内に切り替える
   const deliMode = deliOnly || (n < 0 && range !== null && range.deli && !(shiftBase?.deli ?? false));
@@ -248,7 +289,11 @@ export function evaluate(dishes: Dish[], state: SessionState): Evaluation {
   const ranked = pool
     .map((dish) => ({
       dish,
-      score: attr.get(dish.name)! + foodScore(dish, posFood) + methodBonus(dish, answers),
+      score:
+        attr.get(dish.name)! +
+        foodScore(dish, posFood) +
+        methodBonus(dish, answers) -
+        OPTIONAL_TOOL_PENALTY * missingOptionalTools(dish, tools).length,
       inChosenRange: n !== 0 || chosen === null || inEffortRange(dish, chosen),
       inCandidates: candidates.includes(dish),
       foodMatches: foodMatchCount(dish, posFood),
@@ -286,6 +331,8 @@ export function evaluate(dishes: Dish[], state: SessionState): Evaluation {
     effortMax: range?.cook ? range.cook.max : null,
     shift,
     knife,
+    toolShort,
+    tools,
     foodAnswers: posFood,
   };
 }

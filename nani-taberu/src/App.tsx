@@ -20,19 +20,36 @@ import QuestionScreen from './screens/QuestionScreen';
 import ResultScreen from './screens/ResultScreen';
 import DataScreen from './screens/DataScreen';
 import SettingsScreen from './screens/SettingsScreen';
-import { loadSettings, saveSettings, type Settings } from './settings';
+import {
+  loadPantry,
+  loadProfile,
+  loadSettings,
+  savePantry,
+  saveProfile,
+  saveSettings,
+  type Profile,
+  type Settings,
+} from './settings';
+import DishDetailScreen from './screens/DishDetailScreen';
+import type { SessionContext } from './logic/engine';
 import { conditionQuery, conditionsFrom } from './logic/search';
 import { evaluate } from './logic/engine';
 
 const dishes = dishesJson as Dish[];
 
-type Screen = 'start' | 'free' | 'question' | 'result' | 'data' | 'settings';
+type Screen = 'start' | 'free' | 'question' | 'result' | 'data' | 'settings' | 'detail';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('start');
   const [session, setSession] = useState<SessionState>(() => createSession(dishes));
   const [settings, setSettings] = useState<Settings>(loadSettings);
+  const [profile, setProfile] = useState<Profile>(loadProfile);
+  const [pantry, setPantry] = useState<string[]>(loadPantry);
+  const [detailName, setDetailName] = useState<string | null>(null);
   const target = settings.recipeSearch;
+  /** 設定・プロフィールからセッションの条件を作る（器具は登録済みかつスイッチオンのときだけ） */
+  const ctx: SessionContext = { tools: settings.useToolFilter && profile.tools ? profile.tools : null };
+  const newSession = () => createSession(dishes, Math.random, ctx);
 
   /** 状態を更新し、終了条件を満たしていれば結果画面へ */
   const proceed = (next: SessionState) => {
@@ -40,10 +57,10 @@ export default function App() {
     setScreen(isFinished(dishes, next) ? 'result' : 'question');
   };
 
-  const startAkinator = () => proceed(createSession(dishes));
+  const startAkinator = () => proceed(newSession());
 
   const restart = () => {
-    setSession(createSession(dishes));
+    setSession(newSession());
     setScreen('start');
   };
 
@@ -60,6 +77,11 @@ export default function App() {
     case 'settings':
       return (
         <SettingsScreen
+          profile={profile}
+          onProfileChange={(next) => {
+            setProfile(next);
+            saveProfile(next);
+          }}
           settings={settings}
           onChange={(next) => {
             setSettings(next);
@@ -68,6 +90,26 @@ export default function App() {
           onBack={() => setScreen('start')}
         />
       );
+    case 'detail': {
+      const dish = dishes.find((d) => d.name === detailName);
+      if (!dish) return null;
+      return (
+        <DishDetailScreen
+          dish={dish}
+          dishes={dishes}
+          session={session}
+          ev={evaluate(dishes, session)}
+          ownedTools={profile.tools ?? null}
+          pantry={pantry}
+          onPantryChange={(items) => {
+            setPantry(items);
+            savePantry(items);
+          }}
+          searchTarget={target}
+          onBack={() => setScreen('result')}
+        />
+      );
+    }
     case 'data':
       return <DataScreen dishes={dishes} onBack={() => setScreen('start')} />;
     case 'free':
@@ -75,10 +117,10 @@ export default function App() {
         <FreeInputScreen
           // 入力文はここで解釈して捨てる（保存しない）
           interpret={(text) => dictionaryInterpreter.interpret(text)}
-          onConfirm={(items: FreeItem[]) => proceed(withFreeItems(createSession(dishes), items))}
+          onConfirm={(items: FreeItem[]) => proceed(withFreeItems(newSession(), items))}
           searchTarget={target}
           conditionQueryFor={(items: FreeItem[]) => {
-            const s = withFreeItems(createSession(dishes), items);
+            const s = withFreeItems(newSession(), items);
             return conditionQuery(conditionsFrom(s, evaluate(dishes, s)), 'recipe', target);
           }}
           onAkinator={startAkinator}
@@ -107,6 +149,11 @@ export default function App() {
           onResetShift={() => setSession(resetEffortShift(session))}
           onRestart={restart}
           searchTarget={target}
+          onChoose={(name) => {
+            setDetailName(name);
+            setScreen('detail');
+          }}
+          onSettings={() => setScreen('settings')}
         />
       );
   }

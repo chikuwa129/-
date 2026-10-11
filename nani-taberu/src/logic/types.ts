@@ -10,6 +10,9 @@ export type Knife = '不要' | '少し' | '必要';
 export type Method = '温める' | '茹でる' | '炒める' | '焼く' | '煮る' | '揚げる' | '和える' | '混ぜる';
 /** やる気レベル。0=作りたくない … 4=凝りたい */
 export type EffortLevel = 0 | 1 | 2 | 3 | 4;
+/** 調理器具（包丁・まな板は含めない。包丁は knife で扱う） */
+export type Tool = '電子レンジ' | 'フライパン' | '鍋' | 'トースター' | '炊飯器' | 'オーブン' | 'ホットプレート';
+export const TOOLS: Tool[] = ['電子レンジ', 'フライパン', '鍋', 'トースター', '炊飯器', 'オーブン', 'ホットプレート'];
 
 export interface DishIngredient {
   /** ingredients.json の正規名 */
@@ -20,6 +23,7 @@ export interface DishIngredient {
 export interface Dish {
   name: string;
   aliases: string[];
+  kind: 'meal';
   genre: Genre;
   weight: Weight;
   temp: Temp;
@@ -32,6 +36,14 @@ export interface Dish {
   effort: 1 | 2 | 3 | 4;
   knife: Knife;
   method: Method[];
+  /** なければ作れない器具 */
+  toolsRequired: Tool[];
+  /** あれば便利、なくても代わりがある器具 */
+  toolsOptional: Tool[];
+  /** 調理時間の目安（分） */
+  cookMinutes: number;
+  /** 洗い物の多さ */
+  washing: '少' | '普' | '多';
   ingredients: DishIngredient[];
 }
 

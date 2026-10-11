@@ -12,7 +12,13 @@ interface Props {
   variant?: 'primary' | 'secondary' | 'small';
 }
 
-const OPEN_LABEL: Record<SearchKind, string> = { recipe: '', image: 'Google画像検索', maps: 'Googleマップ' };
+const OPEN_LABEL: Record<SearchKind, string> = {
+  recipe: '',
+  ingredients: '',
+  image: 'Google画像検索',
+  maps: 'Googleマップ',
+  calorie: 'Google検索',
+};
 
 /**
  * 外部検索ボタン。押すと検索語を表示し（編集可）、［〜で開く］で新しいタブに開く。
@@ -22,7 +28,7 @@ export default function SearchAction({ label, kind, query, target = 'google', va
   const online = useOnline();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState(query);
-  const where = kind === 'recipe' ? RECIPE_TARGET_LABEL[target] : OPEN_LABEL[kind];
+  const where = kind === 'recipe' || kind === 'ingredients' ? RECIPE_TARGET_LABEL[target] : OPEN_LABEL[kind];
 
   if (!online) {
     return (

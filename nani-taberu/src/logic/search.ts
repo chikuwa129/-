@@ -21,7 +21,10 @@ export const RECIPE_TARGET_LABEL: Record<RecipeTarget, string> = {
   youtube: 'YouTube',
 };
 
-export type SearchKind = 'recipe' | 'image' | 'maps';
+/**
+ * recipe=レシピ / image=画像 / maps=地図 / ingredients=材料・分量（レシピの開く先に従う）/ calorie=カロリー（Google）
+ */
+export type SearchKind = 'recipe' | 'image' | 'maps' | 'ingredients' | 'calorie';
 
 /** 検索語の材料になる条件 */
 export interface SearchConditions {
@@ -41,6 +44,9 @@ export interface SearchConditions {
 }
 
 export const MAX_TERMS = 5;
+
+/** 買い足しのお店（Google マップ） */
+export const SHOP_QUERY = 'スーパー';
 
 const EFFORT_WORDS: Record<number, string[]> = { 1: ['レンジ', '簡単'], 2: ['炒めるだけ', '簡単'] };
 const METHOD_NOUN: Record<string, string> = { 炒める: '炒めもの', 煮る: '煮物', 揚げる: '揚げ物' };
@@ -80,6 +86,8 @@ export function conditionQuery(c: SearchConditions, kind: SearchKind, target: Re
 /** 結果の料理1品についての検索語（いま表示している料理名に合わせる） */
 export function dishQuery(dishName: string, c: SearchConditions, kind: SearchKind, target: RecipeTarget = 'google'): string {
   if (kind === 'maps') return dishName;
+  if (kind === 'ingredients') return `${dishName} 材料 分量`;
+  if (kind === 'calorie') return `${dishName} カロリー`;
   if (kind === 'image') return [dishName, ...negTerms(c, kind, target)].join(' ');
   const rest = conditionTerms({ ...c, foods: [] }, 'recipe').filter((t) => t !== dishName);
   return finish([dishName, ...rest].slice(0, MAX_TERMS), c, kind, target);
@@ -90,6 +98,7 @@ export function searchUrl(kind: SearchKind, query: string, target: RecipeTarget 
   const q = encodeURIComponent(query.trim());
   if (kind === 'image') return SEARCH_TEMPLATES.googleImage + q;
   if (kind === 'maps') return SEARCH_TEMPLATES.googleMaps + q;
+  if (kind === 'calorie') return SEARCH_TEMPLATES.google + q;
   return SEARCH_TEMPLATES[target] + q;
 }
 

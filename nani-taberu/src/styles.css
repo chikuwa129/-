@@ -725,3 +725,117 @@ h1 {
   background: var(--bg);
   border-top: 1px solid var(--border);
 }
+
+/* --- これにする後の説明画面・器具 --- */
+.btn-choose {
+  flex: 1 1 100%;
+  min-height: 48px;
+  font-size: 16px;
+}
+.result-sub .btn-choose {
+  flex: 0 0 auto;
+}
+.detail-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.detail-block h3 {
+  margin: 0;
+  font-size: 17px;
+}
+.facts {
+  display: grid;
+  grid-template-columns: 5em 1fr;
+  gap: 8px 10px;
+  margin: 0;
+}
+.facts dt {
+  color: var(--muted);
+  font-size: 14px;
+  padding-top: 3px;
+}
+.facts dd {
+  margin: 0;
+  min-width: 0;
+}
+.method {
+  color: var(--muted);
+  font-size: 14px;
+}
+.ings {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ing {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-size: 14px;
+}
+.ing-missing {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+.missing-list {
+  color: var(--accent-strong);
+}
+.ok {
+  margin: 0;
+  font-weight: 700;
+  color: var(--accent-strong);
+}
+.warn {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 2px solid var(--accent);
+  font-size: 14px;
+}
+.small {
+  font-size: 13px;
+}
+.pantry {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pantry fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pantry legend {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.chip-on {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.switch {
+  margin-top: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}

@@ -1,5 +1,5 @@
 import type { Dish } from './types';
-import { foodMatch, type Evaluation } from './engine';
+import { foodMatch, missingOptionalTools, type Evaluation } from './engine';
 import { isDeliDish } from './effort';
 
 /** 外食・お惣菜向きとして出している料理か（レベル0を含む範囲で、自炊の範囲外） */
@@ -88,6 +88,8 @@ function effortReason(d: Dish, ev: Evaluation): string | null {
 export function reasonLine(d: Dish, ev: Evaluation): string | null {
   const parts = [foodReason(d, ev), effortReason(d, ev)];
   if (ev.knife && d.knife === '不要') parts.push('包丁を使いません');
+  const lacking = missingOptionalTools(d, ev.tools);
+  if (lacking.length) parts.push(`${lacking.join('や')}があるともっと楽です`);
   const line = parts.filter(Boolean).join('。');
   return line ? line + '。' : null;
 }

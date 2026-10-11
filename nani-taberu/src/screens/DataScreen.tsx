@@ -29,7 +29,7 @@ export default function DataScreen({ dishes, onBack }: Props) {
           食材
         </button>
         <button role="tab" aria-selected={tab === 'effort'} onClick={() => setTab('effort')}>
-          やる気度
+          やる気度・器具
         </button>
       </div>
       <div className="table-wrap">
@@ -60,6 +60,10 @@ export default function DataScreen({ dishes, onBack }: Props) {
                 <th>手間</th>
                 <th>包丁</th>
                 <th>調理法</th>
+                <th>器具（必須）</th>
+                <th>あれば便利</th>
+                <th>時間</th>
+                <th>洗い物</th>
                 <th>お惣菜</th>
               </tr>
             </thead>
@@ -70,6 +74,10 @@ export default function DataScreen({ dishes, onBack }: Props) {
                   <td className="num">{d.effort}</td>
                   <td>{d.knife}</td>
                   <td>{d.method.join('・')}</td>
+                  <td>{d.toolsRequired.join('、') || '—'}</td>
+                  <td>{d.toolsOptional.join('、') || '—'}</td>
+                  <td className="num">{d.cookMinutes}分</td>
+                  <td>{d.washing}</td>
                   <td>{d.deliAlt ? '○' : ''}</td>
                 </tr>
               ))}
