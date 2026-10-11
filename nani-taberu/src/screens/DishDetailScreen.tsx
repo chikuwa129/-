@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Dish, Tool } from '../logic/types';
 import { missingOptionalTools, missingRequiredTools, type Evaluation } from '../logic/engine';
-import { badges, effortBadge } from '../logic/display';
+import { badges, effortBadge, nutritionBadges, NUTRITION_NOTE } from '../logic/display';
 import { conditionsFrom, dishQuery, SHOP_QUERY, type RecipeTarget } from '../logic/search';
 import type { SessionState } from '../logic/engine';
 import ingredientsJson from '../data/ingredients.json';
@@ -25,6 +25,8 @@ interface Props {
 
 const CATEGORY_OF = ingredientsJson as Record<string, { category: string }>;
 const WASHING: Record<Dish['washing'], string> = { 少: '少なめ', 普: 'ふつう', 多: '多め' };
+const AMOUNT: Record<Dish['amount'], string> = { 少: '軽め', 普: 'ふつう', 多: 'しっかり' };
+const FAT: Record<Dish['fat'], string> = { 低: '低め', 中: 'ふつう', 高: '多め' };
 const KNIFE: Record<Dish['knife'], string> = { 不要: '包丁なし', 少し: '包丁ちょっと', 必要: '包丁を使う' };
 
 /**
@@ -111,6 +113,17 @@ export default function DishDetailScreen({
           <dd>
             調理 約{dish.cookMinutes}分・洗い物 {WASHING[dish.washing]}
           </dd>
+          <dt>量・脂質</dt>
+          <dd>
+            量 {AMOUNT[dish.amount]}・脂質 {FAT[dish.fat]}・カロリー {dish.calorie}
+            {nutritionBadges(dish).length > 0 && (
+              <ul className="nutri-badges inline">
+                {nutritionBadges(dish).map((b) => (
+                  <li key={b}>{b}</li>
+                ))}
+              </ul>
+            )}
+          </dd>
         </dl>
         {lackRequired.length > 0 && (
           <p className="warn" role="alert">
@@ -121,6 +134,7 @@ export default function DishDetailScreen({
           <p className="hint">{lackOptional.join('や')}があるともっと楽です。</p>
         )}
         <p className="hint small">手順・調味料・分量はデータに持っていません。調味料・分量は検索で確認を。</p>
+        <p className="hint small">{NUTRITION_NOTE}</p>
       </section>
 
       <section className="detail-block">
@@ -175,6 +189,7 @@ export default function DishDetailScreen({
           <SearchAction label="レシピを探す" kind="recipe" target={searchTarget} query={dishQuery(dish.name, cond, 'recipe', searchTarget)} />
           <SearchAction label="画像を見る" kind="image" query={dishQuery(dish.name, cond, 'image')} />
           <SearchAction label="材料・分量を調べる" kind="ingredients" target={searchTarget} query={dishQuery(dish.name, cond, 'ingredients')} />
+          <SearchAction label="カロリーを調べる" kind="calorie" query={dishQuery(dish.name, cond, 'calorie')} />
           {missing.length > 0 && <SearchAction label="買い足しのお店を探す" kind="maps" query={SHOP_QUERY} />}
         </div>
       </section>

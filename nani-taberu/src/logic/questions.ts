@@ -1,4 +1,4 @@
-import type { Attr, QuestionDef } from './types';
+import type { Attr, PolicyKey, QuestionDef } from './types';
 
 /**
  * 質問の定義。主材料は値が6つあるので「主食」と「メイン食材」の2問に分けている。
@@ -34,13 +34,14 @@ export const QUESTIONS: QuestionDef[] = [
     ],
   },
   {
-    id: 'weight',
-    attr: 'weight',
-    text: 'おなかの空き具合は？',
+    // 量（旧「重さ」）。脂質は「今日の方針」で選ぶ
+    id: 'amount',
+    attr: 'amount',
+    text: 'どのくらい食べたい？',
     options: [
-      { value: '軽い', label: '軽めでいい' },
-      { value: '普通', label: 'ふつう' },
-      { value: '重い', label: 'ガッツリ食べたい' },
+      { value: '少', label: '軽め' },
+      { value: '普', label: 'ふつう' },
+      { value: '多', label: 'しっかり' },
     ],
   },
   {
@@ -113,4 +114,10 @@ export const EFFORT_SHORT: Record<number, string> = {
   2: '炒める・焼くだけ',
   3: 'ふつうに作る',
   4: '凝りたい',
+};
+
+export const POLICY_LABEL: Record<PolicyKey, string> = {
+  lowFat: '脂質控えめ',
+  lowCalorie: 'カロリー控えめ',
+  bigAmount: '量しっかり',
 };

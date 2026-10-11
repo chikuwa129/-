@@ -71,6 +71,27 @@ export default function SettingsScreen({ settings, onChange, profile, onProfileC
           </button>
         )}
       </fieldset>
+      <fieldset className="field">
+        <legend>脂質とカロリーが食い違うとき</legend>
+        {(
+          [
+            ['fatFirst', '脂質を優先（おすすめ）'],
+            ['calorieFirst', 'カロリーを優先'],
+            ['equal', '同じ重み'],
+          ] as const
+        ).map(([v, label]) => (
+          <label key={v} className="radio">
+            <input
+              type="radio"
+              name="fatCalorieOrder"
+              id={`order-${v}`}
+              checked={settings.fatCalorieOrder === v}
+              onChange={() => onChange({ ...settings, fatCalorieOrder: v })}
+            />
+            {label}
+          </label>
+        ))}
+      </fieldset>
       <p className="hint">
         画像は Google 画像検索、お店は Google マップで開きます。外部のサイトに渡るのは検索語だけです。設定はこの端末の中だけに保存します。
       </p>

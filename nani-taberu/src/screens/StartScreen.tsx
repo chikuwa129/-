@@ -1,11 +1,22 @@
+import type { PolicyKey } from '../logic/types';
+import { POLICY_LABEL } from '../logic/questions';
+
+const POLICY_CHIPS: { key: PolicyKey; label: string }[] = [
+  { key: 'lowFat', label: '脂質控えめ' },
+  { key: 'lowCalorie', label: 'カロリー控えめ' },
+  { key: 'bigAmount', label: '量はしっかり' },
+];
+
 interface Props {
+  policies: PolicyKey[];
+  onPolicies: (p: PolicyKey[]) => void;
   onAkinator: () => void;
   onFree: () => void;
   onData: () => void;
   onSettings: () => void;
 }
 
-export default function StartScreen({ onAkinator, onFree, onData, onSettings }: Props) {
+export default function StartScreen({ policies, onPolicies, onAkinator, onFree, onData, onSettings }: Props) {
   return (
     <main className="screen start">
       <div className="hero">
@@ -27,6 +38,27 @@ export default function StartScreen({ onAkinator, onFree, onData, onSettings }: 
           <span className="btn-sub">フリー入力モード（食材や料理名でもOK）</span>
         </button>
       </div>
+      <fieldset className="policy">
+        <legend>今日の方針（任意）</legend>
+        <div className="policy-chips">
+          {POLICY_CHIPS.map(({ key, label }) => {
+            const on = policies.includes(key);
+            return (
+              <button
+                key={key}
+                type="button"
+                className={on ? 'chip chip-on' : 'chip'}
+                aria-pressed={on}
+                title={POLICY_LABEL[key]}
+                onClick={() => onPolicies(on ? policies.filter((p) => p !== key) : [...policies, key])}
+              >
+                {on ? '✓ ' : ''}
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
       <nav className="footer-links">
         <button className="link" onClick={onData}>
           料理データ一覧

@@ -1,5 +1,5 @@
-import type { Answer, Attr, Dish, FreeItem } from './types';
-import { EFFORT_SHORT, questionFor, tagLabel } from './questions';
+import type { Answer, Attr, Dish, FreeItem, PolicyKey } from './types';
+import { EFFORT_SHORT, POLICY_LABEL, questionFor, tagLabel } from './questions';
 import { isHiragana, isKana, normalize, normalizeWidth, toKatakana } from './text';
 
 /** keywords.json の形式: 言葉 → 属性タグ・やる気・包丁 */
@@ -11,6 +11,10 @@ export type KeywordTags = Partial<Record<Attr, string>> & {
   /** 「どっちでもいい」：やる気度で絞らない（質問済みにはする） */
   effortAny?: boolean;
   knife?: string;
+  /** 今日の方針（「あっさり」→["lowFat"]、「ヘルシー」→["lowFat","lowCalorie"]） */
+  policy?: PolicyKey[];
+  /** 「甘いもの」などでスイーツモードへ */
+  mode?: 'sweet';
 };
 export type KeywordDict = Record<string, KeywordTags>;
 /** ingredients.json の形式: 正規名 → 別名とカテゴリ */
@@ -88,12 +92,20 @@ const NEGATION = new RegExp(
   ),
 );
 
-/** 2文字以下のかなの言葉（「いか」「なす」「タイ」）は、文の途中のひらがなに埋もれた一致を拾わない */
+/**
+ * 2文字以下のかなの言葉（「いか」「なす」「タイ」）は、文の途中のひらがなに埋もれた一致を拾わない。
+ * ただし日常的にひらがなで書く短い食材名（なす・ねぎ・えび）は、後ろが文の終わり・助詞・ひらがな以外なら
+ * 文の途中でも拾う（「辛いなす」）。「いか」「たこ」「タイ」は誤反応が多いので例外にしない。
+ */
 const PARTICLES = new Set(['と', 'や', 'の', 'で', 'に', 'を', 'は', 'が', 'も']);
+const MIDSENTENCE_OK = new Set(['ナス', 'ネギ', 'エビ']);
 function boundaryOk(entry: Entry, base: string, start: number): boolean {
   if (entry.word.length > 2 || !isKana(entry.word)) return true;
   const prev = base[start - 1];
-  return !prev || !isHiragana(prev) || PARTICLES.has(prev);
+  if (!prev || !isHiragana(prev) || PARTICLES.has(prev)) return true;
+  if (!MIDSENTENCE_OK.has(entry.word)) return false;
+  const next = base[start + entry.word.length];
+  return !next || !isHiragana(next) || PARTICLES.has(next);
 }
 
 export interface Hit {
@@ -150,6 +162,18 @@ function keywordItem(hit: Hit, tags: KeywordTags): FreeItem | null {
       answers.push({ kind: 'effort', questionId: 'effort', sel: { type: 'any' } });
       labels.push('手間はどれでも');
       kindLabel = 'やる気';
+    } else if (key === 'policy') {
+      if (hit.negate) continue;
+      for (const p of raw as PolicyKey[]) {
+        answers.push({ kind: 'policy', key: p });
+        labels.push(POLICY_LABEL[p]);
+      }
+      kindLabel = '今日の方針';
+    } else if (key === 'mode') {
+      if (hit.negate) continue;
+      answers.push({ kind: 'mode', mode: 'sweet' });
+      labels.push('甘いもの');
+      kindLabel = '甘いものを探す合図';
     } else if (key === 'knife') {
       if (hit.negate) continue;
       answers.push({ kind: 'knife' });
@@ -251,4 +275,33 @@ export function parseFreeText(text: string, index: ParserIndex): FreeItem[] {
     items.push(item);
   }
   return items;
+}
+
+/** 回答をテストやケース集で比べやすい文字列にする（例: "taste:辛い" "!food:トマト" "policy:lowFat"） */
+export function answerTag(a: Answer): string {
+  switch (a.kind) {
+    case 'attr':
+      return `${a.negate ? '!' : ''}${a.attr}:${a.value}`;
+    case 'effort': {
+      const e = a.sel;
+      return e.type === 'max'
+        ? `effort:${e.level}`
+        : e.type === 'range'
+          ? `effort:${e.min}-${e.max}`
+          : e.type === 'any'
+            ? 'effort:any'
+            : `effort:[${e.levels}]`;
+    }
+    case 'knife':
+      return 'knife:不要';
+    case 'policy':
+      return `policy:${a.key}`;
+    case 'mode':
+      return `mode:${a.mode}`;
+    case 'food': {
+      const t = a.target;
+      const name = t.type === 'dish' ? t.word : t.type === 'ingredient' ? t.name : t.category;
+      return `${a.negate ? '!' : ''}food:${name}`;
+    }
+  }
 }

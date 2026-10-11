@@ -1,4 +1,5 @@
 import type { RecipeTarget } from './logic/search';
+import type { FatOrder } from './logic/engine';
 import { TOOLS, type Tool } from './logic/types';
 
 /** 端末内（localStorage）だけに保存する設定 */
@@ -6,6 +7,8 @@ export interface Settings {
   recipeSearch: RecipeTarget;
   /** 「器具で絞り込む」スイッチ（初期値オン） */
   useToolFilter: boolean;
+  /** 脂質とカロリーが食い違うときの優先 */
+  fatCalorieOrder: FatOrder;
 }
 
 /** プロフィール（今回は持っている調理器具だけ。未登録は undefined） */
@@ -16,7 +19,7 @@ export interface Profile {
 const SETTINGS_KEY = 'nani-taberu:settings';
 const PROFILE_KEY = 'nani-taberu:profile';
 const PANTRY_KEY = 'nani-taberu:pantry';
-export const DEFAULT_SETTINGS: Settings = { recipeSearch: 'google', useToolFilter: true };
+export const DEFAULT_SETTINGS: Settings = { recipeSearch: 'google', useToolFilter: true, fatCalorieOrder: 'fatFirst' };
 
 function read<T>(key: string): Partial<T> {
   try {
@@ -42,6 +45,9 @@ export function loadSettings(): Settings {
       ? (p.recipeSearch as RecipeTarget)
       : DEFAULT_SETTINGS.recipeSearch,
     useToolFilter: typeof p.useToolFilter === 'boolean' ? p.useToolFilter : DEFAULT_SETTINGS.useToolFilter,
+    fatCalorieOrder: ['fatFirst', 'calorieFirst', 'equal'].includes(p.fatCalorieOrder ?? '')
+      ? (p.fatCalorieOrder as FatOrder)
+      : DEFAULT_SETTINGS.fatCalorieOrder,
   };
 }
 

@@ -8,7 +8,7 @@ interface Props {
 
 /** 料理データの確認用一覧（食材・やる気度の付与結果を人が見て直せるように） */
 export default function DataScreen({ dishes, onBack }: Props) {
-  const [tab, setTab] = useState<'ingredients' | 'effort'>('ingredients');
+  const [tab, setTab] = useState<'ingredients' | 'effort' | 'nutrition'>('ingredients');
   const names = (d: Dish, role: 'main' | 'sub') =>
     d.ingredients
       .filter((i) => i.role === role)
@@ -31,9 +31,33 @@ export default function DataScreen({ dishes, onBack }: Props) {
         <button role="tab" aria-selected={tab === 'effort'} onClick={() => setTab('effort')}>
           やる気度・器具
         </button>
+        <button role="tab" aria-selected={tab === 'nutrition'} onClick={() => setTab('nutrition')}>
+          量・脂質
+        </button>
       </div>
       <div className="table-wrap">
-        {tab === 'ingredients' ? (
+        {tab === 'nutrition' ? (
+          <table>
+            <thead>
+              <tr>
+                <th>料理名</th>
+                <th>量</th>
+                <th>脂質</th>
+                <th>カロリー</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dishes.map((d) => (
+                <tr key={d.name}>
+                  <th scope="row">{d.name}</th>
+                  <td>{d.amount}</td>
+                  <td>{d.fat}</td>
+                  <td>{d.calorie}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : tab === 'ingredients' ? (
           <table>
             <thead>
               <tr>

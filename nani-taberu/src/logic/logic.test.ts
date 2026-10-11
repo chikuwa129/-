@@ -19,7 +19,7 @@ import {
   withFreeItems,
   type SessionState,
 } from './engine';
-import { parseFreeText } from './freeText';
+import { answerTag, parseFreeText } from './freeText';
 import { dictionaryIndex } from './interpreter';
 import { normalize } from './text';
 
@@ -43,19 +43,7 @@ function runToEnd(s: SessionState, pick: 'first' | 'last' = 'first'): SessionSta
 }
 const resultNames = (s: SessionState) => evaluate(dishes, s).ranked.map((r) => r.dish.name);
 const usesIngredient = (d: Dish, name: string) => d.ingredients.some((i) => i.name === name);
-const tags = (text: string) =>
-  parse(text).flatMap((i) =>
-    i.answers.map((a) => {
-      const neg = 'negate' in a && a.negate ? '!' : '';
-      if (a.kind === 'attr') return `${neg}${a.attr}:${a.value}`;
-      if (a.kind === 'effort') {
-        const e = a.sel;
-        return e.type === 'max' ? `effort:${e.level}` : e.type === 'range' ? `effort:${e.min}-${e.max}` : e.type === 'any' ? 'effort:any' : `effort:[${e.levels}]`;
-      }
-      if (a.kind === 'knife') return 'knife:不要';
-      return `${neg}food:${a.target.type === 'dish' ? a.target.word : a.target.type === 'ingredient' ? a.target.name : a.target.category}`;
-    }),
-  );
+const tags = (text: string) => parse(text).flatMap((i) => i.answers.map(answerTag));
 
 describe('data', () => {
   it('has 63 dishes with valid attributes', () => {
@@ -102,6 +90,9 @@ describe('data', () => {
         if (attr === 'effortLevel' || attr === 'effortMax') expect([0, 1, 2, 3, 4], word).toContain(value);
         else if (attr === 'effortRange') expect((value as number[]).length, word).toBe(2);
         else if (attr === 'effortAny') expect(value, word).toBe(true);
+        else if (attr === 'policy')
+          for (const v of value as string[]) expect(['lowFat', 'lowCalorie', 'bigAmount'], word).toContain(v);
+        else if (attr === 'mode') expect(value, word).toBe('sweet');
         else if (attr === 'knife') expect(value, word).toBe('不要');
         else if (attr === 'method') expect(typeof value).toBe('string');
         else {

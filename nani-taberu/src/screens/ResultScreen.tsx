@@ -2,7 +2,7 @@ import type { Dish } from '../logic/types';
 import { evaluate, sessionTags, type SessionState } from '../logic/engine';
 import { rangeNumbers } from '../logic/effort';
 import { tagLabel } from '../logic/questions';
-import { badges, reasonLine } from '../logic/display';
+import { badges, nutritionBadges, NUTRITION_NOTE, reasonLine } from '../logic/display';
 import { conditionQuery, conditionsFrom, dishQuery, type RecipeTarget } from '../logic/search';
 import Tags from './Tags';
 import Notices from './Notices';
@@ -131,6 +131,11 @@ export default function ResultScreen({
             <li key={b}>{b}</li>
           ))}
         </ul>
+        <ul className="nutri-badges" aria-label="脂質・カロリーの目安">
+          {nutritionBadges(first.dish).map((b) => (
+            <li key={b}>{b}</li>
+          ))}
+        </ul>
         {reason && <p className="reason">{reason}</p>}
         <ul className="dish-tags">
           {describe(first.dish).map((t) => (
@@ -155,6 +160,11 @@ export default function ResultScreen({
                         {b}
                       </span>
                     ))}
+                    {nutritionBadges(r.dish).map((b) => (
+                      <span key={b} className="mini-badge nutri">
+                        {b}
+                      </span>
+                    ))}
                   </span>
                   {why && <span className="sub-reason">{why}</span>}
                   {dishSearches(r.dish)}
@@ -173,7 +183,7 @@ export default function ResultScreen({
           </button>
         </div>
       )}
-      {(ev.toolShort || session.freeItems.some((i) => i.notFound)) && (
+      {(ev.toolShort || ev.policyShort || session.freeItems.some((i) => i.notFound)) && (
         <SearchAction
           label="検索で探す（入力した条件で）"
           kind="recipe"
@@ -194,6 +204,7 @@ export default function ResultScreen({
         </button>
       </div>
       {!lazy && nearby('secondary')}
+      <p className="hint small">{NUTRITION_NOTE}</p>
     </main>
   );
 }

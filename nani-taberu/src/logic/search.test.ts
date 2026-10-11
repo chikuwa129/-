@@ -30,6 +30,7 @@ const empty: SearchConditions = {
   tastes: [],
   temps: [],
   methods: [],
+  policies: [],
 };
 
 describe('search terms', () => {
@@ -103,6 +104,6 @@ describe('search terms', () => {
 
   it('only passes search words: no profile, history or location fields exist in the conditions', () => {
     const c = condFor('トマトで炒めるだけ');
-    expect(Object.keys(c).sort()).toEqual(['effortMax', 'foods', 'knifeNone', 'methods', 'negFoods', 'tastes', 'temps']);
+    expect(Object.keys(c).sort()).toEqual(['effortMax', 'foods', 'knifeNone', 'methods', 'negFoods', 'policies', 'tastes', 'temps']);
   });
 });

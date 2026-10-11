@@ -86,10 +86,33 @@ function effortReason(d: Dish, ev: Evaluation): string | null {
 
 /** 結果画面の理由（1行） */
 export function reasonLine(d: Dish, ev: Evaluation): string | null {
-  const parts = [foodReason(d, ev), effortReason(d, ev)];
+  const parts = [foodReason(d, ev), effortReason(d, ev), policyReason(d, ev)];
   if (ev.knife && d.knife === '不要') parts.push('包丁を使いません');
   const lacking = missingOptionalTools(d, ev.tools);
   if (lacking.length) parts.push(`${lacking.join('や')}があるともっと楽です`);
   const line = parts.filter(Boolean).join('。');
   return line ? line + '。' : null;
 }
+
+/** 脂質・カロリーのバッジ（目安。「ヘルシー」とは断定しない） */
+export function nutritionBadges(d: { fat: string; calorie: string }): string[] {
+  const out: string[] = [];
+  if (d.fat === '低') out.push('脂質低め');
+  else if (d.fat === '高') out.push('脂質多め');
+  if (d.calorie === '低め') out.push('カロリー控えめ');
+  else if (d.calorie === '高め') out.push('カロリー高め');
+  return out;
+}
+
+/** 今日の方針に関する理由 */
+export function policyReason(d: Dish, ev: Evaluation): string | null {
+  const p = ev.policies;
+  if (p.has('lowFat') && p.has('bigAmount') && d.fat === '低' && d.amount === '多') return '脂質低めで量もしっかりです';
+  const segs: string[] = [];
+  if (p.has('lowFat') && d.fat === '低') segs.push('脂質控えめ');
+  if ((p.has('lowCalorie') || p.has('lowFat')) && d.calorie === '低め') segs.push(segs.length ? 'カロリーも低め' : 'カロリー控えめ');
+  if (p.has('bigAmount') && d.amount === '多') segs.push(segs.length ? '量もしっかり' : '量しっかり');
+  return segs.length ? `${segs.join('・')}です` : null;
+}
+
+export const NUTRITION_NOTE = '脂質・カロリーは料理名からの目安です。正確な数値は［カロリーを調べる］で確認を（栄養指導ではありません）。';

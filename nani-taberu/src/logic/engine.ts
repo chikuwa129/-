@@ -1,4 +1,4 @@
-import type { Answer, Dish, FoodTarget, FreeItem, QuestionDef, QuestionOption, Tool } from './types';
+import type { Answer, Dish, FoodTarget, FreeItem, PolicyKey, QuestionDef, QuestionOption, Tool } from './types';
 import { combineSels, effortTagLabel, inEffortRange, isDeliDish, relaxRange, shiftRange, type EffortRange } from './effort';
 import { EFFORT_QUESTION, MAX_QUESTIONS, QUESTIONS } from './questions';
 import { normalize } from './text';
@@ -42,9 +42,39 @@ export interface SessionState {
 export interface SessionContext {
   /** 持っている調理器具。未登録、または「器具で絞り込む」がオフなら null（絞り込まない） */
   tools: Tool[] | null;
+  /** 脂質とカロリーが食い違うときの優先（初期値：脂質 ＞ カロリー） */
+  fatOrder?: FatOrder;
 }
 
-export const DEFAULT_CTX: SessionContext = { tools: null };
+export type FatOrder = 'fatFirst' | 'calorieFirst' | 'equal';
+export const DEFAULT_CTX: SessionContext = { tools: null, fatOrder: 'fatFirst' };
+
+/** 方針の重み（脂質, カロリー） */
+const ORDER_WEIGHTS: Record<FatOrder, [number, number]> = { fatFirst: [2, 1], calorieFirst: [1, 2], equal: [1, 1] };
+
+export const FAT_RELAX_NOTICE = '脂質控えめの範囲では候補が少なかったので、少し脂質が多めの料理も入れています';
+
+export function policiesOf(state: SessionState): Set<PolicyKey> {
+  return new Set(allAnswers(state).flatMap((a) => (a.kind === 'policy' ? [a.key] : [])));
+}
+
+/** 「脂質控えめ」と「量はしっかり」の両方に合う料理（かさ増し系） */
+export const fitsLowFatBig = (d: Dish) => d.fat === '低' && d.amount === '多';
+
+/**
+ * 今日の方針によるスコア（並び順だけに効く。脂質「高」の除外はハードフィルタで別に行う）
+ * - 脂質控えめ：低 +、中 少し −、高 −（緩和して残したとき）
+ * - カロリー控えめ：低め +、高め −
+ * - 量はしっかり：多 +、少 −
+ */
+export function policyScore(d: Dish, policies: Set<PolicyKey>, order: FatOrder = 'fatFirst'): number {
+  const [wf, wc] = ORDER_WEIGHTS[order];
+  let sum = 0;
+  if (policies.has('lowFat')) sum += d.fat === '低' ? wf : d.fat === '中' ? -0.5 * wf : -2 * wf;
+  if (policies.has('lowCalorie')) sum += d.calorie === '低め' ? wc : d.calorie === '高め' ? -wc : 0;
+  if (policies.has('bigAmount')) sum += d.amount === '多' ? 1 : d.amount === '少' ? -1 : 0;
+  return sum;
+}
 
 /** 持っていない必須器具 */
 export function missingRequiredTools(d: Dish, tools: Tool[] | null): Tool[] {
@@ -140,6 +170,8 @@ export interface Ranked {
   foodMatches: number;
   /** 緩和前のやる気の範囲内か */
   inChosenRange: boolean;
+  /** 脂質控えめ＋量しっかりの両方に合う */
+  fitsBoth: boolean;
 }
 
 /** 結果画面の楽／凝る切り替えの状態 */
@@ -178,6 +210,12 @@ export interface Evaluation {
   toolShort: boolean;
   /** 器具の絞り込みに使った持ち物（未登録・オフは null） */
   tools: Tool[] | null;
+  /** 今日の方針 */
+  policies: Set<PolicyKey>;
+  /** 脂質控えめを緩めて脂質「高」も入れた */
+  fatRelaxed: boolean;
+  /** 脂質控えめ＋量しっかりに合う料理が少ない（検索の案内を出す） */
+  policyShort: boolean;
   /** 加点に使った食材・料理名の指定 */
   foodAnswers: Extract<Answer, { kind: 'food' }>[];
 }
@@ -232,7 +270,21 @@ export function evaluate(dishes: Dish[], state: SessionState): Evaluation {
     }
   }
 
-  // 3. やる気度と食材・料理名の指定
+  // 3. 脂質控えめ：脂質「高」を除外。少なすぎる・食材の指定がすべて消えるときは減点だけに緩める
+  const isHit = (d: Dish) => foodScore(d, posFood) > 0;
+  const policies = policiesOf(state);
+  let fatRelaxed = false;
+  if (policies.has('lowFat')) {
+    const kept = base.filter((d) => d.fat !== '高');
+    const lostFood = posFood.length > 0 && base.some(isHit) && !kept.some(isHit);
+    if (kept.length >= MIN_POOL && !lostFood) base = kept;
+    else {
+      fatRelaxed = true;
+      notices.push(FAT_RELAX_NOTICE);
+    }
+  }
+
+  // 4. やる気度と食材・料理名の指定
   const chosen = chosenEffortOf(state);
   const n = state.effortShift ?? 0;
   let shiftBase: EffortRange | null = null;
@@ -242,7 +294,6 @@ export function evaluate(dishes: Dish[], state: SessionState): Evaluation {
     shiftBase = chosen ?? dishRange(evaluate(dishes, { ...state, effortShift: 0 }).ranked[0]?.dish);
     range = shiftBase ? shiftRange(shiftBase, n) : null;
   }
-  const isHit = (d: Dish) => foodScore(d, posFood) > 0;
   const baseHits = posFood.length ? base.filter(isHit).length : 0;
   const wantHits = Math.min(MIN_POOL, baseHits);
 
@@ -282,7 +333,13 @@ export function evaluate(dishes: Dish[], state: SessionState): Evaluation {
   const deliMode = deliOnly || (n < 0 && range !== null && range.deli && !(shiftBase?.deli ?? false));
   if (deliMode) notices.push(DELI_NOTICE);
 
-  // 4. 残り候補 = 属性スコアが最高の料理（＋必ず残す料理）
+  // 脂質控えめ＋量はしっかり：両方に合う料理を優先し、少なければ正直に件数を出す
+  const both = policies.has('lowFat') && policies.has('bigAmount');
+  const bothCount = both ? pool.filter(fitsLowFatBig).length : 0;
+  const policyShort = both && bothCount < MIN_POOL;
+  if (policyShort) notices.push(`脂質控えめで量もしっかりの条件に合う料理は${bothCount}品でした。近い料理も入れています`);
+
+  // 5. 残り候補 = 属性スコアが最高の料理（＋必ず残す料理）
   const attr = new Map(pool.map((d) => [d.name, attrScore(d, answers)]));
   const top = Math.max(...pool.map((d) => attr.get(d.name)!), -Infinity);
   const candidates = pool.filter((d) => attr.get(d.name) === top || guaranteed.includes(d));
@@ -292,17 +349,20 @@ export function evaluate(dishes: Dish[], state: SessionState): Evaluation {
       score:
         attr.get(dish.name)! +
         foodScore(dish, posFood) +
-        methodBonus(dish, answers) -
+        methodBonus(dish, answers) +
+        policyScore(dish, policies, state.ctx?.fatOrder) -
         OPTIONAL_TOOL_PENALTY * missingOptionalTools(dish, tools).length,
+      fitsBoth: both && fitsLowFatBig(dish),
       inChosenRange: n !== 0 || chosen === null || inEffortRange(dish, chosen),
       inCandidates: candidates.includes(dish),
       foodMatches: foodMatchCount(dish, posFood),
     }))
-    // 候補 → 指定に多く当たる（AND）→ 本来のやる気の範囲内 → スコア → 同点はランダム
+    // 候補 → 指定に多く当たる（AND）→ 方針の両方に合う → 本来のやる気の範囲内 → スコア → 同点はランダム
     .sort(
       (a, b) =>
         Number(b.inCandidates) - Number(a.inCandidates) ||
         b.foodMatches - a.foodMatches ||
+        Number(b.fitsBoth) - Number(a.fitsBoth) ||
         Number(b.inChosenRange) - Number(a.inChosenRange) ||
         b.score - a.score ||
         (state.tieBreak[a.dish.name] ?? 0) - (state.tieBreak[b.dish.name] ?? 0),
@@ -333,6 +393,9 @@ export function evaluate(dishes: Dish[], state: SessionState): Evaluation {
     knife,
     toolShort,
     tools,
+    policies,
+    fatRelaxed,
+    policyShort,
     foodAnswers: posFood,
   };
 }

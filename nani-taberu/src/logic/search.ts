@@ -1,4 +1,4 @@
-import type { Answer } from './types';
+import type { Answer, PolicyKey } from './types';
 import { allAnswers, type Evaluation, type SessionState } from './engine';
 
 /**
@@ -41,6 +41,8 @@ export interface SearchConditions {
   temps: string[];
   /** 調理法（画像検索の「炒めもの」などに使う） */
   methods: string[];
+  /** 今日の方針（脂質控えめ→ヘルシー、カロリー控えめ→低カロリー） */
+  policies: PolicyKey[];
 }
 
 export const MAX_TERMS = 5;
@@ -51,18 +53,26 @@ export const SHOP_QUERY = 'スーパー';
 const EFFORT_WORDS: Record<number, string[]> = { 1: ['レンジ', '簡単'], 2: ['炒めるだけ', '簡単'] };
 const METHOD_NOUN: Record<string, string> = { 炒める: '炒めもの', 煮る: '煮物', 揚げる: '揚げ物' };
 const TEMP_WORD: Record<string, string> = { 温: '温かい', 冷: '冷たい' };
+const POLICY_WORD: Partial<Record<PolicyKey, string>> = { lowFat: 'ヘルシー', lowCalorie: '低カロリー' };
 
 const uniq = (xs: string[]) => [...new Set(xs.filter(Boolean))];
 
 /**
- * 条件から検索に使う言葉を、優先順位（食材・料理名 ＞ やる気度・包丁 ＞ 味）どおりに最大5語まで選ぶ。
+ * 条件から検索に使う言葉を、優先順位（食材・料理名 ＞ やる気度・包丁 ＞ 方針 ＞ 味）どおりに最大5語まで選ぶ。
  * 「レシピ」「料理」やマイナス指定は、この5語とは別に付ける。
  */
 export function conditionTerms(c: SearchConditions, kind: SearchKind): string[] {
   const groups: string[][] =
     kind === 'image'
       ? [c.foods, c.methods.map((m) => METHOD_NOUN[m]).filter(Boolean), c.tastes, c.temps.map((t) => TEMP_WORD[t])]
-      : [c.foods, (c.effortMax && EFFORT_WORDS[c.effortMax]) || [], c.knifeNone ? ['包丁不要'] : [], c.tastes, c.temps.map((t) => TEMP_WORD[t])];
+      : [
+          c.foods,
+          (c.effortMax && EFFORT_WORDS[c.effortMax]) || [],
+          c.knifeNone ? ['包丁不要'] : [],
+          (c.policies ?? []).map((p) => POLICY_WORD[p] ?? ''),
+          c.tastes,
+          c.temps.map((t) => TEMP_WORD[t]),
+        ];
   return uniq(groups.flat()).slice(0, MAX_TERMS);
 }
 
@@ -118,5 +128,6 @@ export function conditionsFrom(state: SessionState, ev: Evaluation): SearchCondi
     tastes: attr('taste'),
     temps: attr('temp'),
     methods: attr('method'),
+    policies: [...ev.policies],
   };
 }

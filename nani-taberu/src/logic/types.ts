@@ -1,7 +1,14 @@
 import type { EffortSel } from './effort';
 
 export type Genre = '和' | '洋' | '中' | '韓' | 'エスニック';
-export type Weight = '軽い' | '普通' | '重い';
+/** 量（ガッツリ＝多） */
+export type Amount = '少' | '普' | '多';
+/** 脂質の目安（旧 oily） */
+export type Fat = '低' | '中' | '高';
+/** カロリーの目安（数値は持たない） */
+export type Calorie = '低め' | 'ふつう' | '高め';
+/** 今日の方針 */
+export type PolicyKey = 'lowFat' | 'lowCalorie' | 'bigAmount';
 export type Temp = '温' | '冷';
 export type Taste = 'さっぱり' | 'こってり' | '辛い' | '甘辛';
 export type Main = '肉' | '魚' | '野菜' | '麺' | '米' | '粉';
@@ -25,7 +32,9 @@ export interface Dish {
   aliases: string[];
   kind: 'meal';
   genre: Genre;
-  weight: Weight;
+  amount: Amount;
+  fat: Fat;
+  calorie: Calorie;
   temp: Temp;
   taste: Taste[];
   main: Main[];
@@ -48,7 +57,7 @@ export interface Dish {
 }
 
 /** スコアの加減算に使う属性。method は質問はしないがフリー入力（「茹でるだけ」）で効く */
-export type Attr = 'genre' | 'weight' | 'temp' | 'taste' | 'main' | 'style' | 'method';
+export type Attr = 'genre' | 'amount' | 'temp' | 'taste' | 'main' | 'style' | 'method';
 
 export type FoodTarget =
   | { type: 'ingredient'; name: string }
@@ -61,12 +70,16 @@ export type FoodTarget =
  * - effort: やる気度による絞り込み（effort.ts の EffortSel：質問の複数選択・上限・範囲・指定なし）
  * - knife: 包丁なしの絞り込み
  * - food: 食材・料理名の指定（加点＋絞り込み。negate=true はその料理を除外）
+ * - policy: 今日の方針（脂質控えめ・カロリー控えめ・量はしっかり）
+ * - mode: 「甘いもの」などでスイーツモードに切り替える
  */
 export type Answer =
   | { kind: 'attr'; questionId: string; attr: Attr; value: string; negate: boolean }
   | { kind: 'effort'; questionId: 'effort'; sel: EffortSel }
   | { kind: 'knife' }
-  | { kind: 'food'; target: FoodTarget; label: string; negate: boolean };
+  | { kind: 'food'; target: FoodTarget; label: string; negate: boolean }
+  | { kind: 'policy'; key: PolicyKey }
+  | { kind: 'mode'; mode: 'sweet' };
 
 export interface QuestionOption {
   value: string;

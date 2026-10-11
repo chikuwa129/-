@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import dishesJson from './data/dishes.json';
-import type { Dish, FreeItem } from './logic/types';
+import type { Dish, FreeItem, PolicyKey } from './logic/types';
+import { POLICY_LABEL } from './logic/questions';
 import {
   answerQuestion,
   createSession,
@@ -37,6 +38,11 @@ import { evaluate } from './logic/engine';
 
 const dishes = dishesJson as Dish[];
 
+/** 今日の方針をタグ（外せるフリー入力の項目）として表す */
+function policyItem(key: PolicyKey): FreeItem {
+  return { id: `pol:${key}`, label: POLICY_LABEL[key], note: '', negate: false, answers: [{ kind: 'policy', key }] };
+}
+
 type Screen = 'start' | 'free' | 'question' | 'result' | 'data' | 'settings' | 'detail';
 
 export default function App() {
@@ -46,10 +52,20 @@ export default function App() {
   const [profile, setProfile] = useState<Profile>(loadProfile);
   const [pantry, setPantry] = useState<string[]>(loadPantry);
   const [detailName, setDetailName] = useState<string | null>(null);
+  /** スタート画面の「今日の方針」 */
+  const [policies, setPolicies] = useState<PolicyKey[]>([]);
   const target = settings.recipeSearch;
   /** 設定・プロフィールからセッションの条件を作る（器具は登録済みかつスイッチオンのときだけ） */
-  const ctx: SessionContext = { tools: settings.useToolFilter && profile.tools ? profile.tools : null };
-  const newSession = () => createSession(dishes, Math.random, ctx);
+  const ctx: SessionContext = {
+    tools: settings.useToolFilter && profile.tools ? profile.tools : null,
+    fatOrder: settings.fatCalorieOrder,
+  };
+  /** 新しいセッション。今日の方針はタグ（外せる）として最初から入れる */
+  const newSession = (extra: FreeItem[] = []) => {
+    const ids = new Set(extra.flatMap((i) => i.answers.flatMap((a) => (a.kind === 'policy' ? [a.key] : []))));
+    const policyItems = policies.filter((p) => !ids.has(p)).map(policyItem);
+    return withFreeItems(createSession(dishes, Math.random, ctx), [...policyItems, ...extra]);
+  };
 
   /** 状態を更新し、終了条件を満たしていれば結果画面へ */
   const proceed = (next: SessionState) => {
@@ -68,6 +84,8 @@ export default function App() {
     case 'start':
       return (
         <StartScreen
+          policies={policies}
+          onPolicies={setPolicies}
           onAkinator={startAkinator}
           onFree={() => setScreen('free')}
           onData={() => setScreen('data')}
@@ -117,10 +135,10 @@ export default function App() {
         <FreeInputScreen
           // 入力文はここで解釈して捨てる（保存しない）
           interpret={(text) => dictionaryInterpreter.interpret(text)}
-          onConfirm={(items: FreeItem[]) => proceed(withFreeItems(newSession(), items))}
+          onConfirm={(items: FreeItem[]) => proceed(newSession(items))}
           searchTarget={target}
           conditionQueryFor={(items: FreeItem[]) => {
-            const s = withFreeItems(newSession(), items);
+            const s = newSession(items);
             return conditionQuery(conditionsFrom(s, evaluate(dishes, s)), 'recipe', target);
           }}
           onAkinator={startAkinator}

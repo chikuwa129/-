@@ -1,0 +1,59 @@
+{
+  "_説明": "精度改善ケース集。試して気づいたずれを「入力→期待」で追加していく。src/logic/accuracy.test.ts が全件を確認する。tags はすべて拾われること、noTags は拾われないこと（前方一致）。結果の条件は、質問に答える前の候補（pool）と並び順で確認する。",
+  "cases": [
+    {
+      "id": 1,
+      "input": "辛いなす",
+      "expect": { "tags": ["taste:辛い", "food:なす"], "candidatesIncludeIngredient": "なす" },
+      "note": "ひらがな2文字の食材を文中でも拾う（なす・ねぎ・えびは例外リスト）"
+    },
+    {
+      "id": 2,
+      "input": "あったかいかな",
+      "expect": { "tags": ["temp:温"], "noTags": ["food:いか"] },
+      "note": "「いか」を食材として誤反応しない"
+    },
+    {
+      "id": 3,
+      "input": "食べたい",
+      "expect": { "unreadable": true, "noTags": ["genre:エスニック"] },
+      "note": "「たい」をタイ料理として誤反応しない"
+    },
+    {
+      "id": 4,
+      "input": "トマト系の炒めるだけ",
+      "expect": { "tags": ["food:トマト", "effort:2"], "topMainIngredient": "トマト" },
+      "note": "トマトが主役の料理が上位。脇役の料理が1位にならない"
+    },
+    {
+      "id": 5,
+      "input": "トマト抜き、包丁なし",
+      "expect": { "tags": ["!food:トマト", "knife:不要"], "resultsExcludeIngredient": "トマト", "resultsOnlyKnife": "不要" },
+      "note": "トマトを使う料理と包丁を使う料理が出ない"
+    },
+    {
+      "id": 6,
+      "input": "なんでもいい",
+      "expect": { "unreadable": true },
+      "note": "「うまく読み取れませんでした」と［この言葉で検索する］（画面はブラウザで確認）"
+    },
+    {
+      "id": 7,
+      "input": "ガッツリで脂質控えめ",
+      "expect": { "tags": ["amount:多", "policy:lowFat"], "resultsExcludeFat": "高" },
+      "note": "量と脂質を別の軸で拾い、脂質「高」の料理を出さない"
+    },
+    {
+      "id": 8,
+      "input": "ヘルシーなもの",
+      "expect": { "tags": ["policy:lowFat", "policy:lowCalorie"], "resultsExcludeFat": "高" },
+      "note": "ヘルシー＝脂質控えめ＋カロリー控えめ（味のさっぱりではない）"
+    },
+    {
+      "id": 9,
+      "input": "こってりだけど脂質低め",
+      "expect": { "tags": ["taste:こってり", "policy:lowFat"], "resultsExcludeFat": "高" },
+      "note": "味のこってりと脂質の軸は別"
+    }
+  ]
+}
