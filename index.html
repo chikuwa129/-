@@ -158,6 +158,12 @@
   .dialog h2 { margin: 0 0 8px; font-size: 21px; }
   .dialog h3 { margin: 14px 0 4px; font-size: 13px; color: var(--dim); letter-spacing: .06em; font-weight: normal; }
   .big { font-size: 17px; padding: 10px 28px; background: var(--ok); color: #fff; border: none; border-radius: 8px; margin-top: 12px; }
+  .mhead {
+    position: sticky; top: -14px; z-index: 1; margin: -14px -16px 8px; padding: 12px 16px 8px;
+    display: flex; align-items: center; justify-content: space-between; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .mhead h2 { margin: 0; }
+  #menuClose { padding: 8px 18px; font-size: 15px; background: var(--ok); color: #fff; border: none; border-radius: 8px; }
   .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
   .tabs button { padding: 7px 12px; background: #24252b; border: 1px solid #50525c; border-radius: 6px; font-size: 14px; }
   .tabs button.on { border-color: var(--accent); color: var(--accent); background: #2a2618; }
@@ -232,10 +238,9 @@
 <!-- メニュー -->
 <div class="overlay" id="menu" hidden>
   <div class="dialog">
-    <h2>メニュー</h2>
+    <div class="mhead"><h2>メニュー</h2><button id="menuClose">とじる</button></div>
     <div class="tabs" id="menuTabs"></div>
     <div id="menuBody"></div>
-    <div class="center"><button class="big" id="menuClose">とじる</button></div>
   </div>
 </div>
 
@@ -662,6 +667,7 @@ function pickUpGround() {
 function descend() {
   floorNo++;
   for (const u of team) u.en = Math.min(u.maxEn, u.en + STAIRS_ENERGY_BONUS);
+  if (DEBUG) for (const u of team) u.hp = u.maxHp;   // テスト用：階を降りるたびにHP全回復
   newFloor();
   if (isBossFloor(floorNo)) {
     log(`${floorNo}F ボスフロアに着いた。（全員EN+${STAIRS_ENERGY_BONUS}）`);
@@ -1098,6 +1104,7 @@ function openMenu() {
   $("menu").hidden = false;
 }
 function closeMenu() {
+  if (mode !== "menu") return;
   $("menu").hidden = true;
   mode = "map";
   renderMap();
@@ -1393,7 +1400,7 @@ function gameOver(msg) {
   $("endTitle").style.color = "#ff6a6a";
   $("endText").textContent = `${msg}　到達階：${floorNo}F　最高機体レベル：Lv${bestLevel}`;
   $("endScreen").hidden = false;
-  $("retry").focus();
+  endShownAt = Date.now();
 }
 
 function gameClear() {
@@ -1404,11 +1411,13 @@ function gameClear() {
   $("endTitle").style.color = "#ffd447";
   $("endText").textContent = `${floorNo}Fの守護機を倒し、遺跡の最深部にたどり着いた！　最高機体レベル：Lv${bestLevel}`;
   $("endScreen").hidden = false;
-  $("retry").focus();
+  endShownAt = Date.now();
 }
 
 // テスト用：直近のバトル結果
 let lastBattle = null;
+let endShownAt = 0;
+const END_KEY_DELAY = 1000;   // 結果画面が出てからキー入力を受け付けるまで(ms)
 
 // ================================================================
 //  入力
@@ -1425,7 +1434,8 @@ document.addEventListener("keydown", ev => {
     return;
   }
   if (mode === "over") {
-    if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); showSelect(); }
+    // 戦闘中にEnterで送っていた勢いで、結果画面を飛ばさないようにする
+    if ((ev.key === "Enter" || ev.key === " ") && Date.now() - endShownAt > END_KEY_DELAY) { ev.preventDefault(); showSelect(); }
     return;
   }
   if (mode === "menu") {
