@@ -184,11 +184,54 @@
   .tag.laser { background: #6fd6f2; }
   .eq { color: var(--accent); font-size: 11px; margin-left: 4px; }
   .empty { color: #666; }
+  /* 村・タイトル */
+  #villageScene { width: 100%; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #2a3a2e; }
+  #villageScene canvas { margin: 0 auto; }
+  .vstats { width: 100%; display: grid; gap: 3px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .vinv { font-size: 13px; color: var(--dim); width: 100%; }
+  .vbtns { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .vbtns button { min-height: 52px; font-size: 16px; border-radius: 10px; background: #26272d; border: 1px solid #50525c; }
+  .vbtns button.primary { grid-column: 1 / -1; background: var(--ok); color: #fff; border: none; font-size: 18px; }
+  .vbtns button.danger, .dlgBtns button.danger { border-color: #8a3a3a; color: #ff9a9a; }
+  #saveNote { font-size: 12px; color: #e8a33a; width: 100%; }
+  #title h1 { font-size: 24px; margin: 40px 0 4px; }
+  #title p { color: var(--dim); font-size: 13px; margin: 0 0 12px; text-align: center; }
+  #title .vbtns { max-width: 360px; }
+  .dlgBtns { display: grid; gap: 8px; margin-top: 12px; }
+  .dlgBtns button { min-height: 48px; font-size: 15px; border-radius: 8px; background: #26272d; border: 1px solid #50525c; }
+  .dlgBtns button.primary { background: var(--ok); color: #fff; border: none; }
+  .mheadBtns { display: flex; gap: 8px; }
+  #btnBackVillage { padding: 8px 12px; font-size: 14px; background: #3a2a1c; border: 1px solid #a8743a; border-radius: 8px; }
   .debug { position: fixed; right: 6px; bottom: 6px; font-size: 11px; color: #f5d; }
 </style>
 </head>
 <body>
 <div id="app">
+
+  <!-- タイトル（セーブデータがあるとき） -->
+  <section id="title" class="screen" hidden>
+    <h1>ロボット遺跡探索</h1>
+    <p id="titleNote"></p>
+    <div class="vbtns">
+      <button id="btnContinue" class="primary">つづきから</button>
+      <button id="btnNewFromTitle" class="danger" style="grid-column: 1 / -1">はじめから</button>
+    </div>
+  </section>
+
+  <!-- 村 -->
+  <section id="village" class="screen" hidden>
+    <div id="floorLabelV" style="width:100%;font-size:15px;font-weight:bold">ベースキャンプの村</div>
+    <div id="villageScene"></div>
+    <div class="vstats" id="villageTeam"></div>
+    <div class="vinv" id="villageInv"></div>
+    <div class="log" id="villageLog"><div></div><div></div><div></div></div>
+    <div class="vbtns">
+      <button id="btnDepart" class="primary">出発</button>
+      <button id="btnVillageMenu">メニュー</button>
+      <button id="btnNewFromVillage" class="danger">はじめから</button>
+    </div>
+    <div id="saveNote" hidden>保存できませんでした（このまま遊べます）</div>
+  </section>
 
   <!-- タイプ選択画面 -->
   <section id="select" class="screen">
@@ -238,19 +281,28 @@
 <!-- メニュー -->
 <div class="overlay" id="menu" hidden>
   <div class="dialog">
-    <div class="mhead"><h2>メニュー</h2><button id="menuClose">とじる</button></div>
+    <div class="mhead"><h2>メニュー</h2><span class="mheadBtns"><button id="btnBackVillage" hidden>村に戻る</button><button id="menuClose">とじる</button></span></div>
     <div class="tabs" id="menuTabs"></div>
     <div id="menuBody"></div>
   </div>
 </div>
 
-<!-- ゲームオーバー / クリア -->
+<!-- 確認・選択ダイアログ -->
+<div class="overlay" id="dialog" hidden>
+  <div class="dialog">
+    <h2 id="dlgTitle"></h2>
+    <p id="dlgText" style="margin:0;font-size:14px"></p>
+    <div class="dlgBtns" id="dlgBtns"></div>
+  </div>
+</div>
+
+<!-- クリア -->
 <div class="overlay" id="endScreen" hidden>
   <div class="dialog center">
     <h2 id="endTitle">機能停止…</h2>
     <p id="endText"></p>
     <p id="endLoot"></p>
-    <button class="big" id="retry">もう一度</button>
+    <button class="big" id="retry">村に戻る</button>
   </div>
 </div>
 
@@ -281,8 +333,28 @@ const LEVEL_MAX = 20;
 const expToNext = lv => 8 + 4 * lv;          // 次のレベルに必要な経験値
 const LEVEL_HP_GROWTH = 5;
 const LEVEL_EN_GROWTH = 3;
-const TACKLE_GROWTH = 0.7;                   // たいあたり威力 = 基本 + floor((Lv-1) × これ)
+const TACKLE_GROWTH = 0.4;                   // たいあたり威力 = 基本 + floor((Lv-1) × これ)
 const EXP_FLOOR_SCALE = 0.1;                 // 経験値 × (1 + これ × (階-1))、切り上げ
+
+// 遊び方のモード。"adventure"=全滅しても強さを引き継いで村に戻る。"rogue"（全滅で最初から）は未実装
+const GAME_MODE = "adventure";
+// 全滅したときのペナルティ（冒険モード）
+const DEFEAT_PENALTY = {
+  itemKeep: 0.5,                   // 修理キットとエネルギーセルが、この割合に（切り捨て）
+  breakRate: 0.5,                  // 主人公機の装備パーツのうち1つが壊れる確率
+};
+
+// セーブ（localStorage）
+const SAVE_KEY = "robotRuinsSave";
+const SAVE_VERSION = 1;
+
+// 村から出発できる階（条件を満たしたものだけ選べる）
+const DEPARTURES = [
+  { floor: 1,  label: "1階から",             ok: pr => true },
+  { floor: 5,  label: "5階の準備部屋から",   ok: pr => pr.maxFloor >= 5 },
+  { floor: 6,  label: "6階から",             ok: pr => !!pr.bossDefeated[5] },
+  { floor: 10, label: "10階の準備部屋から",  ok: pr => pr.maxFloor >= 10 },
+];
 
 // 最初のタイプ（Lv1の値）。sprite=バトル用の絵
 const START_TYPES = [
@@ -378,10 +450,13 @@ const BOSS_PREP_ITEMS = { repair: 2, cell: 2 };
 
 // スキル（効果はスキルレベルで決まる。機体レベルでは変わらない）
 const SKILL_MAX_LEVEL = 10;
+const DOUBLE_BASE = 0.7, DOUBLE_PER_LV = 0.03;
 const SKILLS = [
+  // 連続攻撃：1回の威力 = たいあたり × (0.7 + 0.03×スキルLv)。命中はたいあたりと同じ
   { id: "double", name: "連続攻撃",
-    hitPower: lv => 2 + Math.ceil(lv / 2), hitAcc: lv => 84 + lv,
-    desc: lv => `2回攻撃 威力${2 + Math.ceil(lv / 2)}×2 命中${84 + lv}%` },
+    rate: lv => DOUBLE_BASE + DOUBLE_PER_LV * lv,
+    hitPower: (lv, u) => Math.max(1, Math.round(tackleOf(u) * (DOUBLE_BASE + DOUBLE_PER_LV * lv))),
+    desc: (lv, u) => `2回攻撃 威力${Math.max(1, Math.round(tackleOf(u) * (DOUBLE_BASE + DOUBLE_PER_LV * lv)))}×2（たいあたりの${Math.round((DOUBLE_BASE + DOUBLE_PER_LV * lv) * 100)}%×2）` },
   { id: "guard", name: "防御",
     ratio: lv => Math.max(0.2, 0.5 - 0.03 * (lv - 1)),
     desc: lv => `次に狙われたときの被ダメージを${Math.round(100 * Math.max(0.2, 0.5 - 0.03 * (lv - 1)))}%に` },
@@ -557,6 +632,9 @@ function spriteEl(key, s, flip) {
 const WALL = 0, FLOOR = 1, STAIRS = 2, HEAL = 3, BOSSFLOOR = 4, GATE = 5;
 let map, seen, visible, enemies, groundItems, floorNo, logLines;
 let team, inv, pos, bestLevel, partUid = 0;
+let typeKey = null;
+let progress = null;     // { maxFloor, bossDefeated: {5, 10}, cleared }
+let saveFailed = false;
 let mode = "select";    // select | map | battle | menu | over
 let battle = null;
 let menuState = { unit: 0, pending: null, confirmRelease: false };
@@ -826,7 +904,7 @@ function bossFloor() {
   map[L.stairs.y][L.stairs.x] = STAIRS;
   map[L.heal.y][L.heal.x] = HEAL;
   pos = { ...L.start };
-  enemies.push(makeBoss(BOSSES[floorNo], L.boss.x, L.boss.y));
+  if (!progress.bossDefeated[floorNo]) enemies.push(makeBoss(BOSSES[floorNo], L.boss.x, L.boss.y));
   const keys = [];
   for (const [k, n] of Object.entries(BOSS_PREP_ITEMS)) for (let i = 0; i < n; i++) keys.push(k);
   keys.forEach((k, i) => { const [x, y] = L.items[i % L.items.length]; groundItems.push({ x, y, key: k }); });
@@ -871,7 +949,7 @@ function log(msg, color) {
   renderLog();
 }
 function renderLog() {
-  for (const id of ["mapLog", "battleLog"]) {
+  for (const id of ["mapLog", "battleLog", "villageLog"]) {
     const divs = $(id).children, pad = 3 - logLines.length;
     for (let i = 0; i < 3; i++) {
       const l = i < pad ? null : logLines[i - pad];
@@ -930,7 +1008,10 @@ function pickUpGround() {
 }
 
 function descend() {
+  // 10階（最深部）の階段は村へ戻る道
+  if (floorNo >= FINAL_FLOOR) { goVillage(["遺跡の最深部から地上へ戻った。"]); return; }
   floorNo++;
+  progress.maxFloor = Math.max(progress.maxFloor, floorNo);
   for (const u of team) u.en = Math.min(u.maxEn, u.en + STAIRS_ENERGY_BONUS);
   if (DEBUG) for (const u of team) u.hp = u.maxHp;   // テスト用：階を降りるたびにHP全回復
   newFloor();
@@ -1082,8 +1163,8 @@ const ACTIONS = {
   skill(u, id) {
     const s = SKILLS.find(s => s.id === id), lv = u.skills[id];
     if (id === "double") {
-      attack(u, "連続攻撃(1)", s.hitPower(lv), s.hitAcc(lv));
-      if (battle.enemy.hp > 0) attack(u, "連続攻撃(2)", s.hitPower(lv), s.hitAcc(lv));
+      attack(u, "連続攻撃(1)", s.hitPower(lv, u), TACKLE_ACC);
+      if (battle.enemy.hp > 0) attack(u, "連続攻撃(2)", s.hitPower(lv, u), TACKLE_ACC);
     } else if (id === "guard") {
       u.guard = s.ratio(lv);
       log(`${u.name}は防御の構え。（被ダメージ${Math.round(u.guard * 100)}%）`);
@@ -1134,7 +1215,7 @@ async function runCommand(action, arg) {
   await enemyPhase();
   if (alive().length === 0) {
     await pause(500);
-    gameOver(`${battle.enemy.name}にチームが全滅させられた…`);
+    onDefeat();
     return;
   }
   battle.round++;
@@ -1219,6 +1300,11 @@ function winBattle() {
   log(`${e.name}を破壊した！${e.exp ? ` EXP+${e.exp}` : ""}`);
   $("eSprite").style.opacity = "0.2";
 
+  if (e.boss) {
+    progress.bossDefeated[floorNo] = true;
+    if (floorNo >= FINAL_FLOOR) progress.cleared = true;
+    saveGame();   // ボスを倒したら自動保存
+  }
   if (e.boss && floorNo >= FINAL_FLOOR) {
     const loot = rollBossDrop(floorNo);
     lastBattle.loot = loot;
@@ -1285,7 +1371,7 @@ function battleCommands() {
   } else if (b.menu === "skill") {
     for (const s of SKILLS) {
       const lv = u.skills[s.id];
-      cmds.push({ label: `${s.name} Lv${lv}`, sub: s.desc(lv), act: () => runCommand("skill", s.id) });
+      cmds.push({ label: `${s.name} Lv${lv}`, sub: s.desc(lv, u), act: () => runCommand("skill", s.id) });
     }
     cmds.push(back);
   } else if (b.menu === "item") {
@@ -1389,8 +1475,10 @@ function battleKey(key) {
 // ================================================================
 //  メニュー
 // ================================================================
+let menuFrom = "map";
 function openMenu() {
-  if (mode !== "map") return;
+  if (mode !== "map" && mode !== "village") return;
+  menuFrom = mode;
   mode = "menu";
   menuState = { unit: 0, pending: null, confirmRelease: false };
   renderMenu();
@@ -1399,8 +1487,8 @@ function openMenu() {
 function closeMenu() {
   if (mode !== "menu") return;
   $("menu").hidden = true;
-  mode = "map";
-  renderMap();
+  mode = menuFrom;
+  if (mode === "village") renderVillage(); else renderMap();
 }
 
 function el(tag, cls, text) {
@@ -1515,7 +1603,7 @@ function renderMenu() {
   for (const s of SKILLS) {
     const lv = u.skills[s.id], row = el("div", "mrow");
     const info = el("div", "info", `${s.name}　Lv${lv}${lv >= SKILL_MAX_LEVEL ? "（最大）" : ""}`);
-    info.append(el("small", "", s.desc(lv)));
+    info.append(el("small", "", s.desc(lv, u)));
     row.append(info);
     body.append(row);
   }
@@ -1535,6 +1623,17 @@ function renderMenu() {
     row.append(btns);
     body.append(row);
   }
+
+  // 「村に戻る」はマップから開いたときだけ（見出しに常に表示）
+  $("btnBackVillage").hidden = menuFrom !== "map";
+}
+
+// マップのメニューから村に戻る（確認つき）
+function askReturnVillage() {
+  showDialog("村に戻りますか？", "この階の進行（拾っていない落とし物、いる敵）は消えます。レベル・仲間・持ち物はそのままです。", [
+    { label: "村に戻る", primary: true, act: () => { $("menu").hidden = true; mode = "map"; goVillage(["村に戻った。"]); } },
+    { label: "やめる", act: () => {} },
+  ]);
 }
 
 function releaseAlly(u) {
@@ -1549,7 +1648,8 @@ function releaseAlly(u) {
 //  描画（マップ）。12×12ドットのタイルを整数倍で並べる
 // ================================================================
 function resize() {
-  if (mode === "battle" || mode === "select" || !team) return;
+  if (mode !== "map" && mode !== "menu") return;
+  if (!team || !map) return;
   const availW = Math.min(window.innerWidth, 520) - 24;
   const others = $("mapScreen").offsetHeight - cv.offsetHeight;
   const availH = window.innerHeight - others - 16;
@@ -1644,10 +1744,7 @@ function updateStatus() {
 // ================================================================
 function showSelect() {
   mode = "select";
-  $("endScreen").hidden = true;
-  $("menu").hidden = true;
-  $("battle").hidden = true;
-  $("mapScreen").hidden = true;
+  hideAllScreens();
   $("select").hidden = false;
   const list = $("typeList");
   list.textContent = "";
@@ -1665,48 +1762,136 @@ function showSelect() {
   });
 }
 
-function startGame(typeKey) {
-  const t = START_TYPES.find(x => x.key === typeKey);
-  floorNo = 1;
+// ================================================================
+//  はじめから / 村 / 出発 / 全滅 / クリア
+// ================================================================
+function hideAllScreens() {
+  for (const id of ["title", "village", "select", "mapScreen", "battle"]) $(id).hidden = true;
+  for (const id of ["endScreen", "menu", "dialog"]) $(id).hidden = true;
+}
+
+// タイプを選んで新しく始める → 村へ
+function startGame(key) {
+  const t = START_TYPES.find(x => x.key === key);
+  typeKey = key;
   logLines = [];
   team = [];
   inv = { parts: [], items: { ...STARTING_ITEMS } };
+  progress = { maxFloor: 0, bossDefeated: { 5: false, 10: false }, cleared: false };
   team.push(createUnit({ name: t.name, sprite: t.sprite, isLeader: true, kind: t.key,
     hp: t.hp, en: t.en, tackle: t.tackle, accBonus: t.accBonus, evade: t.evade }));
   addPart(t.part, team[0]);
   bestLevel = 1;
+  goVillage([`${t.label}「${t.name}」で冒険を始める。`]);
+}
+
+// 村に着く：全員全回復（HP0も復活）して自動保存
+function goVillage(msgs = []) {
   battle = null;
-  mode = "map";
-  $("select").hidden = true;
-  $("endScreen").hidden = true;
-  $("menu").hidden = true;
-  $("battle").hidden = true;
-  $("mapScreen").hidden = false;
-  newFloor();
+  map = null;
+  mode = "village";
+  hideAllScreens();
+  $("village").hidden = false;
+  for (const u of team) { u.hp = u.maxHp; u.en = u.maxEn; u.guard = 0; u.focus = 0; }
+  for (const m of msgs) typeof m === "string" ? log(m) : log(m.t, m.c);
+  log("村に着いた。みんな回復した。");
+  saveGame();
+  renderVillage();
+}
+
+function renderVillage() {
+  const rows = $("villageTeam");
+  rows.textContent = "";
+  for (const u of team) {
+    const r = el("div", "trow");
+    const nm = el("span", "nm", u.name); nm.append(el("small", "", ` Lv${u.lv}`));
+    const bar = el("span", "bar hp"); const i = el("i"); i.style.width = (100 * u.hp / u.maxHp) + "%"; bar.append(i);
+    r.append(nm, bar, el("span", "num", `${u.hp}/${u.maxHp}`), el("span", "num", `EN${u.en}`));
+    rows.append(r);
+  }
+  const rec = [progress.maxFloor ? `到達 ${progress.maxFloor}F` : "まだ潜っていない"];
+  if (progress.bossDefeated[5]) rec.push("ゲートキーパー撃破");
+  if (progress.cleared) rec.push("踏破済み");
+  $("villageInv").textContent = `パーツ ${inv.parts.length}個　修理キット ${inv.items.repair}　エネルギーセル ${inv.items.cell}　／　${rec.join("・")}`;
+  $("saveNote").hidden = !saveFailed;
+  renderVillageScene();
   renderLog();
-  log(`${t.label}「${t.name}」で地下遺跡に潜入した。階段を探せ。`);
+}
+
+// 村の背景：色の面と、四角を組み合わせた家（ドット絵の整数倍）
+function renderVillageScene() {
+  const box = $("villageScene");
+  const W = 64, H = 20, s = Math.max(2, Math.floor((box.clientWidth || 340) / W));
+  let c = box.querySelector("canvas");
+  if (!c) { c = document.createElement("canvas"); c.className = "px"; box.append(c); }
+  c.width = W * s; c.height = H * s;
+  const x2 = c.getContext("2d");
+  const R = (x, y, w, h, col) => { x2.fillStyle = col; x2.fillRect(x * s, y * s, w * s, h * s); };
+  R(0, 0, W, 12, "#3a5a78"); R(0, 12, W, 8, "#4f7a46"); R(0, 15, W, 1, "#5f8f54");
+  R(50, 2, 4, 4, "#ffe08a");                                    // 太陽
+  const house = (x, wall, roof) => {
+    R(x, 8, 12, 7, wall); R(x - 1, 6, 14, 2, roof); R(x + 1, 4, 10, 2, roof); R(x + 3, 3, 6, 1, roof);
+    R(x + 5, 11, 2, 4, "#5a3a22"); R(x + 2, 9, 2, 2, "#ffd23a"); R(x + 8, 9, 2, 2, "#ffd23a");
+  };
+  house(4, "#c9a77a", "#a04030"); house(22, "#b8b0a0", "#3d6aa3"); house(40, "#c9a77a", "#5f9e5a");
+  // チームの絵（マップ用アイコン）
+  x2.imageSmoothingEnabled = false;
+  x2.drawImage(spriteImage("m_player", s, false), 54 * s, 8 * s);
+}
+
+// 出発する階を選ぶ
+function openDepart() {
+  if (mode !== "village") return;
+  const btns = DEPARTURES.filter(d => d.ok(progress)).map(d => ({ label: d.label, primary: d.floor === 1, act: () => depart(d.floor) }));
+  btns.push({ label: "やめる", act: () => {} });
+  showDialog("出発", "どこから潜る？", btns);
+}
+
+function depart(floor) {
+  hideAllScreens();
+  $("mapScreen").hidden = false;
+  mode = "map";
+  floorNo = floor;
+  progress.maxFloor = Math.max(progress.maxFloor, floorNo);
+  for (const u of team) { u.guard = 0; u.focus = 0; }
+  newFloor();
+  log(isBossFloor(floorNo) ? `${floorNo}F ボスフロアの準備部屋から出発した。` : `${floorNo}Fから出発した。階段を探せ。`);
   resize();
 }
 
-function gameOver(msg) {
-  mode = "over";
-  log(msg);
-  bestLevel = Math.max(bestLevel, ...team.map(u => u.lv));
-  $("endTitle").textContent = "機能停止…";
-  $("endTitle").style.color = "#ff6a6a";
-  $("endText").textContent = `${msg}　到達階：${floorNo}F　最高機体レベル：Lv${bestLevel}`;
-  $("endLoot").textContent = "";
-  $("endScreen").hidden = false;
-  endShownAt = Date.now();
+// 全滅したときの処理はここだけ。GAME_MODE で切り替える
+function onDefeat() {
+  if (GAME_MODE === "rogue") {
+    // 将来：全滅したら最初からやり直す（セーブを消してタイプ選択へ）
+    deleteSave();
+    showSelect();
+    return;
+  }
+  // 冒険モード：強さは引き継ぎ、軽いペナルティだけ受けて村へ
+  const msgs = ["全滅した…村に戻された。"];
+  inv.items.repair = Math.floor(inv.items.repair * DEFEAT_PENALTY.itemKeep);
+  inv.items.cell = Math.floor(inv.items.cell * DEFEAT_PENALTY.itemKeep);
+  const hero = leader();
+  const slots = hero.equip.map((it, i) => it ? i : -1).filter(i => i >= 0);
+  if (slots.length && Math.random() < DEFEAT_PENALTY.breakRate) {
+    const slot = slots[rnd(slots.length)], item = hero.equip[slot];
+    hero.equip[slot] = null;
+    inv.parts = inv.parts.filter(i => i !== item);
+    const p = partOf(item);
+    msgs.push({ t: `『${p.name}』が壊れた…`, c: RARITY[p.rarity].color });
+  }
+  goVillage(msgs);
 }
 
 function gameClear(lootId) {
   mode = "over";
+  hideAllScreens();
+  $("battle").hidden = false;
   processLevelUps();
   bestLevel = Math.max(bestLevel, ...team.map(u => u.lv));
   $("endTitle").textContent = "遺跡踏破！";
   $("endTitle").style.color = "#ffd447";
-  $("endText").textContent = `${floorNo}Fの守護機を倒し、遺跡の最深部にたどり着いた！　最高機体レベル：Lv${bestLevel}`;
+  $("endText").textContent = `${floorNo}Fの守護機を倒し、遺跡の最深部にたどり着いた！　到達階：${progress.maxFloor}F　最高機体レベル：Lv${bestLevel}`;
   const loot = $("endLoot");
   loot.textContent = "";
   if (lootId) {
@@ -1717,6 +1902,109 @@ function gameClear(lootId) {
   }
   $("endScreen").hidden = false;
   endShownAt = Date.now();
+}
+
+// ---- 確認・選択ダイアログ ----
+function showDialog(title, text, buttons) {
+  $("dlgTitle").textContent = title;
+  $("dlgText").textContent = text;
+  const box = $("dlgBtns");
+  box.textContent = "";
+  buttons.forEach((bt, i) => {
+    const b = el("button", bt.primary ? "primary" : (bt.danger ? "danger" : ""), bt.label);
+    b.dataset.idx = i;
+    b.addEventListener("click", () => { $("dialog").hidden = true; bt.act(); });
+    box.append(b);
+  });
+  $("dialog").hidden = false;
+}
+function askNewGame() {
+  showDialog("はじめから", "セーブデータを消して、最初からやり直します。よろしいですか？", [
+    { label: "消してはじめから", danger: true, act: () => { deleteSave(); showSelect(); } },
+    { label: "やめる", act: () => {} },
+  ]);
+}
+
+// ================================================================
+//  セーブ（localStorage）。失敗してもゲームは止めない
+// ================================================================
+function saveData() {
+  const idx = new Map(inv.parts.map((it, i) => [it, i]));
+  return {
+    version: SAVE_VERSION, typeKey, progress, partUid, bestLevel,
+    items: { ...inv.items },
+    parts: inv.parts.map(it => it.id),
+    team: team.map(u => ({
+      name: u.name, sprite: u.sprite, isLeader: u.isLeader, kind: u.kind,
+      baseHp: u.baseHp, baseEn: u.baseEn, baseTackle: u.baseTackle, accBonus: u.accBonus, evade: u.evade,
+      lv: u.lv, exp: u.exp, hp: u.hp, en: u.en, skills: { ...u.skills }, manual: u.manual,
+      equip: u.equip.map(it => it ? idx.get(it) : null),
+    })),
+  };
+}
+function saveGame() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(saveData()));
+    saveFailed = false;
+  } catch (e) {
+    saveFailed = true;
+  }
+}
+function deleteSave() {
+  try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* 使えなくても続ける */ }
+}
+// 読み込み：{ status: "none" | "ok" | "broken", data }
+function readSave() {
+  let raw;
+  try { raw = localStorage.getItem(SAVE_KEY); } catch (e) { return { status: "none" }; }
+  if (raw == null) return { status: "none" };
+  try {
+    const d = JSON.parse(raw);
+    const okNum = v => typeof v === "number" && isFinite(v);
+    if (!d || d.version !== SAVE_VERSION) throw 0;
+    if (!START_TYPES.some(t => t.key === d.typeKey)) throw 0;
+    if (!Array.isArray(d.parts) || !d.parts.every(id => partById(id))) throw 0;
+    if (!d.items || !okNum(d.items.repair) || !okNum(d.items.cell)) throw 0;
+    if (!d.progress || !okNum(d.progress.maxFloor) || !d.progress.bossDefeated) throw 0;
+    if (!Array.isArray(d.team) || d.team.length < 1 || d.team.length > TEAM_MAX || !d.team[0].isLeader) throw 0;
+    for (const u of d.team) {
+      if (!SPR[u.sprite] || !okNum(u.lv) || !okNum(u.exp) || !okNum(u.baseHp) || !okNum(u.baseEn) || !okNum(u.baseTackle)) throw 0;
+      if (!Array.isArray(u.equip) || u.equip.length !== SLOT_COUNT) throw 0;
+      if (!u.equip.every(i => i === null || (Number.isInteger(i) && i >= 0 && i < d.parts.length))) throw 0;
+      if (!u.skills || !SKILLS.every(s => okNum(u.skills[s.id]))) throw 0;
+    }
+    return { status: "ok", data: d };
+  } catch (e) {
+    return { status: "broken" };
+  }
+}
+function applySave(d) {
+  typeKey = d.typeKey;
+  partUid = d.partUid || 0;
+  logLines = [];
+  progress = { maxFloor: d.progress.maxFloor, bossDefeated: { 5: !!d.progress.bossDefeated[5], 10: !!d.progress.bossDefeated[10] }, cleared: !!d.progress.cleared };
+  inv = { parts: d.parts.map(id => ({ id, uid: ++partUid })), items: { repair: d.items.repair, cell: d.items.cell } };
+  team = d.team.map(s => {
+    const u = createUnit({ name: s.name, sprite: s.sprite, isLeader: s.isLeader, kind: s.kind,
+      hp: s.baseHp, en: s.baseEn, tackle: s.baseTackle, accBonus: s.accBonus, evade: s.evade, lv: s.lv });
+    u.exp = s.exp; u.manual = !!s.manual;
+    for (const sk of SKILLS) u.skills[sk.id] = Math.min(SKILL_MAX_LEVEL, Math.max(1, s.skills[sk.id]));
+    u.equip = s.equip.map(i => i === null ? null : inv.parts[i]);
+    return u;
+  });
+  bestLevel = Math.max(d.bestLevel || 1, ...team.map(u => u.lv));
+}
+
+// 起動：セーブがあればタイトル（つづきから／はじめから）、なければタイプ選択
+function boot() {
+  const r = readSave();
+  if (r.status === "none") { showSelect(); return; }
+  hideAllScreens();
+  mode = "title";
+  $("title").hidden = false;
+  $("btnContinue").hidden = r.status !== "ok";
+  $("titleNote").textContent = r.status === "ok" ? "セーブデータがあります。" : "セーブデータを読めませんでした。はじめから遊べます。";
+  $("btnContinue").onclick = () => { applySave(r.data); goVillage(["つづきから再開した。"]); };
 }
 
 // テスト用：直近のバトル結果
@@ -1738,11 +2026,21 @@ document.addEventListener("keydown", ev => {
     if (n >= 1 && n <= START_TYPES.length) { ev.preventDefault(); startGame(START_TYPES[n - 1].key); }
     return;
   }
-  if (mode === "over") {
-    // 戦闘中にEnterで送っていた勢いで、結果画面を飛ばさないようにする
-    if ((ev.key === "Enter" || ev.key === " ") && Date.now() - endShownAt > END_KEY_DELAY) { ev.preventDefault(); showSelect(); }
+  if (!$("dialog").hidden) {
+    if (ev.key === "Escape") { const bs = $("dlgBtns").children; bs[bs.length - 1].click(); }
     return;
   }
+  if (mode === "over") {
+    // 戦闘中にEnterで送っていた勢いで、結果画面を飛ばさないようにする
+    if ((ev.key === "Enter" || ev.key === " ") && Date.now() - endShownAt > END_KEY_DELAY) { ev.preventDefault(); goVillage(); }
+    return;
+  }
+  if (mode === "village") {
+    if (ev.key === "m" || ev.key === "M") { ev.preventDefault(); openMenu(); }
+    else if (ev.key === "Enter") { ev.preventDefault(); openDepart(); }
+    return;
+  }
+  if (mode === "title") return;
   if (mode === "menu") {
     if (ev.key === "Escape" || ev.key === "m" || ev.key === "M") { ev.preventDefault(); closeMenu(); }
     return;
@@ -1779,12 +2077,17 @@ document.querySelectorAll("#pad button").forEach(btn => {
 });
 $("menuBtn").addEventListener("click", openMenu);
 $("menuClose").addEventListener("click", closeMenu);
-$("retry").addEventListener("click", showSelect);
+$("retry").addEventListener("click", () => goVillage());
+$("btnDepart").addEventListener("click", openDepart);
+$("btnBackVillage").addEventListener("click", askReturnVillage);
+$("btnVillageMenu").addEventListener("click", openMenu);
+$("btnNewFromVillage").addEventListener("click", askNewGame);
+$("btnNewFromTitle").addEventListener("click", askNewGame);
 window.addEventListener("resize", resize);
 
 prepareSprites();
 if (DEBUG) document.body.append(el("div", "debug", "DEBUG MODE"));
-showSelect();
+boot();
 </script>
 </body>
 </html>
