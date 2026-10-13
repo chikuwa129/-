@@ -2,141 +2,308 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>ロボット遺跡探索</title>
 <style>
+  :root {
+    color-scheme: dark;
+    --bg: #101114; --panel: #1a1b20; --line: #34363e; --fg: #dcdde2; --dim: #8a8c96;
+    --hp: #e5534b; --en: #43b4f0; --accent: #ffd447; --ok: #3fae6a;
+  }
   * { box-sizing: border-box; }
-  html, body {
-    margin: 0; padding: 0; height: 100%;
-    background: #111; color: #ddd;
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
     font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Meiryo", sans-serif;
     -webkit-user-select: none; user-select: none;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
   }
+  button { font-family: inherit; color: var(--fg); touch-action: manipulation; cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button:disabled { opacity: 0.35; cursor: default; }
   #app {
-    max-width: 520px; margin: 0 auto; height: 100%;
+    max-width: 520px; margin: 0 auto; min-height: 100%;
     display: flex; flex-direction: column; align-items: center;
-    padding: 8px;
+    padding: 8px 12px;
   }
+  .screen { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  [hidden] { display: none !important; }
+
+  /* ステータス */
   #status {
     width: 100%; display: flex; justify-content: space-between; flex-wrap: wrap;
-    gap: 4px 12px; font-size: 15px; padding: 4px 2px 8px;
+    gap: 4px 12px; font-size: 15px; font-variant-numeric: tabular-nums;
   }
-  #status span b { color: #fff; }
-  .bar { display: inline-block; width: 60px; height: 8px; background: #333; vertical-align: middle; margin-left: 4px; border-radius: 2px; overflow: hidden; }
-  .bar i { display: block; height: 100%; }
-  #hpbar i { background: #e55; }
-  #enbar i { background: #4bf; }
-  #stage { position: relative; }
-  canvas { display: block; background: #000; border: 1px solid #333; image-rendering: pixelated; }
-  #log {
-    width: 100%; min-height: 4.2em; margin-top: 8px; padding: 4px 8px;
-    background: #1a1a1a; border: 1px solid #333; font-size: 14px; line-height: 1.4em;
+  #status b { color: #fff; }
+  .bar { display: inline-block; width: 56px; height: 8px; background: #2c2d33; vertical-align: middle; margin-left: 4px; border-radius: 2px; overflow: hidden; }
+  .bar i { display: block; height: 100%; transition: width .25s; }
+  .bar.hp i { background: var(--hp); }
+  .bar.en i { background: var(--en); }
+  .bar.ehp i { background: #e8a33a; }
+  .low { color: var(--hp) !important; }
+
+  canvas { display: block; background: #000; border: 1px solid var(--line); }
+
+  .log {
+    width: 100%; min-height: 4.4em; padding: 4px 8px;
+    background: var(--panel); border: 1px solid var(--line); font-size: 14px; line-height: 1.45em;
   }
-  #log div:nth-child(1) { color: #888; }
-  #log div:nth-child(2) { color: #aaa; }
-  #log div:nth-child(3) { color: #fff; }
-  #pad {
-    margin-top: 10px; display: grid;
-    grid-template-columns: repeat(3, 64px); grid-template-rows: repeat(3, 56px); gap: 6px;
+  .log div { min-height: 1.45em; }
+  .log div:nth-child(1) { color: #777; }
+  .log div:nth-child(2) { color: #aaa; }
+  .log div:nth-child(3) { color: #fff; }
+
+  /* 十字ボタン */
+  #controls { display: flex; align-items: center; gap: 18px; }
+  #pad { display: grid; grid-template-columns: repeat(3, 60px); grid-template-rows: repeat(3, 52px); gap: 6px; }
+  #pad button, #menuBtn {
+    font-size: 20px; background: #26272d; border: 1px solid #50525c; border-radius: 10px;
   }
-  #pad button {
-    font-size: 22px; background: #2a2a2a; color: #eee; border: 1px solid #555; border-radius: 10px;
-    touch-action: manipulation;
-  }
-  #pad button:active { background: #444; }
+  #pad button:active, #menuBtn:active { background: #3a3c44; }
   #pad .wait { font-size: 13px; }
-  #overlay {
-    position: absolute; inset: 0; display: none;
-    flex-direction: column; align-items: center; justify-content: center;
-    background: rgba(0,0,0,0.8); text-align: center;
-  }
-  #overlay.show { display: flex; }
-  #overlay h2 { margin: 0 0 8px; color: #f66; }
-  #overlay p { margin: 0 0 16px; }
-  #overlay button {
-    font-size: 18px; padding: 10px 24px; background: #3a6; color: #fff; border: none; border-radius: 8px;
-  }
-  #help { font-size: 12px; color: #777; margin-top: 6px; text-align: center; }
-  /* PCなど広い画面では十字ボタンを小さめに */
+  #menuBtn { width: 76px; height: 64px; font-size: 15px; }
+  #help { font-size: 12px; color: #666; text-align: center; }
   @media (hover: hover) and (pointer: fine) {
-    #pad { grid-template-columns: repeat(3, 48px); grid-template-rows: repeat(3, 40px); }
+    #pad { grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(3, 40px); }
+    #pad button { font-size: 16px; }
+    #menuBtn { height: 52px; }
   }
+
+  /* バトル画面 */
+  #battle { padding-top: 4px; }
+  .ehead { width: 100%; display: flex; flex-direction: column; gap: 4px; }
+  .ehead .row { display: flex; justify-content: space-between; align-items: baseline; font-variant-numeric: tabular-nums; }
+  #eName { font-size: 18px; font-weight: bold; }
+  .wide { width: 100%; height: 12px; margin: 0; }
+  .arena {
+    position: relative; width: 100%; height: 210px;
+    background: linear-gradient(#17181d 0 62%, #24221e 62% 100%);
+    border: 1px solid var(--line); border-radius: 6px; overflow: hidden;
+  }
+  .arena .floorline { position: absolute; left: 0; right: 0; top: 62%; border-top: 1px dashed #4a463e; }
+  .sprite {
+    position: absolute; display: flex; align-items: center; justify-content: center;
+    font-family: monospace; font-weight: bold; border-radius: 8px; border: 2px solid;
+  }
+  #eSprite { right: 14%; top: 22px; width: 104px; height: 104px; font-size: 56px; }
+  #eSprite.boss { width: 132px; height: 132px; top: 10px; font-size: 72px; right: 10%; }
+  #pSprite { left: 12%; bottom: 18px; width: 68px; height: 68px; font-size: 38px; color: var(--accent); border-color: var(--accent); background: #2b2614; }
+  .sprite.hit { animation: shake .35s; }
+  .sprite.flash { animation: flash .35s; }
+  .sprite.dead { opacity: 0; transform: scale(.6); transition: opacity .5s, transform .5s; }
+  @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
+  @keyframes flash { 0%,100% { background: #2b2614; } 40% { background: #7a1c1c; } }
+  @media (prefers-reduced-motion: reduce) { .sprite.hit, .sprite.flash { animation: none; } }
+  #fx { position: absolute; left: 0; right: 0; top: 46%; text-align: center; font-size: 22px; font-weight: bold; pointer-events: none; text-shadow: 0 2px 4px #000; }
+  .pbars { width: 100%; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 4px 8px; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .pbars .bar { width: 100%; margin: 0; height: 10px; }
+  .pbars .st { color: var(--dim); font-size: 12px; grid-column: 1 / -1; }
+  #cmdTitle { width: 100%; font-size: 12px; color: var(--dim); letter-spacing: .08em; }
+  #cmds { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  #cmds button {
+    min-height: 50px; padding: 6px 8px; text-align: left;
+    background: #24252b; border: 1px solid #50525c; border-radius: 8px; font-size: 15px;
+    display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  }
+  #cmds button:active:not(:disabled) { background: #3a3c44; }
+  #cmds button .k { color: var(--accent); font-size: 12px; margin-right: 4px; }
+  #cmds button small { color: var(--dim); font-size: 11px; }
+  #cmds button.back { background: #1c1d22; }
+
+  /* オーバーレイ */
+  .overlay {
+    position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.82); padding: 16px;
+  }
+  .dialog {
+    width: 100%; max-width: 460px; max-height: 100%; overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px;
+  }
+  .center { text-align: center; }
+  .dialog h2 { margin: 0 0 8px; font-size: 22px; }
+  .dialog h3 { margin: 14px 0 6px; font-size: 13px; color: var(--dim); letter-spacing: .08em; font-weight: normal; }
+  .big { font-size: 18px; padding: 10px 28px; background: var(--ok); color: #fff; border: none; border-radius: 8px; margin-top: 12px; }
+  .mrow {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 7px 8px; border-bottom: 1px solid #2a2b31; font-size: 14px;
+  }
+  .mrow .info { min-width: 0; }
+  .mrow small { display: block; color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .mrow .btns { display: flex; gap: 4px; flex-shrink: 0; }
+  .mrow button { padding: 6px 10px; background: #2c2d34; border: 1px solid #50525c; border-radius: 6px; font-size: 13px; }
+  .tag { display: inline-block; font-size: 10px; padding: 1px 5px; border-radius: 3px; margin-right: 4px; vertical-align: 1px; color: #111; }
+  .tag.gun { background: #e8c25a; }
+  .tag.missile { background: #e98a5a; }
+  .tag.laser { background: #6fd6f2; }
+  .eq { color: var(--accent); font-size: 11px; margin-left: 4px; }
+  .empty { color: #555; }
 </style>
 </head>
 <body>
 <div id="app">
-  <div id="status">
-    <span>階: <b id="floor">1</b>F</span>
-    <span>HP: <b id="hp">30</b>/<b id="maxhp">30</b><span class="bar" id="hpbar"><i></i></span></span>
-    <span>EN: <b id="en">100</b><span class="bar" id="enbar"><i></i></span></span>
-    <span>攻撃: <b id="atk">3</b></span>
-  </div>
-  <div id="stage">
-    <canvas id="cv"></canvas>
-    <div id="overlay">
-      <h2>機能停止…</h2>
-      <p id="result"></p>
-      <button id="retry">もう一度</button>
+
+  <!-- マップ画面 -->
+  <section id="mapScreen" class="screen">
+    <div id="status">
+      <span>地下<b id="floor">1</b>階</span>
+      <span>HP <b id="hp">40</b>/<b id="maxhp">40</b><span class="bar hp" id="hpbar"><i></i></span></span>
+      <span>EN <b id="en">100</b><span class="bar en" id="enbar"><i></i></span></span>
     </div>
+    <canvas id="cv"></canvas>
+    <div class="log" id="mapLog"><div></div><div></div><div></div></div>
+    <div id="controls">
+      <div id="pad">
+        <span></span><button data-dir="up" aria-label="上">▲</button><span></span>
+        <button data-dir="left" aria-label="左">◀</button><button data-dir="wait" class="wait">待機</button><button data-dir="right" aria-label="右">▶</button>
+        <span></span><button data-dir="down" aria-label="下">▼</button><span></span>
+      </div>
+      <button id="menuBtn">メニュー</button>
+    </div>
+    <div id="help">矢印キー / WASD：移動　スペース：待機　M：メニュー</div>
+  </section>
+
+  <!-- バトル画面 -->
+  <section id="battle" class="screen" hidden>
+    <div class="ehead">
+      <div class="row"><span id="eName">ガードロボ</span><span id="eHpText">8/8</span></div>
+      <span class="bar ehp wide" id="eHpBar"><i></i></span>
+    </div>
+    <div class="arena">
+      <div class="floorline"></div>
+      <div class="sprite" id="eSprite">g</div>
+      <div class="sprite" id="pSprite">@</div>
+      <div id="fx"></div>
+    </div>
+    <div class="pbars">
+      <span>HP</span><span class="bar hp" id="bHpBar"><i></i></span><span id="bHp">40/40</span>
+      <span>EN</span><span class="bar en" id="bEnBar"><i></i></span><span id="bEn">100</span>
+      <span class="st" id="bState"></span>
+    </div>
+    <div class="log" id="battleLog"><div></div><div></div><div></div></div>
+    <div id="cmdTitle">コマンド</div>
+    <div id="cmds"></div>
+  </section>
+</div>
+
+<!-- メニュー -->
+<div class="overlay" id="menu" hidden>
+  <div class="dialog">
+    <h2>メニュー</h2>
+    <div id="menuBody"></div>
+    <div class="center"><button class="big" id="menuClose">とじる</button></div>
   </div>
-  <div id="log"><div></div><div></div><div></div></div>
-  <div id="pad">
-    <span></span><button data-dir="up">▲</button><span></span>
-    <button data-dir="left">◀</button><button data-dir="wait" class="wait">待機</button><button data-dir="right">▶</button>
-    <span></span><button data-dir="down">▼</button><span></span>
+</div>
+
+<!-- ゲームオーバー / クリア -->
+<div class="overlay" id="endScreen" hidden>
+  <div class="dialog center">
+    <h2 id="endTitle">機能停止…</h2>
+    <p id="endText"></p>
+    <button class="big" id="retry">もう一度</button>
   </div>
-  <div id="help">矢印キー / WASD で移動、スペースで待機</div>
 </div>
 
 <script>
 "use strict";
 
-// ===== 調整用の定数 =====
-const PLAYER_HP = 30;
-const PLAYER_ATK = 3;
+// ================================================================
+//  調整用の定数・データ
+// ================================================================
+const PLAYER_HP = 40;
 const PLAYER_ENERGY = 100;
 const ENERGY_PER_STEP = 1;
-const STARVE_DAMAGE = 1;          // エネルギー0のときターンごとに減るHP
-const STAIRS_ENERGY_BONUS = 20;   // 階段で次の階へ進んだときのエネルギー回復
+const STARVE_DAMAGE = 1;           // エネルギー0でマップを歩いたときのHP減少
+const STAIRS_ENERGY_BONUS = 20;    // 次の階へ進んだときのエネルギー回復
+const DAMAGE_VARIANCE = 1;         // ダメージのぶれ（±）
 
-const ENEMY_TYPES = {
-  small: { name: "ガードロボ",   ch: "g", color: "#e8a33a", hp: 6,  atk: 2, minFloor: 1 },
-  large: { name: "ハンターロボ", ch: "H", color: "#e04848", hp: 14, atk: 4, minFloor: 3 },
+const TACKLE = { name: "たいあたり", power: 4, acc: 95 };
+const ESCAPE_RATE = 50;            // にげる成功率(%)
+const ESCAPE_STUN_TURNS = 3;       // 逃げた後、敵が追ってこないターン数
+
+// パーツ（武装）。power=威力 acc=命中(%) en=消費エネルギー
+const PARTS = [
+  { id: "g1", type: "gun",     name: "ハンドガンK7",     power: 6,  acc: 92, en: 3 },
+  { id: "g2", type: "gun",     name: "ツインバルカン",   power: 8,  acc: 90, en: 5 },
+  { id: "g3", type: "gun",     name: "レールライフル",   power: 11, acc: 93, en: 8 },
+  { id: "m1", type: "missile", name: "マイクロミサイル", power: 11, acc: 76, en: 6 },
+  { id: "m2", type: "missile", name: "クラスターミサイル", power: 15, acc: 73, en: 9 },
+  { id: "m3", type: "missile", name: "ヘビーミサイル",   power: 21, acc: 70, en: 13 },
+  { id: "l1", type: "laser",   name: "ビームレーザー",   power: 17, acc: 90, en: 14 },
+  { id: "l2", type: "laser",   name: "プラズマレーザー", power: 25, acc: 92, en: 20 },
+];
+const PART_TYPE_LABEL = { gun: "ガン", missile: "ミサイル", laser: "レーザー" };
+const SLOT_COUNT = 3;
+const STARTING_PARTS = ["g1"];     // 最初から持っているパーツ（[] で丸腰スタート）
+
+// 敵。drop=落とすパーツの系統
+const ENEMY_TYPES = [
+  { key: "small", name: "ガードロボ",   ch: "g", color: "#e8a33a", hp: 8,  atk: 3, acc: 80, minFloor: 1, drop: "gun",     weight: 5 },
+  { key: "mid",   name: "ハンターロボ", ch: "h", color: "#d77be0", hp: 16, atk: 5, acc: 80, minFloor: 3, drop: "missile", weight: 3 },
+  { key: "large", name: "タイタンロボ", ch: "T", color: "#ef5a5a", hp: 30, atk: 8, acc: 75, minFloor: 6, drop: "laser",   weight: 2 },
+];
+const BOSSES = {
+  5:  { name: "ゲートキーパー",     ch: "B", color: "#ff8a3c", hp: 60,  atk: 8,  acc: 80, drops: ["m2", "m3", "l1"] },
+  10: { name: "遺跡の守護機オメガ", ch: "Ω", color: "#ff4a6e", hp: 100, atk: 12, acc: 80, drops: ["l2"] },
 };
-const ENEMY_BASE_COUNT = 2;       // 1階の敵数 = BASE + 階数
-const ENEMY_HP_GROWTH = 0.15;     // 1階ごとのHP増加率
-const ENEMY_ATK_GROWTH_EVERY = 3; // この階数ごとに敵の攻撃+1
-const ENEMY_SIGHT = 7;            // 敵がプレイヤーに気づく距離
+const FINAL_FLOOR = 10;
+const BOSS_HEAVY_RATE = 0.25;      // ボスが強攻撃を使う確率（威力1.5倍・命中-10）
+const ENEMY_BASE_COUNT = 2;        // 敵数 = BASE + 階数（上限あり）
+const ENEMY_MAX_COUNT = 10;
+const ENEMY_HP_GROWTH = 0.12;      // 1階ごとのHP増加率
+const ENEMY_ATK_GROWTH_EVERY = 3;  // この階数ごとに攻撃+1
+const ENEMY_SIGHT = 7;
+const PART_DROP_RATE = 0.5;
+const ITEM_DROP_RATE = 0.35;
 
-const ITEM_TYPES = {
-  repair: { name: "修理キット",     ch: "+", color: "#5e5", value: 10 },
-  cell:   { name: "エネルギーセル", ch: "e", color: "#4bf", value: 30 },
-  power:  { name: "パワーパーツ",   ch: "P", color: "#f5d", value: 1 },
+// アイテム
+const ITEMS = {
+  repair: { name: "修理キット",     ch: "+", color: "#5fe07a", value: 15 },
+  cell:   { name: "エネルギーセル", ch: "e", color: "#43b4f0", value: 30 },
 };
-const ITEM_COUNT_MIN = 2;
-const ITEM_COUNT_MAX = 4;
+const STARTING_ITEMS = { repair: 1, cell: 0 };
+const MAP_ITEM_MIN = 2, MAP_ITEM_MAX = 4;
 
-const MAP_W = 36;
-const MAP_H = 28;
-const VIEW = 15;                  // 画面に表示するマス数（縦横）
-const FOV_RADIUS = 6;
-const ROOM_TRIES = 40;
-const ROOM_MAX = 9;
+// スキル。lv は 1〜SKILL_MAX_LEVEL。使うたびに +1
+const SKILL_MAX_LEVEL = 10;
+const SKILLS = [
+  { id: "double", name: "連続攻撃",
+    hitPower: lv => 2 + Math.ceil(lv / 2), hitAcc: lv => 84 + lv,
+    desc: lv => `2回攻撃 威力${2 + Math.ceil(lv / 2)}×2 命中${84 + lv}%` },
+  { id: "guard", name: "防御",
+    ratio: lv => Math.max(0.2, 0.5 - 0.03 * (lv - 1)),
+    desc: lv => `次の被ダメージを${Math.round(100 * Math.max(0.2, 0.5 - 0.03 * (lv - 1)))}%に` },
+  { id: "focus", name: "集中攻撃",
+    bonus: lv => 20 + 3 * (lv - 1),
+    desc: lv => `次のぶそうの命中+${20 + 3 * (lv - 1)}%` },
+];
 
-// ===== 状態 =====
+// マップ
+const MAP_W = 36, MAP_H = 28, VIEW = 15, FOV_RADIUS = 6;
+const ROOM_TRIES = 50, ROOM_MAX = 9;
+
+// ================================================================
+//  状態
+// ================================================================
 const WALL = 0, FLOOR = 1, STAIRS = 2;
-let map, seen, visible, enemies, items, player, floorNo, gameOver, logLines;
+let map, seen, visible, enemies, groundItems, player, floorNo, logLines;
+let mode = "map";       // map | battle | menu | over
+let battle = null;
+let menuPending = null; // 交換先スロットを選んでいるパーツの所持番号
 
-const cv = document.getElementById("cv");
-const ctx = cv.getContext("2d");
+const $ = id => document.getElementById(id);
+const cv = $("cv"), ctx = cv.getContext("2d");
 let tile = 24;
 
-const rnd = (n) => Math.floor(Math.random() * n);
+const rnd = n => Math.floor(Math.random() * n);
 const rndRange = (a, b) => a + rnd(b - a + 1);
+const roll = pct => Math.random() * 100 < pct;
+const partById = id => PARTS.find(p => p.id === id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// ===== マップ生成 =====
+// ================================================================
+//  マップ生成
+// ================================================================
 function generateMap() {
   map = []; seen = []; visible = [];
   for (let y = 0; y < MAP_H; y++) {
@@ -148,12 +315,10 @@ function generateMap() {
   for (let i = 0; i < ROOM_TRIES && rooms.length < ROOM_MAX; i++) {
     const w = rndRange(4, 8), h = rndRange(3, 6);
     const x = rndRange(1, MAP_W - w - 2), y = rndRange(1, MAP_H - h - 2);
-    const r = { x, y, w, h };
     if (rooms.some(o => x <= o.x + o.w && x + w >= o.x && y <= o.y + o.h && y + h >= o.y)) continue;
-    rooms.push(r);
+    rooms.push({ x, y, w, h });
     for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) map[yy][xx] = FLOOR;
   }
-  // 部屋を順番に通路でつなぐ
   for (let i = 1; i < rooms.length; i++) {
     const a = center(rooms[i - 1]), b = center(rooms[i]);
     if (Math.random() < 0.5) { hCorr(a.x, b.x, a.y); vCorr(a.y, b.y, b.x); }
@@ -165,58 +330,65 @@ function center(r) { return { x: r.x + (r.w >> 1), y: r.y + (r.h >> 1) }; }
 function hCorr(x1, x2, y) { for (let x = Math.min(x1, x2); x <= Math.max(x1, x2); x++) map[y][x] = FLOOR; }
 function vCorr(y1, y2, x) { for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) map[y][x] = FLOOR; }
 
-function randomFreeCellIn(r) {
-  for (let t = 0; t < 50; t++) {
+function occupied(x, y) {
+  return (player.x === x && player.y === y) ||
+         enemies.some(e => e.x === x && e.y === y) ||
+         groundItems.some(it => it.x === x && it.y === y) ||
+         map[y][x] === STAIRS;
+}
+function freeCellIn(r) {
+  for (let t = 0; t < 60; t++) {
     const x = rndRange(r.x, r.x + r.w - 1), y = rndRange(r.y, r.y + r.h - 1);
     if (map[y][x] === FLOOR && !occupied(x, y)) return { x, y };
   }
   return null;
 }
-function occupied(x, y) {
-  return (player && player.x === x && player.y === y) ||
-         enemies.some(e => e.x === x && e.y === y) ||
-         items.some(it => it.x === x && it.y === y);
+
+function makeEnemy(def, x, y, isBoss) {
+  const hp = isBoss ? def.hp : Math.round(def.hp * (1 + ENEMY_HP_GROWTH * (floorNo - 1)));
+  const atk = isBoss ? def.atk : def.atk + Math.floor((floorNo - 1) / ENEMY_ATK_GROWTH_EVERY);
+  return { def, name: def.name, ch: def.ch, color: def.color, x, y, hp, maxHp: hp, atk, acc: def.acc,
+           boss: !!isBoss, awake: false, stun: 0 };
+}
+
+function pickEnemyType() {
+  const pool = ENEMY_TYPES.filter(t => floorNo >= t.minFloor);
+  let total = pool.reduce((s, t) => s + t.weight, 0), r = Math.random() * total;
+  for (const t of pool) { if ((r -= t.weight) < 0) return t; }
+  return pool[0];
 }
 
 function newFloor() {
-  enemies = []; items = [];
+  enemies = []; groundItems = [];
   let rooms = generateMap();
-  while (rooms.length < 3) rooms = generateMap();
+  while (rooms.length < 4) rooms = generateMap();
 
   const start = center(rooms[0]);
   player.x = start.x; player.y = start.y;
-  const s = randomFreeCellIn(rooms[rooms.length - 1]);
+
+  const last = rooms[rooms.length - 1];
+  const s = freeCellIn(last);
   map[s.y][s.x] = STAIRS;
 
-  // 敵（最初の部屋には置かない）
-  const enemyCount = ENEMY_BASE_COUNT + floorNo;
-  const types = Object.values(ENEMY_TYPES).filter(t => floorNo >= t.minFloor);
-  for (let i = 0; i < enemyCount; i++) {
-    const r = rooms[1 + rnd(rooms.length - 1)];
-    const p = randomFreeCellIn(r);
-    if (!p) continue;
-    // 大型は出現率やや低め
-    const t = types.length > 1 && Math.random() < 0.35 ? types[1] : types[0];
-    const hp = Math.round(t.hp * (1 + ENEMY_HP_GROWTH * (floorNo - 1)));
-    const atk = t.atk + Math.floor((floorNo - 1) / ENEMY_ATK_GROWTH_EVERY);
-    enemies.push({ x: p.x, y: p.y, type: t, hp, maxHp: hp, atk, awake: false });
-  }
+  // ボスは階段の上に立ちふさがる
+  if (BOSSES[floorNo]) enemies.push(makeEnemy(BOSSES[floorNo], s.x, s.y, true));
 
-  // アイテム
-  const itemKeys = Object.keys(ITEM_TYPES);
-  const itemCount = rndRange(ITEM_COUNT_MIN, ITEM_COUNT_MAX);
+  const count = Math.min(ENEMY_MAX_COUNT, ENEMY_BASE_COUNT + floorNo);
+  for (let i = 0; i < count; i++) {
+    const p = freeCellIn(rooms[1 + rnd(rooms.length - 1)]);
+    if (p) enemies.push(makeEnemy(pickEnemyType(), p.x, p.y, false));
+  }
+  const itemCount = rndRange(MAP_ITEM_MIN, MAP_ITEM_MAX);
   for (let i = 0; i < itemCount; i++) {
-    const p = randomFreeCellIn(rooms[rnd(rooms.length)]);
-    if (!p) continue;
-    // パワーパーツは少し出にくくする
-    let key = itemKeys[rnd(itemKeys.length)];
-    if (key === "power" && Math.random() < 0.5) key = itemKeys[rnd(2)];
-    items.push({ x: p.x, y: p.y, type: ITEM_TYPES[key] });
+    const p = freeCellIn(rooms[rnd(rooms.length)]);
+    if (p) groundItems.push({ x: p.x, y: p.y, key: Math.random() < 0.5 ? "repair" : "cell" });
   }
   updateFov();
 }
 
-// ===== 視界 =====
+// ================================================================
+//  視界
+// ================================================================
 function updateFov() {
   for (let y = 0; y < MAP_H; y++) visible[y].fill(false);
   for (let dy = -FOV_RADIUS; dy <= FOV_RADIUS; dy++) {
@@ -229,7 +401,7 @@ function updateFov() {
   }
 }
 function lineOfSight(x0, y0, x1, y1) {
-  let dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+  const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
   const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
   let err = dx - dy, x = x0, y = y0;
   while (!(x === x1 && y === y1)) {
@@ -241,82 +413,59 @@ function lineOfSight(x0, y0, x1, y1) {
   return true;
 }
 
-// ===== ログ =====
+// ================================================================
+//  ログ
+// ================================================================
 function log(msg) {
   logLines.push(msg);
   while (logLines.length > 3) logLines.shift();
-  const divs = document.querySelectorAll("#log div");
-  const pad = 3 - logLines.length;
-  divs.forEach((d, i) => { d.textContent = i < pad ? "" : logLines[i - pad]; });
+  renderLog();
+}
+function renderLog() {
+  for (const id of ["mapLog", "battleLog"]) {
+    const divs = $(id).children, pad = 3 - logLines.length;
+    for (let i = 0; i < 3; i++) divs[i].textContent = i < pad ? "" : logLines[i - pad];
+  }
 }
 
-// ===== ターン処理 =====
+// ================================================================
+//  マップでの行動
+// ================================================================
 const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0], wait: [0, 0] };
 
-function playerAct(dir) {
-  if (gameOver) return;
+function playerMove(dir) {
+  if (mode !== "map") return;
   const [dx, dy] = DIRS[dir];
   const nx = player.x + dx, ny = player.y + dy;
 
-  if (dx !== 0 || dy !== 0) {
+  if (dx || dy) {
     const target = enemies.find(e => e.x === nx && e.y === ny);
-    if (target) {
-      attackEnemy(target);
-    } else if (map[ny][nx] === WALL) {
-      return; // 壁にはぶつかるだけでターンを消費しない
-    } else {
-      player.x = nx; player.y = ny;
-      pickUpItem();
-      if (map[ny][nx] === STAIRS) {
-        descend();
-        render();
-        return;
-      }
-    }
+    if (target) { startBattle(target); return; }
+    if (map[ny][nx] === WALL) return;
+    player.x = nx; player.y = ny;
+    pickUpGround();
+    if (map[ny][nx] === STAIRS) { descend(); return; }
   }
 
-  // エネルギー消費
   if (player.energy > 0) {
     player.energy = Math.max(0, player.energy - ENERGY_PER_STEP);
-    if (player.energy === 0) log("エネルギー切れ！ 機体が損傷していく…");
+    if (player.energy === 0) log("エネルギー切れ！ 歩くたびに機体が損傷する…");
   } else {
     player.hp -= STARVE_DAMAGE;
-    if (checkDeath("エネルギー切れ")) { render(); return; }
+    if (player.hp <= 0) { player.hp = 0; renderMap(); gameOver("エネルギー切れで機能停止した…"); return; }
   }
 
   enemiesAct();
   updateFov();
-  render();
+  renderMap();
 }
 
-function attackEnemy(e) {
-  e.hp -= player.atk;
-  e.awake = true;
-  if (e.hp <= 0) {
-    log(`${e.type.name}に${player.atk}ダメージ！ 破壊した！`);
-    enemies = enemies.filter(o => o !== e);
-  } else {
-    log(`${e.type.name}に${player.atk}ダメージ！`);
-  }
-}
-
-function pickUpItem() {
-  const it = items.find(i => i.x === player.x && i.y === player.y);
+function pickUpGround() {
+  const it = groundItems.find(i => i.x === player.x && i.y === player.y);
   if (!it) return;
-  items = items.filter(i => i !== it);
-  const t = it.type;
-  if (t === ITEM_TYPES.repair) {
-    const before = player.hp;
-    player.hp = Math.min(player.maxHp, player.hp + t.value);
-    log(`${t.name}を拾った。HPが${player.hp - before}回復。`);
-  } else if (t === ITEM_TYPES.cell) {
-    const before = player.energy;
-    player.energy = Math.min(PLAYER_ENERGY, player.energy + t.value);
-    log(`${t.name}を拾った。エネルギーが${player.energy - before}回復。`);
-  } else if (t === ITEM_TYPES.power) {
-    player.atk += t.value;
-    log(`${t.name}を拾った。攻撃力が${t.value}上がった！`);
-  }
+  groundItems = groundItems.filter(i => i !== it);
+  player.items[it.key]++;
+  log(`${ITEMS[it.key].name}を拾った。（所持${player.items[it.key]}）`);
 }
 
 function descend() {
@@ -324,25 +473,22 @@ function descend() {
   const before = player.energy;
   player.energy = Math.min(PLAYER_ENERGY, player.energy + STAIRS_ENERGY_BONUS);
   newFloor();
-  log(`階段を降りた。地下${floorNo}階。（EN+${player.energy - before}）`);
+  log(`地下${floorNo}階へ降りた。（EN+${player.energy - before}）`);
+  if (BOSSES[floorNo]) log("強い気配がする…。階段の前に何かいる。");
+  renderMap();
 }
 
 function enemiesAct() {
   for (const e of enemies) {
-    if (gameOver) return;
+    if (e.boss) continue;                 // ボスは階段から動かない
+    if (e.stun > 0) { e.stun--; continue; }
     const dist = Math.abs(e.x - player.x) + Math.abs(e.y - player.y);
     if (!e.awake && dist <= ENEMY_SIGHT && lineOfSight(e.x, e.y, player.x, player.y)) e.awake = true;
 
-    if (dist === 1) {
-      player.hp -= e.atk;
-      log(`${e.type.name}の攻撃！ ${e.atk}ダメージ。`);
-      if (checkDeath(e.type.name)) return;
-      continue;
-    }
     if (e.awake) {
+      if (dist === 1) { startBattle(e); return; }  // 体当たりしてきた
       const sx = Math.sign(player.x - e.x), sy = Math.sign(player.y - e.y);
-      const tries = Math.abs(player.x - e.x) >= Math.abs(player.y - e.y)
-        ? [[sx, 0], [0, sy]] : [[0, sy], [sx, 0]];
+      const tries = Math.abs(player.x - e.x) >= Math.abs(player.y - e.y) ? [[sx, 0], [0, sy]] : [[0, sy], [sx, 0]];
       for (const [mx, my] of tries) {
         if ((mx || my) && canEnemyMove(e.x + mx, e.y + my)) { e.x += mx; e.y += my; break; }
       }
@@ -353,43 +499,413 @@ function enemiesAct() {
   }
 }
 function canEnemyMove(x, y) {
-  if (map[y][x] === WALL) return false;
+  if (map[y][x] !== FLOOR) return false;
   if (player.x === x && player.y === y) return false;
   return !enemies.some(o => o.x === x && o.y === y);
 }
 
-function checkDeath(cause) {
-  if (player.hp > 0) return false;
-  player.hp = 0;
-  gameOver = true;
-  log(`${cause}によって機能停止した…`);
-  document.getElementById("result").textContent = `到達階：地下${floorNo}階`;
-  document.getElementById("overlay").classList.add("show");
-  return true;
+// ================================================================
+//  バトル
+// ================================================================
+function startBattle(e) {
+  mode = "battle";
+  e.awake = true;
+  battle = { enemy: e, menu: "main", busy: false, guard: 0, focus: 0 };
+  log(e.boss ? `ボス「${e.name}」が立ちはだかる！` : `${e.name}が現れた！`);
+  $("mapScreen").hidden = true;
+  $("battle").hidden = false;
+  const sp = $("eSprite");
+  sp.className = "sprite" + (e.boss ? " boss" : "");
+  sp.textContent = e.ch;
+  sp.style.color = e.color;
+  sp.style.borderColor = e.color;
+  sp.style.background = e.color + "22";
+  $("fx").textContent = "";
+  renderBattle();
 }
 
-// ===== 描画 =====
+function endBattle() {
+  battle = null;
+  mode = "map";
+  $("battle").hidden = true;
+  $("mapScreen").hidden = false;
+  updateFov();
+  resize();
+}
+
+function varied(power) { return Math.max(1, power + rndRange(-DAMAGE_VARIANCE, DAMAGE_VARIANCE)); }
+
+function playerHit(label, power, acc) {
+  const e = battle.enemy;
+  if (!roll(acc)) { log(`${label}！ …しかし外れた。`); showFx("MISS", "#aaa"); return; }
+  const dmg = varied(power);
+  e.hp = Math.max(0, e.hp - dmg);
+  log(`${label}！ ${e.name}に${dmg}ダメージ。`);
+  showFx(`-${dmg}`, "#ffd447");
+  anim($("eSprite"), "hit");
+}
+
+function anim(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+function showFx(text, color) { const f = $("fx"); f.textContent = text; f.style.color = color; }
+
+function levelUpSkill(id) {
+  if (player.skills[id] < SKILL_MAX_LEVEL) {
+    player.skills[id]++;
+    const s = SKILLS.find(s => s.id === id);
+    log(`${s.name}のレベルが${player.skills[id]}に上がった！`);
+  }
+}
+
+// 各コマンドの中身。"escaped" を返すとバトル終了
+const ACTIONS = {
+  tackle() { playerHit(TACKLE.name, TACKLE.power, TACKLE.acc); },
+  weapon(slot) {
+    const part = partById(player.parts[player.equip[slot]]);
+    player.energy -= part.en;
+    const acc = Math.min(100, part.acc + battle.focus);
+    battle.focus = 0;
+    playerHit(part.name, part.power, acc);
+  },
+  skill(id) {
+    const s = SKILLS.find(s => s.id === id), lv = player.skills[id];
+    if (id === "double") {
+      log(`${s.name}！`);
+      playerHit("1発目", s.hitPower(lv), s.hitAcc(lv));
+      if (battle.enemy.hp > 0) playerHit("2発目", s.hitPower(lv), s.hitAcc(lv));
+    } else if (id === "guard") {
+      battle.guard = s.ratio(lv);
+      log(`${s.name}の構え！ 次の被ダメージを${Math.round(battle.guard * 100)}%に抑える。`);
+    } else if (id === "focus") {
+      battle.focus = s.bonus(lv);
+      log(`${s.name}！ 次のぶそうの命中が+${battle.focus}%。`);
+    }
+    levelUpSkill(id);
+  },
+  item(key) {
+    player.items[key]--;
+    if (key === "repair") {
+      const before = player.hp;
+      player.hp = Math.min(player.maxHp, player.hp + ITEMS.repair.value);
+      log(`${ITEMS.repair.name}を使った。HPが${player.hp - before}回復。`);
+    } else {
+      const before = player.energy;
+      player.energy = Math.min(PLAYER_ENERGY, player.energy + ITEMS.cell.value);
+      log(`${ITEMS.cell.name}を使った。ENが${player.energy - before}回復。`);
+    }
+  },
+  escape() {
+    if (roll(ESCAPE_RATE)) {
+      log("うまく逃げ切った！");
+      battle.enemy.stun = ESCAPE_STUN_TURNS;
+      return "escaped";
+    }
+    log("逃げられなかった！");
+  },
+};
+
+async function runTurn(action, arg) {
+  if (!battle || battle.busy) return;
+  battle.busy = true;
+  battle.menu = "main";
+  const result = ACTIONS[action](arg);
+  renderBattle();
+  await sleep(550);
+
+  if (result === "escaped") { endBattle(); return; }
+  if (battle.enemy.hp <= 0) { await winBattle(); return; }
+
+  enemyTurn();
+  renderBattle();
+  if (player.hp <= 0) {
+    await sleep(600);
+    gameOver(`${battle.enemy.name}に倒された…`);
+    return;
+  }
+  await sleep(250);
+  battle.busy = false;
+  renderBattle();
+}
+
+function enemyTurn() {
+  const e = battle.enemy;
+  let power = e.atk, acc = e.acc, label = `${e.name}の攻撃`;
+  if (e.boss && Math.random() < BOSS_HEAVY_RATE) {
+    power = Math.round(e.atk * 1.5); acc -= 10; label = `${e.name}の強攻撃`;
+  }
+  if (!roll(acc)) {
+    log(`${label}！ …ひらりとかわした。`);
+    showFx("回避", "#8fd");
+  } else {
+    let dmg = varied(power);
+    if (battle.guard) dmg = Math.max(1, Math.round(dmg * battle.guard));
+    player.hp = Math.max(0, player.hp - dmg);
+    log(`${label}！ ${dmg}ダメージを受けた${battle.guard ? "（防御）" : ""}。`);
+    showFx(`-${dmg}`, "#ff6a6a");
+    anim($("pSprite"), "flash");
+    battle.guard = 0;   // 攻撃を受けたら防御は消える
+  }
+}
+
+async function winBattle() {
+  const e = battle.enemy;
+  $("eSprite").classList.add("dead");
+  enemies = enemies.filter(o => o !== e);
+  log(`${e.name}を破壊した！`);
+
+  if (e.boss && floorNo >= FINAL_FLOOR) {
+    renderBattle();
+    await sleep(900);
+    gameClear();
+    return;
+  }
+
+  let partId = null;
+  if (e.boss) {
+    partId = e.def.drops[rnd(e.def.drops.length)];
+  } else if (Math.random() < PART_DROP_RATE) {
+    // 浅い階では系統内の弱いものが出やすい
+    const pool = PARTS.filter(p => p.type === e.def.drop);
+    const maxIdx = Math.min(pool.length, 1 + Math.floor(floorNo / 3));
+    partId = pool[rnd(maxIdx)].id;
+  }
+  if (partId) gainPart(partId);
+  if (Math.random() < ITEM_DROP_RATE) {
+    const key = Math.random() < 0.5 ? "repair" : "cell";
+    player.items[key]++;
+    log(`${ITEMS[key].name}を手に入れた。`);
+  }
+  if (e.boss) log("階段への道が開いた！");
+
+  battle.menu = "result";
+  battle.busy = false;
+  renderBattle();
+}
+
+function gainPart(id) {
+  player.parts.push(id);
+  const idx = player.parts.length - 1;
+  const free = player.equip.indexOf(null);
+  if (free >= 0) {
+    player.equip[free] = idx;
+    log(`パーツ「${partById(id).name}」を入手、スロット${free + 1}に装備した！`);
+  } else {
+    log(`パーツ「${partById(id).name}」を入手！（メニューで装備）`);
+  }
+}
+
+// コマンド一覧を作る
+function battleCommands() {
+  const b = battle, cmds = [];
+  const back = { label: "もどる", back: true, act: () => { b.menu = "main"; renderBattle(); } };
+  if (b.menu === "main") {
+    cmds.push({ label: "たいあたり", sub: `威力${TACKLE.power} 命中${TACKLE.acc}%`, act: () => runTurn("tackle") });
+    cmds.push({ label: "ぶそう", sub: "パーツで攻撃", act: () => { b.menu = "weapon"; renderBattle(); } });
+    cmds.push({ label: "スキル", sub: "技を使う", act: () => { b.menu = "skill"; renderBattle(); } });
+    cmds.push({ label: "アイテム", sub: `修理${player.items.repair} セル${player.items.cell}`, act: () => { b.menu = "item"; renderBattle(); } });
+    cmds.push({ label: "にげる", sub: b.enemy.boss ? "ボスからは逃げられない" : `成功率${ESCAPE_RATE}%`,
+                disabled: b.enemy.boss, act: () => runTurn("escape") });
+  } else if (b.menu === "weapon") {
+    player.equip.forEach((pi, slot) => {
+      if (pi === null) { cmds.push({ label: `スロット${slot + 1}：なし`, disabled: true }); return; }
+      const p = partById(player.parts[pi]);
+      const acc = Math.min(100, p.acc + b.focus);
+      cmds.push({ label: p.name, sub: `威力${p.power} 命中${acc}% EN${p.en}`,
+                  disabled: player.energy < p.en, act: () => runTurn("weapon", slot) });
+    });
+    cmds.push(back);
+  } else if (b.menu === "skill") {
+    for (const s of SKILLS) {
+      const lv = player.skills[s.id];
+      cmds.push({ label: `${s.name} Lv${lv}`, sub: s.desc(lv), act: () => runTurn("skill", s.id) });
+    }
+    cmds.push(back);
+  } else if (b.menu === "item") {
+    cmds.push({ label: `${ITEMS.repair.name} ×${player.items.repair}`, sub: `HP+${ITEMS.repair.value}`,
+                disabled: player.items.repair <= 0 || player.hp >= player.maxHp, act: () => runTurn("item", "repair") });
+    cmds.push({ label: `${ITEMS.cell.name} ×${player.items.cell}`, sub: `EN+${ITEMS.cell.value}`,
+                disabled: player.items.cell <= 0 || player.energy >= PLAYER_ENERGY, act: () => runTurn("item", "cell") });
+    cmds.push(back);
+  } else if (b.menu === "result") {
+    cmds.push({ label: "つづける", sub: "マップにもどる", act: endBattle });
+  }
+  return cmds;
+}
+
+let currentCmds = [];
+function renderBattle() {
+  const e = battle.enemy;
+  $("eName").textContent = (e.boss ? "BOSS " : "") + e.name;
+  $("eHpText").textContent = `HP ${e.hp}/${e.maxHp}`;
+  $("eHpBar").firstElementChild.style.width = (100 * e.hp / e.maxHp) + "%";
+  $("bHp").textContent = `${player.hp}/${player.maxHp}`;
+  $("bHp").classList.toggle("low", player.hp <= player.maxHp * 0.3);
+  $("bEn").textContent = player.energy;
+  $("bHpBar").firstElementChild.style.width = (100 * player.hp / player.maxHp) + "%";
+  $("bEnBar").firstElementChild.style.width = (100 * player.energy / PLAYER_ENERGY) + "%";
+  const st = [];
+  if (battle.guard) st.push(`防御中（${Math.round(battle.guard * 100)}%）`);
+  if (battle.focus) st.push(`集中中（命中+${battle.focus}%）`);
+  $("bState").textContent = st.join("　");
+
+  const titles = { main: "コマンド", weapon: "ぶそう：パーツを選ぶ", skill: "スキルを選ぶ", item: "アイテムを選ぶ", result: "勝利！" };
+  $("cmdTitle").textContent = titles[battle.menu];
+
+  currentCmds = battleCommands();
+  const box = $("cmds");
+  box.textContent = "";
+  currentCmds.forEach((c, i) => {
+    const btn = document.createElement("button");
+    const keyLabel = c.back ? "0" : String(i + 1);
+    btn.innerHTML = `<span><span class="k">${keyLabel}</span></span>`;
+    btn.firstChild.append(c.label);
+    if (c.sub) { const sm = document.createElement("small"); sm.textContent = c.sub; btn.append(sm); }
+    if (c.back) btn.classList.add("back");
+    btn.disabled = !!c.disabled || battle.busy;
+    btn.addEventListener("click", () => { if (!btn.disabled && c.act) c.act(); });
+    box.append(btn);
+  });
+}
+
+function battleKey(key) {
+  if (!battle || battle.busy) return false;
+  if (key === "0" || key === "Escape" || key === "Backspace") {
+    const back = currentCmds.find(c => c.back);
+    if (back) { back.act(); return true; }
+    return false;
+  }
+  if (key === "Enter" && battle.menu === "result") { endBattle(); return true; }
+  const n = parseInt(key, 10);
+  if (n >= 1 && n <= currentCmds.length) {
+    const c = currentCmds[n - 1];
+    if (!c.disabled && !c.back && c.act) c.act();
+    return true;
+  }
+  return false;
+}
+
+// ================================================================
+//  メニュー（装備の付け替え・アイテム・スキル）
+// ================================================================
+function openMenu() {
+  if (mode !== "map") return;
+  mode = "menu";
+  menuPending = null;
+  renderMenu();
+  $("menu").hidden = false;
+}
+function closeMenu() {
+  $("menu").hidden = true;
+  mode = "map";
+  renderMap();
+}
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+function partInfo(id, extra) {
+  const p = partById(id), info = el("div", "info");
+  const name = el("div");
+  name.append(el("span", "tag " + p.type, PART_TYPE_LABEL[p.type]), p.name);
+  if (extra) name.append(el("span", "eq", extra));
+  info.append(name, el("small", "", `威力${p.power}　命中${p.acc}%　EN${p.en}`));
+  return info;
+}
+function rowButton(label, fn, disabled) {
+  const b = el("button", "", label);
+  b.disabled = !!disabled;
+  b.addEventListener("click", fn);
+  return b;
+}
+
+function renderMenu() {
+  const body = $("menuBody");
+  body.textContent = "";
+
+  body.append(el("h3", "", `装備スロット（${SLOT_COUNT}）`));
+  player.equip.forEach((pi, slot) => {
+    const row = el("div", "mrow");
+    if (pi === null) row.append(el("div", "info empty", `スロット${slot + 1}：なし`));
+    else row.append(partInfo(player.parts[pi], `スロット${slot + 1}`));
+    const btns = el("div", "btns");
+    if (menuPending !== null) {
+      btns.append(rowButton("ここに装備", () => { player.equip[slot] = menuPending; menuPending = null; renderMenu(); }));
+    } else if (pi !== null) {
+      btns.append(rowButton("はずす", () => { player.equip[slot] = null; renderMenu(); }));
+    }
+    row.append(btns);
+    body.append(row);
+  });
+
+  body.append(el("h3", "", "所持パーツ"));
+  const unequipped = player.parts.map((id, i) => i).filter(i => !player.equip.includes(i));
+  if (unequipped.length === 0) body.append(el("div", "mrow empty", "装備していないパーツはありません"));
+  for (const i of unequipped) {
+    const row = el("div", "mrow");
+    row.append(partInfo(player.parts[i], menuPending === i ? "← 装備先のスロットを選んでください" : ""));
+    const btns = el("div", "btns");
+    if (menuPending === i) {
+      btns.append(rowButton("やめる", () => { menuPending = null; renderMenu(); }));
+    } else {
+      btns.append(rowButton("装備", () => {
+        const free = player.equip.indexOf(null);
+        if (free >= 0) player.equip[free] = i; else menuPending = i;
+        renderMenu();
+      }));
+    }
+    row.append(btns);
+    body.append(row);
+  }
+
+  body.append(el("h3", "", "アイテム"));
+  for (const key of ["repair", "cell"]) {
+    const it = ITEMS[key], row = el("div", "mrow");
+    const info = el("div", "info", `${it.name} ×${player.items[key]}`);
+    info.append(el("small", "", key === "repair" ? `HP+${it.value}（いま ${player.hp}/${player.maxHp}）` : `EN+${it.value}（いま ${player.energy}/${PLAYER_ENERGY}）`));
+    const full = key === "repair" ? player.hp >= player.maxHp : player.energy >= PLAYER_ENERGY;
+    const btns = el("div", "btns");
+    btns.append(rowButton("使う", () => { ACTIONS.item(key); renderMenu(); }, player.items[key] <= 0 || full));
+    row.append(info, btns);
+    body.append(row);
+  }
+
+  body.append(el("h3", "", "スキル（使うたびにレベルアップ）"));
+  for (const s of SKILLS) {
+    const lv = player.skills[s.id], row = el("div", "mrow");
+    const info = el("div", "info", `${s.name}　Lv${lv}${lv >= SKILL_MAX_LEVEL ? "（最大）" : ""}`);
+    info.append(el("small", "", s.desc(lv)));
+    row.append(info);
+    body.append(row);
+  }
+}
+
+// ================================================================
+//  描画（マップ）
+// ================================================================
 function resize() {
-  const padH = 3 * 56 + 2 * 6 + 10;
-  const reserved = 40 + 70 + padH + 30;  // ステータス・ログ・十字ボタン・余白
-  const byW = Math.floor((Math.min(window.innerWidth, 520) - 18) / VIEW);
-  const byH = Math.floor((window.innerHeight - reserved) / VIEW);
+  if (mode === "battle") return;
+  const byW = Math.floor((Math.min(window.innerWidth, 520) - 26) / VIEW);
+  // キャンバス以外が占める高さを測ってから、残りでマスの大きさを決める
+  const others = $("mapScreen").offsetHeight - cv.offsetHeight + 24;
+  const byH = Math.floor((window.innerHeight - others) / VIEW);
   tile = Math.max(14, Math.min(32, byW, byH));
   const dpr = window.devicePixelRatio || 1;
   cv.style.width = cv.style.height = tile * VIEW + "px";
   cv.width = cv.height = Math.round(tile * VIEW * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  if (player) render();
+  if (player) renderMap();
 }
 
-function render() {
-  // カメラ（プレイヤー中心、マップ端で止める）
+function renderMap() {
   const half = VIEW >> 1;
   const camX = Math.max(0, Math.min(MAP_W - VIEW, player.x - half));
   const camY = Math.max(0, Math.min(MAP_H - VIEW, player.y - half));
+  const size = tile * VIEW;
 
   ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, tile * VIEW, tile * VIEW);
+  ctx.fillRect(0, 0, size, size);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.font = `bold ${Math.floor(tile * 0.75)}px monospace`;
@@ -398,9 +914,7 @@ function render() {
     for (let vx = 0; vx < VIEW; vx++) {
       const x = camX + vx, y = camY + vy;
       if (!seen[y][x]) continue;
-      const vis = visible[y][x];
-      const px = vx * tile, py = vy * tile;
-      const t = map[y][x];
+      const vis = visible[y][x], px = vx * tile, py = vy * tile, t = map[y][x];
       if (t === WALL) {
         ctx.fillStyle = vis ? "#5a5248" : "#2a2622";
         ctx.fillRect(px, py, tile, tile);
@@ -411,25 +925,25 @@ function render() {
       }
     }
   }
-  for (const it of items) {
+  const toScreen = (x, y) => [(x - camX) * tile, (y - camY) * tile];
+  for (const it of groundItems) {
     if (!seen[it.y][it.x]) continue;
-    const vis = visible[it.y][it.x];
-    drawChar(it.type.ch, (it.x - camX) * tile, (it.y - camY) * tile, vis ? it.type.color : "#555");
+    drawChar(ITEMS[it.key].ch, ...toScreen(it.x, it.y), visible[it.y][it.x] ? ITEMS[it.key].color : "#555");
   }
   for (const e of enemies) {
     if (!visible[e.y][e.x]) continue;
-    const px = (e.x - camX) * tile, py = (e.y - camY) * tile;
-    if (px < 0 || py < 0 || px >= tile * VIEW || py >= tile * VIEW) continue;
-    drawChar(e.type.ch, px, py, e.type.color);
-    // HPバー
+    const [px, py] = toScreen(e.x, e.y);
+    if (e.boss) {
+      ctx.fillStyle = "#4a1a1a";
+      ctx.fillRect(px + 1, py + 1, tile - 2, tile - 2);
+    }
+    drawChar(e.ch, px, py, e.stun > 0 ? "#777" : e.color);
     if (e.hp < e.maxHp) {
-      ctx.fillStyle = "#400";
-      ctx.fillRect(px + 2, py + tile - 4, tile - 4, 3);
-      ctx.fillStyle = "#f44";
-      ctx.fillRect(px + 2, py + tile - 4, (tile - 4) * e.hp / e.maxHp, 3);
+      ctx.fillStyle = "#400"; ctx.fillRect(px + 2, py + tile - 4, tile - 4, 3);
+      ctx.fillStyle = "#f44"; ctx.fillRect(px + 2, py + tile - 4, (tile - 4) * e.hp / e.maxHp, 3);
     }
   }
-  drawChar("@", (player.x - camX) * tile, (player.y - camY) * tile, "#ffe24a");
+  drawChar("@", ...toScreen(player.x, player.y), "#ffd447");
   updateStatus();
 }
 function drawChar(ch, px, py, color) {
@@ -437,66 +951,112 @@ function drawChar(ch, px, py, color) {
   ctx.fillStyle = color;
   ctx.fillText(ch, px + tile / 2, py + tile / 2 + 1);
 }
-
 function updateStatus() {
-  document.getElementById("floor").textContent = floorNo;
-  document.getElementById("hp").textContent = player.hp;
-  document.getElementById("maxhp").textContent = player.maxHp;
-  document.getElementById("en").textContent = player.energy;
-  document.getElementById("atk").textContent = player.atk;
-  document.querySelector("#hpbar i").style.width = (100 * player.hp / player.maxHp) + "%";
-  document.querySelector("#enbar i").style.width = (100 * player.energy / PLAYER_ENERGY) + "%";
-  document.getElementById("hp").style.color = player.hp <= player.maxHp * 0.3 ? "#f66" : "";
-  document.getElementById("en").style.color = player.energy <= 20 ? "#f66" : "";
+  $("floor").textContent = floorNo;
+  $("hp").textContent = player.hp;
+  $("maxhp").textContent = player.maxHp;
+  $("en").textContent = player.energy;
+  $("hpbar").firstElementChild.style.width = (100 * player.hp / player.maxHp) + "%";
+  $("enbar").firstElementChild.style.width = (100 * player.energy / PLAYER_ENERGY) + "%";
+  $("hp").classList.toggle("low", player.hp <= player.maxHp * 0.3);
+  $("en").classList.toggle("low", player.energy <= 20);
 }
 
-// ===== 開始 =====
+// ================================================================
+//  ゲームの開始・終了
+// ================================================================
 function startGame() {
   floorNo = 1;
-  gameOver = false;
   logLines = [];
-  player = { x: 0, y: 0, hp: PLAYER_HP, maxHp: PLAYER_HP, atk: PLAYER_ATK, energy: PLAYER_ENERGY };
-  document.getElementById("overlay").classList.remove("show");
-  document.querySelectorAll("#log div").forEach(d => d.textContent = "");
+  player = {
+    x: 0, y: 0, hp: PLAYER_HP, maxHp: PLAYER_HP, energy: PLAYER_ENERGY,
+    parts: [...STARTING_PARTS],
+    equip: new Array(SLOT_COUNT).fill(null),
+    items: { ...STARTING_ITEMS },
+    skills: Object.fromEntries(SKILLS.map(s => [s.id, 1])),
+  };
+  player.parts.forEach((_, i) => { if (i < SLOT_COUNT) player.equip[i] = i; });
+  battle = null;
+  mode = "map";
+  $("endScreen").hidden = true;
+  $("menu").hidden = true;
+  $("battle").hidden = true;
+  $("mapScreen").hidden = false;
   newFloor();
+  renderLog();
   log("地下遺跡に潜入した。階段 > を探せ。");
-  render();
+  resize();
 }
 
-// ===== 入力 =====
+function gameOver(msg) {
+  mode = "over";
+  log(msg);
+  $("endTitle").textContent = "機能停止…";
+  $("endTitle").style.color = "#ff6a6a";
+  $("endText").textContent = `${msg}　到達階：地下${floorNo}階`;
+  $("endScreen").hidden = false;
+  $("retry").focus();
+}
+
+function gameClear() {
+  mode = "over";
+  $("endTitle").textContent = "遺跡踏破！";
+  $("endTitle").style.color = "#ffd447";
+  $("endText").textContent = `地下${floorNo}階の守護機を倒し、遺跡の最深部にたどり着いた！`;
+  $("endScreen").hidden = false;
+  $("retry").focus();
+}
+
+// ================================================================
+//  入力
+// ================================================================
 const KEYMAP = {
   ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
-  w: "up", s: "down", a: "left", d: "right",
-  W: "up", S: "down", A: "left", D: "right",
+  w: "up", s: "down", a: "left", d: "right", W: "up", S: "down", A: "left", D: "right",
   " ": "wait", ".": "wait",
 };
-document.addEventListener("keydown", (ev) => {
-  if (gameOver && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); startGame(); return; }
+document.addEventListener("keydown", ev => {
+  if (mode === "over") {
+    if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); startGame(); }
+    return;
+  }
+  if (mode === "menu") {
+    if (ev.key === "Escape" || ev.key === "m" || ev.key === "M") { ev.preventDefault(); closeMenu(); }
+    return;
+  }
+  if (mode === "battle") {
+    if (battleKey(ev.key)) ev.preventDefault();
+    return;
+  }
+  if (ev.key === "m" || ev.key === "M") { ev.preventDefault(); openMenu(); return; }
   const dir = KEYMAP[ev.key];
   if (!dir) return;
   ev.preventDefault();
-  playerAct(dir);
+  playerMove(dir);
 });
 
 // 十字ボタン：押しっぱなしで連続移動
 let holdTimer = null;
 function stopHold() { clearTimeout(holdTimer); clearInterval(holdTimer); holdTimer = null; }
 document.querySelectorAll("#pad button").forEach(btn => {
-  btn.addEventListener("pointerdown", (ev) => {
+  btn.addEventListener("pointerdown", ev => {
     ev.preventDefault();
     stopHold();
     const dir = btn.dataset.dir;
-    playerAct(dir);
+    playerMove(dir);
     if (dir === "wait") return;
-    holdTimer = setTimeout(() => { holdTimer = setInterval(() => playerAct(dir), 120); }, 350);
+    holdTimer = setTimeout(() => {
+      holdTimer = setInterval(() => { if (mode === "map") playerMove(dir); else stopHold(); }, 130);
+    }, 350);
   });
   ["pointerup", "pointerleave", "pointercancel"].forEach(t => btn.addEventListener(t, stopHold));
   btn.addEventListener("contextmenu", ev => ev.preventDefault());
 });
-document.getElementById("retry").addEventListener("click", startGame);
+$("menuBtn").addEventListener("click", openMenu);
+$("menuClose").addEventListener("click", closeMenu);
+$("retry").addEventListener("click", startGame);
 window.addEventListener("resize", resize);
 
-resize();
 startGame();
 </script>
 </body>
