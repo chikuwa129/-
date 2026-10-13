@@ -22,6 +22,7 @@
   button { font-family: inherit; color: var(--fg); touch-action: manipulation; cursor: pointer; }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   button:disabled { opacity: 0.35; cursor: default; }
+  canvas.px, #cv { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
   #app {
     max-width: 520px; margin: 0 auto; min-height: 100%;
     display: flex; flex-direction: column; align-items: center;
@@ -42,40 +43,43 @@
   #select p.lead { margin: 0; color: var(--dim); font-size: 13px; text-align: center; }
   #typeList { width: 100%; display: grid; gap: 10px; }
   .typeCard {
-    width: 100%; text-align: left; padding: 12px 14px; border-radius: 10px;
-    background: var(--panel); border: 1px solid #50525c; display: grid; gap: 6px;
+    width: 100%; text-align: left; padding: 10px 12px; border-radius: 10px;
+    background: var(--panel); border: 1px solid #50525c;
+    display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; align-items: center;
   }
   .typeCard:hover, .typeCard:focus-visible { border-color: var(--accent); }
+  .typeCard canvas { grid-row: 1 / 4; }
   .typeCard .tname { font-size: 18px; font-weight: bold; }
-  .typeCard .tname small { font-size: 12px; color: var(--dim); font-weight: normal; margin-left: 8px; }
+  .typeCard .tname small { font-size: 12px; color: var(--dim); font-weight: normal; margin-left: 6px; }
   .typeCard .k { color: var(--accent); font-size: 12px; margin-right: 6px; }
-  .typeCard .desc { font-size: 13px; color: #c4c5cc; }
-  .typeCard .stats { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .typeCard .desc { font-size: 12px; color: #c4c5cc; }
+  .typeCard .stats { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 12px; font-variant-numeric: tabular-nums; }
   .typeCard .stats b { color: #fff; }
 
   /* マップ画面 */
   #status { width: 100%; display: grid; gap: 3px; font-size: 13px; font-variant-numeric: tabular-nums; }
   #floorLabel { font-size: 15px; font-weight: bold; }
+  #teamRows { display: grid; gap: 3px; min-height: calc(3 * 19px + 6px); align-content: start; }
   #floorLabel.bossfl { color: var(--boss); }
   .trow { display: grid; grid-template-columns: minmax(0, 1fr) 70px 64px 52px; align-items: center; gap: 6px; }
   .trow .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .trow .nm small { color: var(--dim); }
   .trow .bar { width: 100%; }
   .trow .num { text-align: right; }
+  #cv { background: #000; }
 
-  canvas { display: block; background: #000; border: 1px solid var(--line); }
-
+  /* 高さを固定して、長い行が折り返しても画面がずれないようにする（新しい行が下に残る） */
   .log {
-    width: 100%; min-height: 4.4em; padding: 4px 8px;
+    width: 100%; height: calc(4 * 1.45em + 10px); padding: 4px 8px; overflow: hidden;
+    display: flex; flex-direction: column; justify-content: flex-end;
     background: var(--panel); border: 1px solid var(--line); font-size: 13px; line-height: 1.45em;
   }
-  .log div { min-height: 1.45em; }
-  .log div:nth-child(1) { color: #777; }
-  .log div:nth-child(2) { color: #aaa; }
-  .log div:nth-child(3) { color: #fff; }
+  .log div { min-height: 1.45em; flex-shrink: 0; }
+  .log div:nth-child(1) { opacity: .5; }
+  .log div:nth-child(2) { opacity: .75; }
 
   #controls { display: flex; align-items: center; gap: 18px; }
-  #pad { display: grid; grid-template-columns: repeat(3, 58px); grid-template-rows: repeat(3, 50px); gap: 6px; }
+  #pad { display: grid; grid-template-columns: repeat(3, 58px); grid-template-rows: repeat(3, 48px); gap: 6px; }
   #pad button, #menuBtn { font-size: 20px; background: #26272d; border: 1px solid #50525c; border-radius: 10px; }
   #pad button:active, #menuBtn:active { background: #3a3c44; }
   #pad .wait { font-size: 13px; }
@@ -86,38 +90,31 @@
     #pad button { font-size: 16px; }
     #menuBtn { height: 52px; }
   }
+  @media (pointer: coarse) { #help { display: none; } }
 
   /* バトル画面 */
   .ehead { width: 100%; display: flex; flex-direction: column; gap: 4px; }
   .ehead .row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-variant-numeric: tabular-nums; }
   #eName { font-size: 17px; font-weight: bold; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #eHpText { flex-shrink: 0; }
   #eName.boss { color: var(--boss); }
+  #eHpText { flex-shrink: 0; }
   #charge { color: #1a1206; background: #ffb02e; font-weight: bold; font-size: 13px; padding: 2px 8px; border-radius: 4px; align-self: flex-start; }
   .wide { width: 100%; height: 12px; }
   .arena {
-    position: relative; width: 100%; height: 150px;
-    background: linear-gradient(#17181d 0 60%, #24221e 60% 100%);
+    position: relative; width: 100%;
+    display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 8px;
+    background: linear-gradient(#17181d 0 62%, #24221e 62% 100%);
     border: 1px solid var(--line); border-radius: 6px; overflow: hidden;
   }
-  .arena.bossArena { height: 176px; background: linear-gradient(#1d1214 0 60%, #2a1a1a 60% 100%); }
-  .sprite {
-    position: absolute; display: flex; align-items: center; justify-content: center;
-    font-family: monospace; font-weight: bold; border-radius: 8px; border: 2px solid;
-  }
-  #eSprite { right: 12%; top: 14px; width: 84px; height: 84px; font-size: 46px; }
-  #eSprite.boss { width: 140px; height: 140px; top: 12px; right: 6%; font-size: 84px; border-width: 3px; }
-  #allies { position: absolute; left: 4%; bottom: 10px; display: flex; gap: 8px; align-items: flex-end; }
-  .ally {
-    position: relative; width: 46px; height: 46px; font-size: 26px;
-    background: #22232a; border-width: 2px;
-  }
-  .ally.active { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .arena.bossArena { background: linear-gradient(#1d1214 0 62%, #2a1a1a 62% 100%); }
+  #allies { display: flex; flex-direction: column; gap: 4px; }
+  .ally { padding: 2px; border: 2px solid transparent; border-radius: 6px; }
+  .ally.active { border-color: var(--accent); background: rgba(255, 212, 71, .12); }
   .ally.down { opacity: 0.25; }
   .hit { animation: shake .2s; }
   @keyframes shake { 0%,100% { transform: translateX(0); } 50% { transform: translateX(5px); } }
   @media (prefers-reduced-motion: reduce) { .hit { animation: none; } }
-  #fx { position: absolute; left: 0; right: 0; top: 38%; text-align: center; font-size: 20px; font-weight: bold; pointer-events: none; text-shadow: 0 2px 4px #000; }
+  #fx { position: absolute; left: 0; right: 0; top: 40%; text-align: center; font-size: 20px; font-weight: bold; pointer-events: none; text-shadow: 0 2px 4px #000; }
 
   #party { width: 100%; display: grid; gap: 3px; font-size: 13px; font-variant-numeric: tabular-nums; }
   .prow {
@@ -167,7 +164,9 @@
   .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
   .tabs button { padding: 7px 12px; background: #24252b; border: 1px solid #50525c; border-radius: 6px; font-size: 14px; }
   .tabs button.on { border-color: var(--accent); color: var(--accent); background: #2a2618; }
-  .sgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 12px; font-size: 13px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .unitHead { display: flex; gap: 12px; align-items: center; margin-top: 10px; }
+  .unitHead canvas { flex-shrink: 0; background: #22232a; border-radius: 6px; }
+  .sgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 12px; font-size: 13px; font-variant-numeric: tabular-nums; flex: 1; min-width: 0; }
   .sgrid b { color: #fff; font-weight: normal; }
   .mrow {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -178,6 +177,7 @@
   .mrow .btns { display: flex; gap: 4px; flex-shrink: 0; }
   .mrow button { padding: 6px 10px; background: #2c2d34; border: 1px solid #50525c; border-radius: 6px; font-size: 13px; }
   .mrow button.danger { border-color: #8a3a3a; color: #ff9a9a; }
+  .omakase { width: 100%; margin-top: 8px; padding: 9px; background: #23324a; border: 1px solid #3d8fd9; border-radius: 8px; font-size: 14px; }
   .tag { display: inline-block; font-size: 10px; padding: 1px 5px; border-radius: 3px; margin-right: 4px; vertical-align: 1px; color: #111; }
   .tag.gun { background: #e8c25a; }
   .tag.missile { background: #e98a5a; }
@@ -219,13 +219,13 @@
   <!-- バトル画面 -->
   <section id="battle" class="screen" hidden>
     <div class="ehead">
-      <div class="row"><span id="eName">ガードロボ</span><span id="eHpText">8/8</span></div>
+      <div class="row"><span id="eName">ロールバグ</span><span id="eHpText">8/8</span></div>
       <span class="bar ehp wide" id="eHpBar"><i></i></span>
       <div id="charge" hidden></div>
     </div>
     <div class="arena" id="arena">
-      <div class="sprite" id="eSprite">g</div>
       <div id="allies"></div>
+      <div id="eWrap"></div>
       <div id="fx"></div>
     </div>
     <div id="party"></div>
@@ -249,6 +249,7 @@
   <div class="dialog center">
     <h2 id="endTitle">機能停止…</h2>
     <p id="endText"></p>
+    <p id="endLoot"></p>
     <button class="big" id="retry">もう一度</button>
   </div>
 </div>
@@ -261,7 +262,7 @@
 // ================================================================
 // ?debug=1 を付けたときだけ、全機体のHPを大きくする（テスト用）
 const DEBUG = /[?&]debug=1(&|$)/.test(location.search);
-const DEBUG_HP_BONUS = 600;
+const DEBUG_HP_BONUS = 1500;
 
 const STAIRS_ENERGY_BONUS = 30;    // 次の階へ進んだとき、全員のエネルギー回復
 const WIN_ENERGY_BONUS = 5;        // 戦闘に勝ったとき、生きている全員のエネルギー回復
@@ -283,41 +284,71 @@ const LEVEL_EN_GROWTH = 3;
 const TACKLE_GROWTH = 0.7;                   // たいあたり威力 = 基本 + floor((Lv-1) × これ)
 const EXP_FLOOR_SCALE = 0.1;                 // 経験値 × (1 + これ × (階-1))、切り上げ
 
-// 最初のタイプ（Lv1の値）
+// 最初のタイプ（Lv1の値）。sprite=バトル用の絵
 const START_TYPES = [
-  { key: "assault",   label: "突撃型",   name: "ブレイカー",   hp: 50, en: 80,  tackle: TACKLE_BASE + 2, accBonus: 0,  evade: 0,
-    part: "g1", desc: "HPが高く、たいあたりが強い。正面から殴り合うタイプ。" },
-  { key: "artillery", label: "砲撃型",   name: "キャノニア",   hp: 36, en: 130, tackle: TACKLE_BASE,     accBonus: 0,  evade: 0,
-    part: "m1", desc: "エネルギーが多く、ミサイルを撃ち続けられる。打たれ弱い。" },
-  { key: "mobile",    label: "高機動型", name: "スプリンター", hp: 40, en: 100, tackle: TACKLE_BASE,     accBonus: 10, evade: 15,
-    part: "l1", desc: "攻撃の命中+10%、敵の攻撃を15%で回避する。レーザーで戦う。" },
+  { key: "assault",   label: "突撃型",   name: "ブレイカー",   sprite: "lion", hp: 50, en: 80,  tackle: TACKLE_BASE + 2, accBonus: 0,  evade: 0,
+    part: "g0", desc: "HPが高く、たいあたりが強い。正面から殴り合うタイプ。" },
+  { key: "artillery", label: "砲撃型",   name: "キャノニア",   sprite: "rex",  hp: 36, en: 130, tackle: TACKLE_BASE,     accBonus: 0,  evade: 0,
+    part: "m0", desc: "エネルギーが多く、ミサイルを撃ち続けられる。打たれ弱い。" },
+  { key: "mobile",    label: "高機動型", name: "スプリンター", sprite: "wolf", hp: 40, en: 100, tackle: TACKLE_BASE,     accBonus: 10, evade: 15,
+    part: "l0", desc: "攻撃の命中+10%、敵の攻撃を15%で回避する。レーザーで戦う。" },
 ];
 const STARTING_ITEMS = { repair: 1, cell: 0 };
 
+// レア度（0:ノーマル 1:レア 2:スーパーレア 3:レジェンド）
+// 色は暗い背景で読めるよう、仕様の色から少しだけ明るくしたもの（レア・スーパーレア）
+const RARITY = [
+  { name: "ノーマル",     stars: "",       color: "#8a8f98" },
+  { name: "レア",         stars: "★",     color: "#4c9be6" },
+  { name: "スーパーレア", stars: "★★",   color: "#b47ae6" },
+  { name: "レジェンド",   stars: "★★★", color: "#e0b341" },
+];
+
 // パーツ（武装）。power=威力 acc=命中(%) en=消費エネルギー。レベルでは変わらない
 const PARTS = [
-  { id: "g1", type: "gun",     name: "ハンドガンK7",       power: 6,  acc: 92, en: 3 },
-  { id: "g2", type: "gun",     name: "ツインバルカン",     power: 8,  acc: 90, en: 5 },
-  { id: "g3", type: "gun",     name: "レールライフル",     power: 11, acc: 93, en: 8 },
-  { id: "m1", type: "missile", name: "マイクロミサイル",   power: 11, acc: 76, en: 6 },
-  { id: "m2", type: "missile", name: "クラスターミサイル", power: 15, acc: 73, en: 9 },
-  { id: "m3", type: "missile", name: "ヘビーミサイル",     power: 21, acc: 70, en: 13 },
-  { id: "l1", type: "laser",   name: "ビームレーザー",     power: 17, acc: 90, en: 14 },
-  { id: "l2", type: "laser",   name: "プラズマレーザー",   power: 25, acc: 92, en: 20 },
+  { id: "g0", type: "gun",     rarity: 0, name: "ハンドガンK7",       power: 6,  acc: 95, en: 5 },
+  { id: "g1", type: "gun",     rarity: 1, name: "ツインガンM2",       power: 9,  acc: 95, en: 6 },
+  { id: "g2", type: "gun",     rarity: 2, name: "ハイパーガンX",      power: 13, acc: 97, en: 7 },
+  { id: "g3", type: "gun",     rarity: 3, name: "ゴールドバレット",   power: 18, acc: 99, en: 8 },
+  { id: "m0", type: "missile", rarity: 0, name: "ミサイルポッドA",    power: 12, acc: 65, en: 8 },
+  { id: "m1", type: "missile", rarity: 1, name: "ホーミングB",        power: 17, acc: 68, en: 9 },
+  { id: "m2", type: "missile", rarity: 2, name: "ギガミサイルZ",      power: 24, acc: 70, en: 10 },
+  { id: "m3", type: "missile", rarity: 3, name: "ノヴァミサイル",     power: 34, acc: 75, en: 12 },
+  { id: "l0", type: "laser",   rarity: 0, name: "レーザーS1",         power: 9,  acc: 88, en: 12 },
+  { id: "l1", type: "laser",   rarity: 1, name: "レーザーS2",         power: 13, acc: 90, en: 14 },
+  { id: "l2", type: "laser",   rarity: 2, name: "プラズマレーザーR",  power: 18, acc: 92, en: 16 },
+  { id: "l3", type: "laser",   rarity: 3, name: "サンダーフレア",     power: 25, acc: 95, en: 20 },
 ];
 const PART_TYPE_LABEL = { gun: "ガン", missile: "ミサイル", laser: "レーザー" };
-const SLOT_COUNT = 3;
+const SLOT_COUNT = 2;
+const INVENTORY_MAX = 30;
+const expectedDamage = p => p.power * p.acc / 100;   // 期待ダメージ（自動装備・おまかせ装備で比べる）
 
-// 通常の敵（基本値）。drop=落とすパーツの系統。ally=仲間になったときの基本値（Lv1）
-const ENEMY_TYPES = [
-  { key: "small", name: "ガードロボ",   ch: "g", color: "#e8a33a", hp: 8,  atk: 3, acc: 80, exp: 4,  minFloor: 1, weight: 5, drop: "gun",
-    recruit: 0.12, ally: { hp: 24, en: 60,  tackle: 3, part: "g1" } },
-  { key: "mid",   name: "ハンターロボ", ch: "h", color: "#d77be0", hp: 16, atk: 5, acc: 80, exp: 8,  minFloor: 3, weight: 3, drop: "missile",
-    recruit: 0.08, ally: { hp: 34, en: 80,  tackle: 4, part: "m1" } },
-  { key: "large", name: "タイタンロボ", ch: "T", color: "#ef5a5a", hp: 30, atk: 8, acc: 75, exp: 14, minFloor: 6, weight: 2, drop: "laser",
-    recruit: 0.05, ally: { hp: 46, en: 100, tackle: 6, part: "l1" } },
+// 落とし物
+const PART_DROP_RATE = 0.25;       // 通常の敵がパーツを落とす確率
+const ITEM_DROP_RATE = 0.35;
+// 通常の敵が落とすパーツのレア度の確率 [ノーマル, レア, スーパーレア, レジェンド]
+const DROP_RARITY = [
+  { maxFloor: 3, rates: [0.90, 0.10, 0.00, 0] },
+  { maxFloor: 6, rates: [0.70, 0.27, 0.03, 0] },
+  { maxFloor: 9, rates: [0.50, 0.40, 0.10, 0] },
 ];
-// 階による補正：HP × (0.6 + 0.12×(階-1))、攻撃 × (0.7 + 0.08×(階-1))、切り上げ
+const BOSS_DROP_RARITY = { 5: [0, 0.65, 0.25, 0.10], 10: [0, 0, 0.70, 0.30] };
+
+// 通常の敵（大きさごとの基本値）。drop=落とすパーツの系統。ally=仲間になったときの基本値（Lv1）
+// animals=同じ大きさの中からランダムに選ばれる動物（sprite=バトル用の絵、minFloor=出てくる階）
+const ENEMY_TYPES = [
+  { key: "small", label: "小型", hp: 8,  atk: 3, acc: 80, exp: 4,  minFloor: 1, weight: 5, drop: "gun",
+    recruit: 0.12, ally: { hp: 24, en: 60,  tackle: 3, part: "g0" },
+    animals: [{ sprite: "dango", minFloor: 1 }, { sprite: "turtle", minFloor: 1 }] },
+  { key: "mid",   label: "中型", hp: 16, atk: 5, acc: 80, exp: 8,  minFloor: 3, weight: 3, drop: "missile",
+    recruit: 0.08, ally: { hp: 34, en: 80,  tackle: 4, part: "m0" },
+    animals: [{ sprite: "lion", minFloor: 3 }, { sprite: "wolf", minFloor: 3 }, { sprite: "ptera", minFloor: 7 }, { sprite: "bird", minFloor: 7 }] },
+  { key: "large", label: "大型", hp: 30, atk: 8, acc: 75, exp: 14, minFloor: 6, weight: 2, drop: "laser",
+    recruit: 0.05, ally: { hp: 46, en: 100, tackle: 6, part: "l0" },
+    animals: [{ sprite: "rex", minFloor: 6 }] },
+];
+// 階による補正：HP × (0.6 + 0.3×(階-1))、攻撃 × (0.7 + 0.1×(階-1))、切り上げ
 const ENEMY_HP_SCALE = { base: 0.6, perFloor: 0.3 };
 const ENEMY_ATK_SCALE = { base: 0.7, perFloor: 0.1 };
 const EARLY_FLOORS = 2;            // 1〜2階は敵が少なく、命中も低め
@@ -325,14 +356,13 @@ const EARLY_ENEMY_COUNT = [2, 3];
 const EARLY_ACC_PENALTY = 10;
 const enemyCountFor = f => f <= 4 ? f + 2 : Math.min(6, f - 1);   // 3階以降の敵の数
 const ENEMY_SIGHT = 7;
-const PART_DROP_RATE = 0.5;
-const ITEM_DROP_RATE = 0.35;
 
-// ボス（階の補正はかけない）
+// ボス（階の補正はかけない）。絵はグランレックスを暗い赤にしたもの
 const BOSSES = {
-  5:  { name: "ゲートキーパー",     ch: "B", color: "#ff8a3c", hp: 230, atk: 16, acc: 85, exp: 40, drops: ["m2", "m3", "l1"] },
-  10: { name: "遺跡の守護機オメガ", ch: "Ω", color: "#ff4a6e", hp: 400, atk: 26, acc: 85, exp: 0,  drops: ["l2"], doubleBelowHalf: true },
+  5:  { name: "ゲートキーパー",     hp: 230, atk: 16, acc: 85, exp: 40 },
+  10: { name: "遺跡の守護機オメガ", hp: 360, atk: 26, acc: 85, exp: 0, doubleBelowHalf: true },
 };
+const BOSS_PALETTE = { b: "#8a2f2f", d: "#5c1f1f" };
 const FINAL_FLOOR = 10;
 const BOSS_CHARGE_EVERY = 3;       // 3ターンに1回「力を溜める」→ 次のターンに強攻撃
 const BOSS_HEAVY_MULT = 2;
@@ -340,8 +370,8 @@ const BOSS_HEAVY_ACC_DOWN = 10;
 
 // アイテム
 const ITEMS = {
-  repair: { name: "修理キット",     ch: "+", color: "#5fe07a", value: 15 },
-  cell:   { name: "エネルギーセル", ch: "e", color: "#43b4f0", value: 30 },
+  repair: { name: "修理キット",     icon: "repair", value: 15 },
+  cell:   { name: "エネルギーセル", icon: "energy", value: 30 },
 };
 const MAP_ITEM_MIN = 2, MAP_ITEM_MAX = 4;
 const BOSS_PREP_ITEMS = { repair: 2, cell: 2 };
@@ -361,22 +391,179 @@ const SKILLS = [
 ];
 
 // マップ
-const MAP_W = 36, MAP_H = 28, VIEW = 15, FOV_RADIUS = 6;
+const MAP_W = 36, MAP_H = 28, FOV_RADIUS = 6;
+const VIEW_MAX = 15, VIEW_MIN_COLS = 13, VIEW_MIN_ROWS = 11;   // 表示するマス数（画面に合わせて決める）
 const ROOM_TRIES = 50, ROOM_MAX = 9;
+
+// ================================================================
+//  グラフィック（図形の組み合わせからドット絵を作る）
+// ================================================================
+function makeGrid(w,h){return Array.from({length:h},()=>Array(w).fill(0));}
+function inPoly(x,y,p){let c=false;for(let i=0,j=p.length-1;i<p.length;j=i++){const[xi,yi]=p[i],[xj,yj]=p[j];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)c=!c;}return c;}
+function applyOp(g,w,h,op){
+  const t=op[0];
+  if(t==="P"){for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(inPoly(x+0.5,y+0.5,op[1]))g[y][x]=op[2];}
+  else if(t==="E"){const m=op[6]===undefined?99:op[6];for(let y=0;y<h;y++)for(let x=0;x<w;x++){const dx=(x+0.5-op[1])/op[3],dy=(y+0.5-op[2])/op[4];if(dx*dx+dy*dy<=1&&y+0.5<=m)g[y][x]=op[5];}}
+  else if(t==="R"){for(let y=op[2];y<op[2]+op[4];y++)for(let x=op[1];x<op[1]+op[3];x++)if(y>=0&&y<h&&x>=0&&x<w)g[y][x]=op[5];}
+}
+function buildSprite(def,w,h){
+  const a=makeGrid(w,h),b=makeGrid(w,h);
+  def.o.forEach(op=>applyOp(a,w,h,op));
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    if(a[y][x]){b[y][x]=a[y][x];}
+    else{const nb=(y>0&&a[y-1][x])||(y<h-1&&a[y+1][x])||(x>0&&a[y][x-1])||(x<w-1&&a[y][x+1]);if(nb)b[y][x]="k";}
+  }
+  def.a.forEach(q=>{b[q[1]][q[0]]=q[2];});
+  return b;
+}
+
+// バトル用の動物の絵（32×24ドット、右向き）
+const BATTLE_W=32,BATTLE_H=24;
+const BATTLE={
+rex:{n:"グランレックス",p:{k:"#2b2b2b",b:"#5f9e5a",d:"#3f7a3c",e:"#ffd23a",w:"#f3f3f3",c:"#8a8f98"},
+ o:[["P",[[2,12],[10,10],[10,15],[4,14]],"b"],
+ ["P",[[16,17],[20,17],[20,21],[22,22],[22,23],[14,23],[14,21],[16,20]],"d"],
+ ["E",15,13,7,5,"b"],["E",16,16,5,2.5,"d"],
+ ["P",[[18,10],[21,5],[24,3],[30,4],[30,9],[24,9],[22,13],[18,13]],"b"],
+ ["P",[[23,9],[30,9],[29,12],[24,12]],"d"],
+ ["P",[[21,12],[25,12],[25,14],[22,14]],"b"],
+ ["P",[[11,7],[19,5],[20,7],[12,9]],"c"],
+ ["P",[[10,17],[14,17],[14,21],[17,22],[17,23],[8,23],[8,21],[10,20]],"b"]],
+ a:[[26,5,"e"],[25,9,"w"],[27,9,"w"],[29,9,"w"],[24,13,"w"]]},
+lion:{n:"レオガード",p:{k:"#2b2b2b",b:"#d98a3d",d:"#b06a25",y:"#a8541c",l:"#f0c890",e:"#ffd23a",c:"#8a8f98"},
+ o:[["P",[[2,15],[7,12],[9,14],[4,18]],"b"],["E",2.5,18,2,2,"y"],
+ ["R",11,19,3,4,"d"],["R",18,19,3,4,"d"],
+ ["E",15,15,8,5,"b"],
+ ["R",8,19,3,4,"b"],["R",20,19,3,4,"b"],
+ ["R",11,8,6,2,"c"],["R",17,8,4,1,"c"],
+ ["E",24,10,7,7,"y"],["E",25,11,4,4,"b"],
+ ["P",[[27,12],[31,12],[31,15],[27,15]],"l"]],
+ a:[[26,9,"e"],[30,12,"k"]]},
+wolf:{n:"シルバーファング",p:{k:"#2b2b2b",b:"#8e9bb0",d:"#67758c",e:"#ffd23a",c:"#8a8f98"},
+ o:[["P",[[1,7],[6,10],[9,13],[7,16],[3,12]],"b"],
+ ["R",11,17,2,6,"d"],["R",22,17,2,6,"d"],
+ ["E",14,14,8,4,"b"],["E",20,13,4,4,"b"],
+ ["R",8,17,2,6,"b"],["R",19,17,2,6,"b"],
+ ["R",10,9,5,2,"c"],["R",15,9,3,1,"c"],
+ ["P",[[20,11],[21,6],[24,5],[27,6],[31,10],[31,12],[26,12],[22,14]],"b"],
+ ["P",[[21,6],[22,2],[24,5]],"b"],["P",[[25,5],[27,2],[27,6]],"b"]],
+ a:[[25,8,"e"],[31,10,"k"]]},
+dango:{n:"ロールバグ",p:{k:"#2b2b2b",b:"#8a7fa8",d:"#66598a",e:"#ffd23a",c:"#8a8f98"},
+ o:[["R",10,21,2,2,"d"],["R",14,21,2,2,"d"],["R",18,21,2,2,"d"],
+ ["E",14,13,10,9,"d"],["E",13,13,8.5,8.5,"b"],["E",12,13,6.5,7.5,"d"],["E",11,13,4.5,6.5,"b"],["E",10,13,2.5,5,"d"],
+ ["R",22,15,4,4,"b"],["E",26,16,4.5,3.5,"b"],
+ ["R",28,11,1,4,"d"],["R",30,12,1,3,"d"],
+ ["R",11,1,6,3,"c"],["R",17,2,4,1,"c"]],
+ a:[[27,15,"e"]]},
+turtle:{n:"シェルキャノン",p:{k:"#2b2b2b",b:"#6fae8f",d:"#4e8a6e",e:"#ffd23a",c:"#8a8f98"},
+ o:[["P",[[1,18],[6,16],[6,19]],"b"],
+ ["R",8,19,4,4,"d"],["R",18,19,4,4,"d"],
+ ["R",24,14,5,5,"b"],["E",28,15,3.5,3,"b"],
+ ["E",14,17,11,10,"d",19],["E",14,17,10,9,"b",18],
+ ["E",9,13,2.5,2.2,"d"],["E",14,10.5,2.5,2.2,"d"],["E",19,13,2.5,2.2,"d"],["E",14,15,2.5,2.2,"d"],
+ ["R",5,19,4,4,"b"],["R",15,19,4,4,"b"],
+ ["R",11,5,7,3,"c"],["R",18,5,6,2,"c"]],
+ a:[[29,14,"e"]]},
+ptera:{n:"スカイプテラ",p:{k:"#2b2b2b",b:"#c9784a",d:"#a35a33",y:"#e0b341",e:"#ffffff",w:"#f3f3f3"},
+ o:[["P",[[8,13],[1,14],[8,16]],"b"],
+ ["P",[[12,11],[13,2],[19,6],[21,11]],"d"],
+ ["E",14,13,7,3,"b"],
+ ["P",[[20,11],[23,8],[27,8],[31,10],[27,12],[23,14]],"b"],
+ ["P",[[27,9],[31,10],[27,11]],"y"],
+ ["P",[[23,8],[14,5],[21,11]],"y"],
+ ["P",[[11,16],[10,20],[13,20]],"d"],["P",[[15,16],[15,20],[18,20]],"d"],
+ ["P",[[10,13],[2,10],[1,19],[6,16],[9,21],[14,16],[17,14]],"b"]],
+ a:[[26,9,"e"]]},
+bird:{n:"ホークウィング",p:{k:"#2b2b2b",b:"#5b8fd1",d:"#3d6aa3",y:"#f0b323",l:"#bcd6f0",e:"#ffffff"},
+ o:[["P",[[7,13],[1,11],[1,18],[7,16]],"d"],
+ ["P",[[14,11],[17,2],[25,3],[22,10]],"d"],
+ ["R",13,16,2,4,"d"],["R",16,16,2,4,"d"],["R",12,20,3,1,"y"],["R",15,20,3,1,"y"],
+ ["E",14,13,8,4,"b"],["E",15,14.5,6,2,"l"],
+ ["E",23,10,4,3.2,"b"],
+ ["P",[[26,9],[31,12],[26,12]],"y"],
+ ["P",[[10,11],[5,2],[13,3],[19,6],[20,11]],"b"]],
+ a:[[24,9,"e"]]}
+};
+
+// マップ用の絵（12×12ドット）
+const MAP_N=12;
+const RING=["E",6,10.5,5,1.2,"q"];
+const ENEMY_OPS=[RING,["R",3,1,1,2,"d"],["R",8,1,1,2,"d"],["R",3,3,6,4,"b"],["R",3,7,6,2,"b"],["R",2,7,1,2,"d"],["R",9,7,1,2,"d"],["R",3,9,2,2,"d"],["R",7,9,2,2,"d"],["R",4,7,4,1,"d"]];
+const MAPICON={
+player:{p:{k:"#2b2b2b",q:"#4fe0ff",b:"#3d8fd9",d:"#2a66a8",l:"#cfe6ff",y:"#ffd23a"},
+ o:[RING,["R",3,2,6,4,"b"],["R",4,3,4,2,"y"],["R",3,6,6,3,"b"],["R",5,7,2,1,"l"],["R",2,6,1,3,"d"],["R",9,6,1,3,"d"],["R",3,9,2,2,"d"],["R",7,9,2,2,"d"],["R",5,1,2,1,"y"]],a:[]},
+enemy:{p:{k:"#2b2b2b",q:"#e0443a",b:"#a04050",d:"#6e2a38",e:"#ffd23a"},o:ENEMY_OPS,a:[[4,5,"e"],[7,5,"e"]]},
+boss:{p:{k:"#2b2b2b",q:"#e0443a",b:"#5c1f3a",d:"#ffd23a",e:"#ff3b30"},o:ENEMY_OPS.concat([["R",4,1,4,1,"d"]]),a:[[4,5,"e"],[7,5,"e"]]},
+repair:{p:{k:"#2b2b2b",w:"#f3f3f3",r:"#e0443a"},o:[["R",2,3,8,6,"w"],["R",5,4,2,4,"r"],["R",4,5,4,2,"r"]],a:[]},
+energy:{p:{k:"#2b2b2b",y:"#ffd23a",o:"#c0701a",c:"#8a8f98"},o:[["R",5,1,2,1,"c"],["R",3,2,6,8,"y"],["P",[[6,3],[4,6],[6,6],[5,9],[8,5],[6,5]],"o"]],a:[]},
+parts:{p:{k:"#2b2b2b",c:"#8a8f98",d:"#5c6068"},o:[["E",6,6,3.5,3.5,"c"],["R",5,1,2,2,"c"],["R",5,9,2,2,"c"],["R",1,5,2,2,"c"],["R",9,5,2,2,"c"],["E",6,6,1.3,1.3,"d"]],a:[]},
+stairs:{p:{k:"#2b2b2b",l:"#b8bcc8",b:"#8a90a0",d:"#5c6272"},o:[["R",1,1,10,3,"l"],["R",1,4,8,3,"b"],["R",1,7,6,3,"d"]],a:[]},
+heal:{p:{k:"#2b2b2b",g:"#1f8f45",h:"#3fcf6e",w:"#ffffff"},o:[["E",6,6,5,5,"g"],["E",6,6,3.8,3.8,"h"],["R",5,3,2,6,"w"],["R",3,5,6,2,"w"]],a:[]}
+};
+
+// 床・壁（輪郭なしのタイル）
+function tileGrid(fill, marks) {
+  const g = Array.from({ length: MAP_N }, () => Array(MAP_N).fill(fill));
+  marks.forEach(([x, y, w, h, c]) => { for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) g[yy][xx] = c; });
+  return g;
+}
+const TILES = {
+  floor:     { g: tileGrid("f", [[3, 3, 1, 1, "g"], [9, 8, 1, 1, "g"]]), p: { f: "#d8d4b8", g: "#cbc7a8" } },
+  bossfloor: { g: tileGrid("f", [[3, 3, 1, 1, "g"], [9, 8, 1, 1, "g"]]), p: { f: "#8a6a68", g: "#7a5a58" } },
+  wall:      { g: tileGrid("w", [[0, 3, 12, 1, "l"], [0, 8, 12, 1, "l"], [5, 0, 1, 3, "l"], [2, 4, 1, 4, "l"], [8, 4, 1, 4, "l"]]), p: { w: "#4b4a5c", l: "#5d5c70" } },
+  // 準備部屋の出口の目印：床に黄色と黒のしま模様の柱
+  gate:      { g: tileGrid("f", [[5, 0, 2, 12, "y"], [5, 2, 2, 1, "k"], [5, 5, 2, 1, "k"], [5, 8, 2, 1, "k"], [5, 11, 2, 1, "k"]]), p: { f: "#d8d4b8", y: "#ffd23a", k: "#2b2b2b" } },
+};
+
+// 絵のデータ（起動時に1回だけ作る）
+const SPR = {};
+function prepareSprites() {
+  for (const [k, d] of Object.entries(BATTLE)) SPR[k] = { g: buildSprite(d, BATTLE_W, BATTLE_H), p: d.p, w: BATTLE_W, h: BATTLE_H };
+  SPR.boss = { g: SPR.rex.g, p: { ...BATTLE.rex.p, ...BOSS_PALETTE }, w: BATTLE_W, h: BATTLE_H };
+  for (const [k, d] of Object.entries(MAPICON)) SPR["m_" + k] = { g: buildSprite(d, MAP_N, MAP_N), p: d.p, w: MAP_N, h: MAP_N };
+  for (const [k, t] of Object.entries(TILES)) SPR["t_" + k] = { g: t.g, p: t.p, w: MAP_N, h: MAP_N };
+}
+// 整数倍に拡大した画像（キャッシュ）。flip=左右反転
+const spriteCache = new Map();
+function spriteImage(key, s, flip) {
+  const ck = `${key}|${s}|${flip ? 1 : 0}`;
+  if (spriteCache.has(ck)) return spriteCache.get(ck);
+  const sp = SPR[key], c = document.createElement("canvas");
+  c.width = sp.w * s; c.height = sp.h * s;
+  const x2 = c.getContext("2d");
+  for (let y = 0; y < sp.h; y++) for (let x = 0; x < sp.w; x++) {
+    const col = sp.p[sp.g[y][x]];
+    if (!col) continue;
+    x2.fillStyle = col;
+    x2.fillRect((flip ? sp.w - 1 - x : x) * s, y * s, s, s);
+  }
+  spriteCache.set(ck, c);
+  return c;
+}
+// DOMに置く用のキャンバス
+function spriteEl(key, s, flip) {
+  const src = spriteImage(key, s, flip), c = document.createElement("canvas");
+  c.width = src.width; c.height = src.height; c.className = "px";
+  c.dataset.sprite = key; c.dataset.scale = s; c.dataset.flip = flip ? "1" : "0";
+  const x2 = c.getContext("2d");
+  x2.imageSmoothingEnabled = false;
+  x2.drawImage(src, 0, 0);
+  return c;
+}
 
 // ================================================================
 //  状態
 // ================================================================
 const WALL = 0, FLOOR = 1, STAIRS = 2, HEAL = 3, BOSSFLOOR = 4, GATE = 5;
 let map, seen, visible, enemies, groundItems, floorNo, logLines;
-let team, inv, pos, bestLevel;
+let team, inv, pos, bestLevel, partUid = 0;
 let mode = "select";    // select | map | battle | menu | over
 let battle = null;
 let menuState = { unit: 0, pending: null, confirmRelease: false };
 
 const $ = id => document.getElementById(id);
 const cv = $("cv"), ctx = cv.getContext("2d");
-let tile = 24;
+let mapScale = 2, viewCols = VIEW_MAX, viewRows = VIEW_MAX, pxRatio = 1;
 
 const rnd = n => Math.floor(Math.random() * n);
 const rndRange = (a, b) => a + rnd(b - a + 1);
@@ -385,6 +572,13 @@ const partById = id => PARTS.find(p => p.id === id);
 const isBossFloor = f => !!BOSSES[f];
 const leader = () => team[0];
 const alive = () => team.filter(u => u.hp > 0);
+const animalName = sprite => BATTLE[sprite].n;
+function pickWeighted(rates) {
+  let r = Math.random();
+  for (let i = 0; i < rates.length; i++) { if ((r -= rates[i]) < 0) return i; }
+  for (let i = rates.length - 1; i >= 0; i--) if (rates[i] > 0) return i;
+  return 0;
+}
 
 // ================================================================
 //  機体
@@ -395,10 +589,11 @@ const tackleOf = u => u.baseTackle + Math.floor((u.lv - 1) * TACKLE_GROWTH);
 
 function createUnit(o) {
   const u = {
-    name: o.name, ch: o.ch, color: o.color, isLeader: !!o.isLeader, kind: o.kind,
+    name: o.name, sprite: o.sprite, isLeader: !!o.isLeader, kind: o.kind,
     baseHp: o.hp, baseEn: o.en, baseTackle: o.tackle, accBonus: o.accBonus || 0, evade: o.evade || 0,
-    lv: o.lv || 1, exp: 0, pendingLv: 0,
+    lv: o.lv || 1, exp: 0,
     equip: new Array(SLOT_COUNT).fill(null),
+    manual: false,   // 手動で付け替えた機体は、自動の入れ替え対象にしない
     skills: Object.fromEntries(SKILLS.map(s => [s.id, 1])),
     guard: 0, focus: 0,
   };
@@ -413,15 +608,74 @@ function uniqueName(base) {
   return base;
 }
 
-// パーツは共有の持ち物。装備は inv.parts の番号で持つ
-function isEquipped(i) { return team.some(u => u.equip.includes(i)); }
+// ---- パーツ（共有の持ち物）。装備は持ち物の要素そのものを指す ----
+const partOf = item => partById(item.id);
+const isEquipped = item => team.some(u => u.equip.includes(item));
+const partText = p => `${p.name}${RARITY[p.rarity].stars}`;
+
+// 持ち物に入れて、自動装備する。prefer=最初に空き枠を探す機体（仲間の初期パーツ用）
 function addPart(id, prefer) {
-  inv.parts.push(id);
-  const idx = inv.parts.length - 1;
+  const item = { id, uid: ++partUid };
+  inv.parts.push(item);
+  const p = partById(id);
+  let res = { item, unit: null, swapped: null };
+  // 1. 空き枠に装備（prefer → チームの並び順）
   const order = prefer ? [prefer, ...team.filter(u => u !== prefer)] : team;
-  const u = order.find(u => u.equip.includes(null));
-  if (u) u.equip[u.equip.indexOf(null)] = idx;
-  return u;
+  const free = order.find(u => u.equip.includes(null));
+  if (free) {
+    free.equip[free.equip.indexOf(null)] = item;
+    res.unit = free;
+  } else {
+    // 2. 手動で付け替えていない機体の装備で一番弱いものより強ければ入れ替え
+    let worst = null;
+    for (const u of team) {
+      if (u.manual) continue;
+      u.equip.forEach((e, slot) => {
+        if (e && (!worst || expectedDamage(partOf(e)) < expectedDamage(partOf(worst.e)))) worst = { u, slot, e };
+      });
+    }
+    if (worst && expectedDamage(p) > expectedDamage(partOf(worst.e))) {
+      worst.u.equip[worst.slot] = item;
+      res.unit = worst.u; res.swapped = worst.e;
+    }
+  }
+  res.discarded = trimInventory();
+  return res;
+}
+// 持ち物が上限を超えたら、装備していないパーツで期待ダメージが一番低いものを捨てる
+function trimInventory() {
+  const out = [];
+  while (inv.parts.length > INVENTORY_MAX) {
+    const free = inv.parts.filter(i => !isEquipped(i));
+    if (!free.length) break;
+    free.sort((a, b) => expectedDamage(partOf(a)) - expectedDamage(partOf(b)));
+    const drop = free[0];
+    inv.parts = inv.parts.filter(i => i !== drop);
+    out.push(drop);
+  }
+  return out;
+}
+// パーツを手に入れたときのメッセージ（レア度の色）
+function logPartGain(res, verb) {
+  const p = partOf(res.item), r = RARITY[p.rarity];
+  const rareTag = p.rarity > 0 ? `（${r.name}${r.stars}）` : "";
+  let tail = "";
+  if (res.swapped) tail = `${res.unit.name}の『${partOf(res.swapped).name}』と入れ替えた`;
+  else if (res.unit) tail = `${res.unit.name}に装備`;
+  log(`『${p.name}』${rareTag}を${verb}！${tail ? `（${tail}）` : ""}`, r.color);
+  for (const d of res.discarded || []) log(`持ち物がいっぱいなので『${partText(partOf(d))}』を捨てた。`);
+}
+// おまかせ装備：期待ダメージの高い順（同じなら消費ENの低い順）に、並び順の機体へ2つずつ
+function autoEquipAll() {
+  const sorted = inv.parts.slice().sort((a, b) => {
+    const pa = partOf(a), pb = partOf(b);
+    return expectedDamage(pb) - expectedDamage(pa) || pa.en - pb.en;
+  });
+  let k = 0;
+  for (const u of team) {
+    u.manual = false;
+    for (let s = 0; s < SLOT_COUNT; s++) u.equip[s] = sorted[k++] || null;
+  }
 }
 
 function addExp(u, amount) {
@@ -498,18 +752,25 @@ function freeCellIn(r) {
 }
 
 function scaled(base, s) { return Math.max(1, Math.ceil(base * (s.base + s.perFloor * (floorNo - 1)))); }
+// 動物（絵と名前）はバトルに入るときに決める
 function makeEnemy(def, x, y) {
   const hp = scaled(def.hp, ENEMY_HP_SCALE);
-  return { def, name: def.name, ch: def.ch, color: def.color, x, y, size: 1,
+  return { def, sprite: null, name: def.label + "の敵", x, y, size: 1,
            hp, maxHp: hp, atk: scaled(def.atk, ENEMY_ATK_SCALE),
            acc: def.acc - (floorNo <= EARLY_FLOORS ? EARLY_ACC_PENALTY : 0),
            exp: Math.ceil(def.exp * (1 + EXP_FLOOR_SCALE * (floorNo - 1))),
            boss: false, awake: false, stun: 0 };
 }
 function makeBoss(def, x, y) {
-  return { def, name: def.name, ch: def.ch, color: def.color, x, y, size: 2,
+  return { def, sprite: "boss", name: def.name, x, y, size: 2,
            hp: def.hp, maxHp: def.hp, atk: def.atk, acc: def.acc, exp: def.exp,
            boss: true, awake: true, stun: 0 };
+}
+function chooseAnimal(e) {
+  if (e.sprite) return;
+  const list = e.def.animals.filter(a => floorNo >= a.minFloor);
+  e.sprite = list[rnd(list.length)].sprite;
+  e.name = animalName(e.sprite);
 }
 
 function pickEnemyType() {
@@ -602,19 +863,24 @@ function lineOfSight(x0, y0, x1, y1) {
 }
 
 // ================================================================
-//  ログ
+//  ログ（color を付けるとその色で表示）
 // ================================================================
-function log(msg) {
-  logLines.push(msg);
+function log(msg, color) {
+  logLines.push({ t: msg, c: color || "" });
   while (logLines.length > 3) logLines.shift();
   renderLog();
 }
 function renderLog() {
   for (const id of ["mapLog", "battleLog"]) {
     const divs = $(id).children, pad = 3 - logLines.length;
-    for (let i = 0; i < 3; i++) divs[i].textContent = i < pad ? "" : logLines[i - pad];
+    for (let i = 0; i < 3; i++) {
+      const l = i < pad ? null : logLines[i - pad];
+      divs[i].textContent = l ? l.t : "";
+      divs[i].style.color = l && l.c ? l.c : (i === 2 ? "#fff" : "");
+    }
   }
 }
+const logText = () => logLines.map(l => l.t);
 
 // ================================================================
 //  マップでの行動
@@ -638,7 +904,7 @@ function playerMove(dir) {
     if (t === HEAL) healAll();
     if (t === GATE && dx > 0) log("この先はボス部屋。準備はいいか？");
     if (t === BOSSFLOOR && !wasBossRoom && enemies.some(e => e.boss)) {
-      log(`強敵の気配がする…。「${enemies.find(e => e.boss).name}」が待ち構えている！`);
+      log(`強敵の気配がする…「${enemies.find(e => e.boss).name}」がいる！`);
     }
   }
   enemiesAct();
@@ -648,7 +914,7 @@ function playerMove(dir) {
 
 function healAll() {
   for (const u of team) { u.hp = u.maxHp; u.en = u.maxEn; }
-  log("回復ポイント：チーム全員のHPとエネルギーが全回復した。");
+  log("回復ポイント：全員のHPとENが全回復した。");
 }
 
 function pickUpGround() {
@@ -656,8 +922,7 @@ function pickUpGround() {
   if (!it) return;
   groundItems = groundItems.filter(i => i !== it);
   if (it.key === "part") {
-    const u = addPart(it.part);
-    log(`パーツ「${partById(it.part).name}」を拾った！${u ? `（${u.name}に装備）` : "（メニューで装備）"}`);
+    logPartGain(addPart(it.part), "拾った");
   } else {
     inv.items[it.key]++;
     log(`${ITEMS[it.key].name}を拾った。（所持${inv.items[it.key]}）`);
@@ -671,7 +936,7 @@ function descend() {
   newFloor();
   if (isBossFloor(floorNo)) {
     log(`${floorNo}F ボスフロアに着いた。（全員EN+${STAIRS_ENERGY_BONUS}）`);
-    log("準備部屋だ。回復ポイント + で全回復できる。");
+    log("準備部屋だ。回復ポイントで全回復できる。");
   } else {
     log(`${floorNo}Fへ降りた。（全員EN+${STAIRS_ENERGY_BONUS}）`);
   }
@@ -715,24 +980,41 @@ function pause(ms = BATTLE_WAIT) {
   });
 }
 
+// バトル画面の絵の倍率。ボスは画面の半分の幅に収まる最大の整数倍（上限7）、通常の敵は5倍まで
+function battleScales() {
+  const w = Math.min(window.innerWidth, 520) - 24 - 20;
+  const boss = Math.max(3, Math.min(7, Math.floor(w / 2 / BATTLE_W)));
+  return { boss, enemy: Math.min(5, boss - 1), ally: 2 };
+}
+
 function startBattle(e) {
   mode = "battle";
   e.awake = true;
+  chooseAnimal(e);
   for (const u of team) { u.guard = 0; u.focus = 0; }
   battle = { enemy: e, menu: "main", busy: false, actor: team.findIndex(u => u.hp > 0),
              round: 1, bossTurn: 0, heavyReady: false, itemKey: null, downs: 0 };
   log(e.boss ? `ボス「${e.name}」との戦闘！` : `${e.name}が現れた！`);
   $("mapScreen").hidden = true;
   $("battle").hidden = false;
-  const sp = $("eSprite");
-  sp.className = "sprite" + (e.boss ? " boss" : "");
   $("eName").className = e.boss ? "boss" : "";
   $("arena").classList.toggle("bossArena", e.boss);
-  sp.textContent = e.ch;
-  sp.style.color = e.color;
-  sp.style.borderColor = e.color;
-  sp.style.background = e.color + "22";
   $("fx").textContent = "";
+  // 絵：敵は右側で左向き（反転）、味方は左側に縦に並べて右向き
+  const sc = battleScales();
+  const ew = $("eWrap");
+  ew.textContent = "";
+  const ec = spriteEl(e.sprite, e.boss ? sc.boss : sc.enemy, true);
+  ec.id = "eSprite";
+  ew.append(ec);
+  const allies = $("allies");
+  allies.textContent = "";
+  team.forEach((u, i) => {
+    const d = document.createElement("div");
+    d.className = "ally"; d.id = "ally" + i;
+    d.append(spriteEl(u.sprite, sc.ally, false));
+    allies.append(d);
+  });
   renderBattle();
 }
 
@@ -791,7 +1073,7 @@ function useItem(key, target) {
 const ACTIONS = {
   tackle(u) { attack(u, "たいあたり", tackleOf(u), TACKLE_ACC); },
   weapon(u, slot) {
-    const part = partById(inv.parts[u.equip[slot]]);
+    const part = partOf(u.equip[slot]);
     u.en -= part.en;
     const acc = part.acc + u.focus;
     u.focus = 0;
@@ -913,6 +1195,20 @@ async function enemyPhase() {
   }
 }
 
+// 落とすパーツを決める（系統とレア度）
+function rollNormalDrop(e) {
+  if (Math.random() >= PART_DROP_RATE) return null;
+  const band = DROP_RARITY.find(b => floorNo <= b.maxFloor) || DROP_RARITY[DROP_RARITY.length - 1];
+  const rarity = pickWeighted(band.rates);
+  return PARTS.find(p => p.type === e.def.drop && p.rarity === rarity).id;
+}
+function rollBossDrop(f) {
+  const rarity = pickWeighted(BOSS_DROP_RARITY[f]);
+  const types = Object.keys(PART_TYPE_LABEL);
+  const type = types[rnd(types.length)];
+  return PARTS.find(p => p.type === type && p.rarity === rarity).id;
+}
+
 function winBattle() {
   const e = battle.enemy;
   battle.result = { rounds: battle.round, downs: battle.downs, boss: e.boss };
@@ -921,31 +1217,31 @@ function winBattle() {
   const living = alive();
   for (const u of living) { u.en = Math.min(u.maxEn, u.en + WIN_ENERGY_BONUS); addExp(u, e.exp); }
   log(`${e.name}を破壊した！${e.exp ? ` EXP+${e.exp}` : ""}`);
+  $("eSprite").style.opacity = "0.2";
 
   if (e.boss && floorNo >= FINAL_FLOOR) {
+    const loot = rollBossDrop(floorNo);
+    lastBattle.loot = loot;
     renderBattle();
-    setTimeout(gameClear, 700);
+    setTimeout(() => gameClear(loot), 700);
     return;
   }
 
   if (e.boss) {
     // 落とし物はボスのいた場所に出る
-    const id = e.def.drops[rnd(e.def.drops.length)];
+    const id = rollBossDrop(floorNo);
     groundItems.push({ x: e.x, y: e.y, key: "part", part: id });
-    log(`${partById(id).name}が落ちた！ 奥の階段が使える。`);
+    const p = partById(id), r = RARITY[p.rarity];
+    log(`『${p.name}』（${r.name}${r.stars}）が落ちた！ 奥の階段が使える。`, r.color);
   } else {
-    if (Math.random() < PART_DROP_RATE) {
-      const pool = PARTS.filter(p => p.type === e.def.drop);
-      const id = pool[rnd(Math.min(pool.length, 1 + Math.floor(floorNo / 3)))].id;
-      const u = addPart(id);
-      log(`パーツ「${partById(id).name}」を入手！${u ? `（${u.name}に装備）` : ""}`);
-    }
+    const id = rollNormalDrop(e);
+    if (id) logPartGain(addPart(id), "手に入れた");
     if (Math.random() < ITEM_DROP_RATE) {
       const key = Math.random() < 0.5 ? "repair" : "cell";
       inv.items[key]++;
       log(`${ITEMS[key].name}を手に入れた。`);
     }
-    if (team.length < TEAM_MAX && Math.random() < e.def.recruit) recruit(e.def);
+    if (team.length < TEAM_MAX && Math.random() < e.def.recruit) recruit(e);
   }
   battle.menu = "result";
   battle.actor = -1;
@@ -953,9 +1249,10 @@ function winBattle() {
   renderBattle();
 }
 
-// 仲間は、最初の機体と同じレベルで加わる
-function recruit(def) {
-  const u = createUnit({ name: uniqueName(def.name), ch: def.ch, color: def.color, kind: def.key,
+// 仲間は、最初の機体と同じレベルで加わる。名前と絵は元の動物
+function recruit(e) {
+  const def = e.def;
+  const u = createUnit({ name: uniqueName(e.name), sprite: e.sprite, kind: def.key,
     hp: def.ally.hp, en: def.ally.en, tackle: def.ally.tackle, lv: leader().lv });
   team.push(u);
   addPart(def.ally.part, u);
@@ -977,11 +1274,11 @@ function battleCommands() {
     cmds.push({ label: "にげる", sub: b.enemy.boss ? "ボスからは逃げられない" : `成功率${ESCAPE_RATE}%`,
                 disabled: b.enemy.boss, act: () => runCommand("escape") });
   } else if (b.menu === "weapon") {
-    u.equip.forEach((pi, slot) => {
-      if (pi === null) { cmds.push({ label: `スロット${slot + 1}：なし`, disabled: true }); return; }
-      const p = partById(inv.parts[pi]);
+    u.equip.forEach((item, slot) => {
+      if (!item) { cmds.push({ label: `枠${slot + 1}：なし`, disabled: true }); return; }
+      const p = partOf(item);
       const acc = Math.min(100, p.acc + u.focus + u.accBonus);
-      cmds.push({ label: p.name, sub: `威力${p.power} 命中${acc}% EN${p.en}`,
+      cmds.push({ label: partText(p), color: RARITY[p.rarity].color, sub: `威力${p.power} 命中${acc}% EN${p.en}`,
                   disabled: u.en < p.en, act: () => runCommand("weapon", slot) });
     });
     cmds.push(back);
@@ -1018,17 +1315,11 @@ function renderBattle() {
   $("charge").textContent = "⚡ 力を溜めている！ 次のターンに強攻撃";
   $("charge").hidden = !battle.heavyReady;
 
-  // 味方の表示
-  const allies = $("allies");
-  allies.textContent = "";
   team.forEach((u, i) => {
-    const s = document.createElement("div");
-    s.className = "sprite ally" + (i === battle.actor ? " active" : "") + (u.hp <= 0 ? " down" : "");
-    s.id = "ally" + i;
-    s.textContent = u.isLeader ? "@" : u.ch;
-    s.style.color = u.isLeader ? "#ffd447" : u.color;
-    s.style.borderColor = u.isLeader ? "#ffd447" : u.color;
-    allies.append(s);
+    const d = $("ally" + i);
+    if (!d) return;
+    d.classList.toggle("active", i === battle.actor);
+    d.classList.toggle("down", u.hp <= 0);
   });
   const party = $("party");
   party.textContent = "";
@@ -1065,7 +1356,9 @@ function renderBattle() {
   currentCmds.forEach((c, i) => {
     const btn = document.createElement("button");
     const k = document.createElement("span"); k.className = "k"; k.textContent = c.back ? "0" : String(i + 1);
-    const line = document.createElement("span"); line.append(k, c.label);
+    const lab = document.createElement("span"); lab.textContent = c.label;
+    if (c.color) lab.style.color = c.color;
+    const line = document.createElement("span"); line.append(k, lab);
     btn.append(line);
     if (c.sub) { const sm = document.createElement("small"); sm.textContent = c.sub; btn.append(sm); }
     if (c.back) btn.classList.add("back");
@@ -1116,12 +1409,14 @@ function el(tag, cls, text) {
   if (text !== undefined) e.textContent = text;
   return e;
 }
-function partInfo(id, extra) {
-  const p = partById(id), info = el("div", "info");
+function partInfo(item, extra) {
+  const p = partOf(item), info = el("div", "info");
   const name = el("div");
-  name.append(el("span", "tag " + p.type, PART_TYPE_LABEL[p.type]), p.name);
+  const nm = el("span", "pname", partText(p));
+  nm.style.color = RARITY[p.rarity].color;
+  name.append(el("span", "tag " + p.type, PART_TYPE_LABEL[p.type]), nm);
   if (extra) name.append(el("span", "eq", extra));
-  info.append(name, el("small", "", `威力${p.power}　命中${p.acc}%　EN${p.en}`));
+  info.append(name, el("small", "", `威力${p.power}　命中${p.acc}%　EN${p.en}　期待${expectedDamage(p).toFixed(1)}`));
   return info;
 }
 function rowButton(label, fn, disabled, cls) {
@@ -1145,45 +1440,58 @@ function renderMenu() {
   const body = $("menuBody");
   body.textContent = "";
 
-  // ステータス
+  // 機体の絵とステータス
+  const head = el("div", "unitHead");
+  head.append(spriteEl(u.sprite, 3, false));
   const g = el("div", "sgrid");
   const stat = (k, v) => { const d = el("div", "", k + " "); d.append(el("b", "", v)); g.append(d); };
   stat("Lv", u.lv >= LEVEL_MAX ? `${u.lv}（最大）` : String(u.lv));
-  stat("次のLvまで", u.lv >= LEVEL_MAX ? "—" : `${expToNext(u.lv) - u.exp} EXP`);
+  stat("次のLvまで", u.lv >= LEVEL_MAX ? "—" : `${expToNext(u.lv) - u.exp}`);
   stat("HP", `${u.hp}/${u.maxHp}`);
   stat("EN", `${u.en}/${u.maxEn}`);
   stat("たいあたり", `威力${tackleOf(u)}`);
   stat("特性", [u.accBonus ? `命中+${u.accBonus}%` : "", u.evade ? `回避${u.evade}%` : ""].filter(Boolean).join(" ") || "—");
-  body.append(g);
+  head.append(g);
+  body.append(head);
 
-  body.append(el("h3", "", `${u.name}の装備（${SLOT_COUNT}枠）`));
-  u.equip.forEach((pi, slot) => {
-    const row = el("div", "mrow");
-    if (pi === null) row.append(el("div", "info empty", `スロット${slot + 1}：なし`));
-    else row.append(partInfo(inv.parts[pi], `スロット${slot + 1}`));
+  const omakase = rowButton("おまかせ装備（強い順にチーム全員へ配る）", () => {
+    autoEquipAll();
+    menuState.pending = null;
+    log("おまかせ装備した。");
+    renderMenu();
+  }, inv.parts.length === 0, "omakase");
+  omakase.id = "omakase";
+  body.append(omakase);
+
+  body.append(el("h3", "", `${u.name}の装備（${SLOT_COUNT}枠）${u.manual ? "　手動で設定中" : ""}`));
+  u.equip.forEach((item, slot) => {
+    const row = el("div", "mrow slotRow");
+    if (!item) row.append(el("div", "info empty", `枠${slot + 1}：なし`));
+    else row.append(partInfo(item, `枠${slot + 1}`));
     const btns = el("div", "btns");
-    if (ms.pending !== null) {
-      btns.append(rowButton("ここに装備", () => { u.equip[slot] = ms.pending; ms.pending = null; renderMenu(); }));
-    } else if (pi !== null) {
-      btns.append(rowButton("はずす", () => { u.equip[slot] = null; renderMenu(); }));
+    if (ms.pending) {
+      btns.append(rowButton("ここに装備", () => { u.equip[slot] = ms.pending; u.manual = true; ms.pending = null; renderMenu(); }));
+    } else if (item) {
+      btns.append(rowButton("はずす", () => { u.equip[slot] = null; u.manual = true; renderMenu(); }));
     }
     row.append(btns);
     body.append(row);
   });
 
-  body.append(el("h3", "", "持ち物のパーツ（だれも装備していないもの）"));
-  const free = inv.parts.map((_, i) => i).filter(i => !isEquipped(i));
+  const free = inv.parts.filter(i => !isEquipped(i))
+    .sort((a, b) => expectedDamage(partOf(b)) - expectedDamage(partOf(a)));
+  body.append(el("h3", "", `持ち物のパーツ（装備していないもの ${free.length}個 ／ 全${inv.parts.length}個・上限${INVENTORY_MAX}）`));
   if (free.length === 0) body.append(el("div", "mrow empty", "ありません。他の機体から外すとここに入ります"));
-  for (const i of free) {
-    const row = el("div", "mrow");
-    row.append(partInfo(inv.parts[i], ms.pending === i ? "← 付ける枠を選んでください" : ""));
+  for (const item of free) {
+    const row = el("div", "mrow invRow");
+    row.append(partInfo(item, ms.pending === item ? "← 付ける枠を選んでください" : ""));
     const btns = el("div", "btns");
-    if (ms.pending === i) {
+    if (ms.pending === item) {
       btns.append(rowButton("やめる", () => { ms.pending = null; renderMenu(); }));
     } else {
       btns.append(rowButton("装備", () => {
         const f = u.equip.indexOf(null);
-        if (f >= 0) u.equip[f] = i; else ms.pending = i;
+        if (f >= 0) { u.equip[f] = item; u.manual = true; } else ms.pending = item;
         renderMenu();
       }));
     }
@@ -1238,94 +1546,81 @@ function releaseAlly(u) {
 }
 
 // ================================================================
-//  描画（マップ）
+//  描画（マップ）。12×12ドットのタイルを整数倍で並べる
 // ================================================================
 function resize() {
-  if (mode === "battle" || mode === "select") return;
-  const byW = Math.floor((Math.min(window.innerWidth, 520) - 26) / VIEW);
-  const others = $("mapScreen").offsetHeight - cv.offsetHeight + 24;
-  const byH = Math.floor((window.innerHeight - others) / VIEW);
-  tile = Math.max(14, Math.min(32, byW, byH));
-  const dpr = window.devicePixelRatio || 1;
-  cv.style.width = cv.style.height = tile * VIEW + "px";
-  cv.width = cv.height = Math.round(tile * VIEW * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  if (team) renderMap();
+  if (mode === "battle" || mode === "select" || !team) return;
+  const availW = Math.min(window.innerWidth, 520) - 24;
+  const others = $("mapScreen").offsetHeight - cv.offsetHeight;
+  const availH = window.innerHeight - others - 16;
+  // 画面に収まる最大の整数倍。マス数は 13〜15 列、11〜15 行の範囲で合わせる
+  let pick = null;
+  for (let s = 4; s >= 1; s--) {
+    const cols = Math.min(VIEW_MAX, Math.floor(availW / (MAP_N * s)));
+    const rows = Math.min(VIEW_MAX, Math.floor(availH / (MAP_N * s)));
+    if (cols >= VIEW_MIN_COLS && rows >= VIEW_MIN_ROWS) { pick = { s, cols, rows }; break; }
+  }
+  if (!pick) pick = { s: 1, cols: VIEW_MAX, rows: VIEW_MAX };
+  mapScale = pick.s; viewCols = pick.cols; viewRows = pick.rows;
+  pxRatio = Math.max(1, Math.round(window.devicePixelRatio || 1));
+  const T = MAP_N * mapScale;
+  cv.style.width = viewCols * T + "px";
+  cv.style.height = viewRows * T + "px";
+  cv.width = viewCols * T * pxRatio;
+  cv.height = viewRows * T * pxRatio;
+  renderMap();
 }
 
-const TILE_COLORS = {
-  [FLOOR]:     ["#2b2b33", "#16161a"],
-  [STAIRS]:    ["#2b2b33", "#16161a"],
-  [HEAL]:      ["#1d3a26", "#12221a"],
-  [GATE]:      ["#3a3418", "#221f10"],
-  [BOSSFLOOR]: ["#3e171b", "#24100f"],
-};
-
 function renderMap() {
-  const half = VIEW >> 1;
-  const camX = Math.max(0, Math.min(MAP_W - VIEW, pos.x - half));
-  const camY = Math.max(0, Math.min(MAP_H - VIEW, pos.y - half));
-  const size = tile * VIEW;
-  const toScreen = (x, y) => [(x - camX) * tile, (y - camY) * tile];
+  if (!map) return;
+  const s = mapScale * pxRatio, T = MAP_N * s;
+  const camX = Math.max(0, Math.min(MAP_W - viewCols, pos.x - (viewCols >> 1)));
+  const camY = Math.max(0, Math.min(MAP_H - viewRows, pos.y - (viewRows >> 1)));
+  const draw = (key, x, y, mult = 1) => {
+    const px = (x - camX) * T, py = (y - camY) * T;
+    if (px + T * mult <= 0 || py + T * mult <= 0 || px >= cv.width || py >= cv.height) return;
+    ctx.drawImage(spriteImage(key, s * mult, false), px, py);
+  };
 
+  ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, size, size);
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.font = `bold ${Math.floor(tile * 0.75)}px monospace`;
+  ctx.fillRect(0, 0, cv.width, cv.height);
 
-  for (let vy = 0; vy < VIEW; vy++) {
-    for (let vx = 0; vx < VIEW; vx++) {
+  for (let vy = 0; vy < viewRows; vy++) {
+    for (let vx = 0; vx < viewCols; vx++) {
       const x = camX + vx, y = camY + vy;
       if (!seen[y][x]) continue;
-      const vis = visible[y][x], px = vx * tile, py = vy * tile, t = map[y][x];
-      if (t === WALL) {
-        ctx.fillStyle = vis ? "#5a5248" : "#2a2622";
-        ctx.fillRect(px, py, tile, tile);
-        continue;
-      }
-      ctx.fillStyle = TILE_COLORS[t][vis ? 0 : 1];
-      ctx.fillRect(px + 1, py + 1, tile - 2, tile - 2);
-      if (t === STAIRS) drawChar(">", px, py, vis ? "#fff" : "#777");
-      if (t === HEAL) drawChar("+", px, py, "#5dff8a");
-      if (t === GATE) drawChar("¦", px, py, "#ffd447");
+      const t = map[y][x];
+      if (t === WALL) draw("t_wall", x, y);
+      else if (t === BOSSFLOOR) draw("t_bossfloor", x, y);
+      else if (t === GATE) draw("t_gate", x, y);
+      else draw("t_floor", x, y);
+      if (t === STAIRS) draw("m_stairs", x, y);
+      if (t === HEAL) draw("m_heal", x, y);
     }
   }
   for (const it of groundItems) {
     if (!seen[it.y][it.x]) continue;
-    const ch = it.key === "part" ? "P" : ITEMS[it.key].ch;
-    const color = it.key === "part" ? "#ff7be0" : ITEMS[it.key].color;
-    drawChar(ch, ...toScreen(it.x, it.y), visible[it.y][it.x] ? color : "#555");
+    draw(it.key === "part" ? "m_parts" : "m_" + ITEMS[it.key].icon, it.x, it.y);
   }
   for (const e of enemies) {
     if (!visible[e.y][e.x]) continue;
-    const [px, py] = toScreen(e.x, e.y);
-    if (e.boss) {
-      // ボスは2×2マスで大きく表示
-      const s = tile * 2;
-      ctx.fillStyle = "#5a1a1e";
-      ctx.fillRect(px + 1, py + 1, s - 2, s - 2);
-      ctx.strokeStyle = e.color; ctx.lineWidth = 2;
-      ctx.strokeRect(px + 2, py + 2, s - 4, s - 4);
-      ctx.fillStyle = e.color;
-      ctx.font = `bold ${Math.floor(s * 0.75)}px monospace`;
-      ctx.fillText(e.ch, px + s / 2, py + s / 2 + 2);
-      ctx.font = `bold ${Math.floor(tile * 0.75)}px monospace`;
-      continue;
-    }
-    drawChar(e.ch, px, py, e.stun > 0 ? "#777" : e.color);
+    if (e.boss) { draw("m_boss", e.x, e.y, 2); continue; }   // ボスは2倍で2×2マス
+    draw("m_enemy", e.x, e.y);
     if (e.hp < e.maxHp) {
-      ctx.fillStyle = "#400"; ctx.fillRect(px + 2, py + tile - 4, tile - 4, 3);
-      ctx.fillStyle = "#f44"; ctx.fillRect(px + 2, py + tile - 4, (tile - 4) * e.hp / e.maxHp, 3);
+      const px = (e.x - camX) * T, py = (e.y - camY) * T;
+      ctx.fillStyle = "#400"; ctx.fillRect(px + s, py + T - 2 * s, T - 2 * s, s);
+      ctx.fillStyle = "#f44"; ctx.fillRect(px + s, py + T - 2 * s, (T - 2 * s) * e.hp / e.maxHp, s);
     }
   }
-  drawChar("@", ...toScreen(pos.x, pos.y), "#ffd447");
+  draw("m_player", pos.x, pos.y);
+  // 探索済みだが今見えていないマスは暗くする
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
+  for (let vy = 0; vy < viewRows; vy++) for (let vx = 0; vx < viewCols; vx++) {
+    const x = camX + vx, y = camY + vy;
+    if (seen[y][x] && !visible[y][x]) ctx.fillRect(vx * T, vy * T, T, T);
+  }
   updateStatus();
-}
-function drawChar(ch, px, py, color) {
-  if (px < 0 || py < 0 || px >= tile * VIEW || py >= tile * VIEW) return;
-  ctx.fillStyle = color;
-  ctx.fillText(ch, px + tile / 2, py + tile / 2 + 1);
 }
 function updateStatus() {
   const fl = $("floorLabel");
@@ -1358,11 +1653,12 @@ function showSelect() {
   list.textContent = "";
   START_TYPES.forEach((t, i) => {
     const b = el("button", "typeCard");
+    b.append(spriteEl(t.sprite, 3, false));
     const nm = el("div", "tname"); nm.append(el("span", "k", String(i + 1)), t.label, el("small", "", t.name));
     const st = el("div", "stats");
     const add = (k, v) => { const s = el("span", "", k + " "); s.append(el("b", "", v)); st.append(s); };
     add("HP", String(t.hp)); add("EN", String(t.en)); add("たいあたり", `威力${t.tackle}`);
-    add("初期パーツ", partById(t.part).name);
+    add("初期", partById(t.part).name);
     b.append(nm, el("div", "desc", t.desc), st);
     b.addEventListener("click", () => startGame(t.key));
     list.append(b);
@@ -1375,7 +1671,7 @@ function startGame(typeKey) {
   logLines = [];
   team = [];
   inv = { parts: [], items: { ...STARTING_ITEMS } };
-  team.push(createUnit({ name: t.name, ch: "@", color: "#ffd447", isLeader: true, kind: t.key,
+  team.push(createUnit({ name: t.name, sprite: t.sprite, isLeader: true, kind: t.key,
     hp: t.hp, en: t.en, tackle: t.tackle, accBonus: t.accBonus, evade: t.evade }));
   addPart(t.part, team[0]);
   bestLevel = 1;
@@ -1388,7 +1684,7 @@ function startGame(typeKey) {
   $("mapScreen").hidden = false;
   newFloor();
   renderLog();
-  log(`${t.label}「${t.name}」で地下遺跡に潜入した。階段 > を探せ。`);
+  log(`${t.label}「${t.name}」で地下遺跡に潜入した。階段を探せ。`);
   resize();
 }
 
@@ -1399,17 +1695,26 @@ function gameOver(msg) {
   $("endTitle").textContent = "機能停止…";
   $("endTitle").style.color = "#ff6a6a";
   $("endText").textContent = `${msg}　到達階：${floorNo}F　最高機体レベル：Lv${bestLevel}`;
+  $("endLoot").textContent = "";
   $("endScreen").hidden = false;
   endShownAt = Date.now();
 }
 
-function gameClear() {
+function gameClear(lootId) {
   mode = "over";
   processLevelUps();
   bestLevel = Math.max(bestLevel, ...team.map(u => u.lv));
   $("endTitle").textContent = "遺跡踏破！";
   $("endTitle").style.color = "#ffd447";
   $("endText").textContent = `${floorNo}Fの守護機を倒し、遺跡の最深部にたどり着いた！　最高機体レベル：Lv${bestLevel}`;
+  const loot = $("endLoot");
+  loot.textContent = "";
+  if (lootId) {
+    const p = partById(lootId), r = RARITY[p.rarity];
+    const s = el("b", "", `『${p.name}』（${r.name}${r.stars}）`);
+    s.style.color = r.color;
+    loot.append("戦利品：", s);
+  }
   $("endScreen").hidden = false;
   endShownAt = Date.now();
 }
@@ -1477,6 +1782,7 @@ $("menuClose").addEventListener("click", closeMenu);
 $("retry").addEventListener("click", showSelect);
 window.addEventListener("resize", resize);
 
+prepareSprites();
 if (DEBUG) document.body.append(el("div", "debug", "DEBUG MODE"));
 showSelect();
 </script>
