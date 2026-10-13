@@ -8,7 +8,7 @@
   :root {
     color-scheme: dark;
     --bg: #101114; --panel: #1a1b20; --line: #34363e; --fg: #dcdde2; --dim: #8a8c96;
-    --hp: #e5534b; --en: #43b4f0; --accent: #ffd447; --ok: #3fae6a;
+    --hp: #e5534b; --en: #43b4f0; --accent: #ffd447; --ok: #3fae6a; --boss: #ff5a5a;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -30,39 +30,56 @@
   .screen { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
   [hidden] { display: none !important; }
 
-  /* ステータス */
-  #status {
-    width: 100%; display: flex; justify-content: space-between; flex-wrap: wrap;
-    gap: 4px 12px; font-size: 15px; font-variant-numeric: tabular-nums;
-  }
-  #status b { color: #fff; }
-  .bar { display: inline-block; width: 56px; height: 8px; background: #2c2d33; vertical-align: middle; margin-left: 4px; border-radius: 2px; overflow: hidden; }
-  .bar i { display: block; height: 100%; transition: width .25s; }
+  .bar { display: inline-block; height: 8px; background: #2c2d33; border-radius: 2px; overflow: hidden; }
+  .bar i { display: block; height: 100%; }
   .bar.hp i { background: var(--hp); }
   .bar.en i { background: var(--en); }
   .bar.ehp i { background: #e8a33a; }
   .low { color: var(--hp) !important; }
 
+  /* タイプ選択 */
+  #select h1 { font-size: 22px; margin: 12px 0 0; letter-spacing: .04em; }
+  #select p.lead { margin: 0; color: var(--dim); font-size: 13px; text-align: center; }
+  #typeList { width: 100%; display: grid; gap: 10px; }
+  .typeCard {
+    width: 100%; text-align: left; padding: 12px 14px; border-radius: 10px;
+    background: var(--panel); border: 1px solid #50525c; display: grid; gap: 6px;
+  }
+  .typeCard:hover, .typeCard:focus-visible { border-color: var(--accent); }
+  .typeCard .tname { font-size: 18px; font-weight: bold; }
+  .typeCard .tname small { font-size: 12px; color: var(--dim); font-weight: normal; margin-left: 8px; }
+  .typeCard .k { color: var(--accent); font-size: 12px; margin-right: 6px; }
+  .typeCard .desc { font-size: 13px; color: #c4c5cc; }
+  .typeCard .stats { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .typeCard .stats b { color: #fff; }
+
+  /* マップ画面 */
+  #status { width: 100%; display: grid; gap: 3px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  #floorLabel { font-size: 15px; font-weight: bold; }
+  #floorLabel.bossfl { color: var(--boss); }
+  .trow { display: grid; grid-template-columns: minmax(0, 1fr) 70px 64px 52px; align-items: center; gap: 6px; }
+  .trow .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .trow .nm small { color: var(--dim); }
+  .trow .bar { width: 100%; }
+  .trow .num { text-align: right; }
+
   canvas { display: block; background: #000; border: 1px solid var(--line); }
 
   .log {
     width: 100%; min-height: 4.4em; padding: 4px 8px;
-    background: var(--panel); border: 1px solid var(--line); font-size: 14px; line-height: 1.45em;
+    background: var(--panel); border: 1px solid var(--line); font-size: 13px; line-height: 1.45em;
   }
   .log div { min-height: 1.45em; }
   .log div:nth-child(1) { color: #777; }
   .log div:nth-child(2) { color: #aaa; }
   .log div:nth-child(3) { color: #fff; }
 
-  /* 十字ボタン */
   #controls { display: flex; align-items: center; gap: 18px; }
-  #pad { display: grid; grid-template-columns: repeat(3, 60px); grid-template-rows: repeat(3, 52px); gap: 6px; }
-  #pad button, #menuBtn {
-    font-size: 20px; background: #26272d; border: 1px solid #50525c; border-radius: 10px;
-  }
+  #pad { display: grid; grid-template-columns: repeat(3, 58px); grid-template-rows: repeat(3, 50px); gap: 6px; }
+  #pad button, #menuBtn { font-size: 20px; background: #26272d; border: 1px solid #50525c; border-radius: 10px; }
   #pad button:active, #menuBtn:active { background: #3a3c44; }
   #pad .wait { font-size: 13px; }
-  #menuBtn { width: 76px; height: 64px; font-size: 15px; }
+  #menuBtn { width: 76px; height: 62px; font-size: 15px; }
   #help { font-size: 12px; color: #666; text-align: center; }
   @media (hover: hover) and (pointer: fine) {
     #pad { grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(3, 40px); }
@@ -71,38 +88,55 @@
   }
 
   /* バトル画面 */
-  #battle { padding-top: 4px; }
   .ehead { width: 100%; display: flex; flex-direction: column; gap: 4px; }
-  .ehead .row { display: flex; justify-content: space-between; align-items: baseline; font-variant-numeric: tabular-nums; }
-  #eName { font-size: 18px; font-weight: bold; }
-  .wide { width: 100%; height: 12px; margin: 0; }
+  .ehead .row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-variant-numeric: tabular-nums; }
+  #eName { font-size: 17px; font-weight: bold; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #eHpText { flex-shrink: 0; }
+  #eName.boss { color: var(--boss); }
+  #charge { color: #1a1206; background: #ffb02e; font-weight: bold; font-size: 13px; padding: 2px 8px; border-radius: 4px; align-self: flex-start; }
+  .wide { width: 100%; height: 12px; }
   .arena {
-    position: relative; width: 100%; height: 210px;
-    background: linear-gradient(#17181d 0 62%, #24221e 62% 100%);
+    position: relative; width: 100%; height: 150px;
+    background: linear-gradient(#17181d 0 60%, #24221e 60% 100%);
     border: 1px solid var(--line); border-radius: 6px; overflow: hidden;
   }
-  .arena .floorline { position: absolute; left: 0; right: 0; top: 62%; border-top: 1px dashed #4a463e; }
+  .arena.bossArena { height: 176px; background: linear-gradient(#1d1214 0 60%, #2a1a1a 60% 100%); }
   .sprite {
     position: absolute; display: flex; align-items: center; justify-content: center;
     font-family: monospace; font-weight: bold; border-radius: 8px; border: 2px solid;
   }
-  #eSprite { right: 14%; top: 22px; width: 104px; height: 104px; font-size: 56px; }
-  #eSprite.boss { width: 132px; height: 132px; top: 10px; font-size: 72px; right: 10%; }
-  #pSprite { left: 12%; bottom: 18px; width: 68px; height: 68px; font-size: 38px; color: var(--accent); border-color: var(--accent); background: #2b2614; }
-  .sprite.hit { animation: shake .35s; }
-  .sprite.flash { animation: flash .35s; }
-  .sprite.dead { opacity: 0; transform: scale(.6); transition: opacity .5s, transform .5s; }
-  @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
-  @keyframes flash { 0%,100% { background: #2b2614; } 40% { background: #7a1c1c; } }
-  @media (prefers-reduced-motion: reduce) { .sprite.hit, .sprite.flash { animation: none; } }
-  #fx { position: absolute; left: 0; right: 0; top: 46%; text-align: center; font-size: 22px; font-weight: bold; pointer-events: none; text-shadow: 0 2px 4px #000; }
-  .pbars { width: 100%; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 4px 8px; font-size: 14px; font-variant-numeric: tabular-nums; }
-  .pbars .bar { width: 100%; margin: 0; height: 10px; }
-  .pbars .st { color: var(--dim); font-size: 12px; grid-column: 1 / -1; }
-  #cmdTitle { width: 100%; font-size: 12px; color: var(--dim); letter-spacing: .08em; }
+  #eSprite { right: 12%; top: 14px; width: 84px; height: 84px; font-size: 46px; }
+  #eSprite.boss { width: 140px; height: 140px; top: 12px; right: 6%; font-size: 84px; border-width: 3px; }
+  #allies { position: absolute; left: 4%; bottom: 10px; display: flex; gap: 8px; align-items: flex-end; }
+  .ally {
+    position: relative; width: 46px; height: 46px; font-size: 26px;
+    background: #22232a; border-width: 2px;
+  }
+  .ally.active { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .ally.down { opacity: 0.25; }
+  .hit { animation: shake .2s; }
+  @keyframes shake { 0%,100% { transform: translateX(0); } 50% { transform: translateX(5px); } }
+  @media (prefers-reduced-motion: reduce) { .hit { animation: none; } }
+  #fx { position: absolute; left: 0; right: 0; top: 38%; text-align: center; font-size: 20px; font-weight: bold; pointer-events: none; text-shadow: 0 2px 4px #000; }
+
+  #party { width: 100%; display: grid; gap: 3px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .prow {
+    display: grid; grid-template-columns: minmax(0, 1fr) 80px 58px 48px; align-items: center; gap: 6px;
+    padding: 3px 6px; border: 1px solid transparent; border-radius: 6px;
+  }
+  .prow.active { border-color: var(--accent); background: #26231a; }
+  .prow.down { opacity: 0.45; }
+  .prow .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .prow .nm small { color: var(--dim); }
+  .prow .bar { width: 100%; height: 9px; }
+  .prow .num { text-align: right; }
+  .prow .st { grid-column: 1 / -1; font-size: 11px; color: #8fd; }
+
+  #cmdTitle { width: 100%; font-size: 12px; color: var(--dim); letter-spacing: .06em; }
+  #cmdTitle b { color: var(--accent); font-weight: normal; }
   #cmds { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   #cmds button {
-    min-height: 50px; padding: 6px 8px; text-align: left;
+    min-height: 48px; padding: 5px 8px; text-align: left;
     background: #24252b; border: 1px solid #50525c; border-radius: 8px; font-size: 15px;
     display: flex; flex-direction: column; justify-content: center; gap: 2px;
   }
@@ -117,38 +151,51 @@
     background: rgba(0,0,0,0.82); padding: 16px;
   }
   .dialog {
-    width: 100%; max-width: 460px; max-height: 100%; overflow-y: auto;
-    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px;
+    width: 100%; max-width: 480px; max-height: 100%; overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px;
   }
   .center { text-align: center; }
-  .dialog h2 { margin: 0 0 8px; font-size: 22px; }
-  .dialog h3 { margin: 14px 0 6px; font-size: 13px; color: var(--dim); letter-spacing: .08em; font-weight: normal; }
-  .big { font-size: 18px; padding: 10px 28px; background: var(--ok); color: #fff; border: none; border-radius: 8px; margin-top: 12px; }
+  .dialog h2 { margin: 0 0 8px; font-size: 21px; }
+  .dialog h3 { margin: 14px 0 4px; font-size: 13px; color: var(--dim); letter-spacing: .06em; font-weight: normal; }
+  .big { font-size: 17px; padding: 10px 28px; background: var(--ok); color: #fff; border: none; border-radius: 8px; margin-top: 12px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tabs button { padding: 7px 12px; background: #24252b; border: 1px solid #50525c; border-radius: 6px; font-size: 14px; }
+  .tabs button.on { border-color: var(--accent); color: var(--accent); background: #2a2618; }
+  .sgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 12px; font-size: 13px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .sgrid b { color: #fff; font-weight: normal; }
   .mrow {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    padding: 7px 8px; border-bottom: 1px solid #2a2b31; font-size: 14px;
+    padding: 7px 6px; border-bottom: 1px solid #2a2b31; font-size: 14px;
   }
   .mrow .info { min-width: 0; }
   .mrow small { display: block; color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
   .mrow .btns { display: flex; gap: 4px; flex-shrink: 0; }
   .mrow button { padding: 6px 10px; background: #2c2d34; border: 1px solid #50525c; border-radius: 6px; font-size: 13px; }
+  .mrow button.danger { border-color: #8a3a3a; color: #ff9a9a; }
   .tag { display: inline-block; font-size: 10px; padding: 1px 5px; border-radius: 3px; margin-right: 4px; vertical-align: 1px; color: #111; }
   .tag.gun { background: #e8c25a; }
   .tag.missile { background: #e98a5a; }
   .tag.laser { background: #6fd6f2; }
   .eq { color: var(--accent); font-size: 11px; margin-left: 4px; }
-  .empty { color: #555; }
+  .empty { color: #666; }
+  .debug { position: fixed; right: 6px; bottom: 6px; font-size: 11px; color: #f5d; }
 </style>
 </head>
 <body>
 <div id="app">
 
+  <!-- タイプ選択画面 -->
+  <section id="select" class="screen">
+    <h1>ロボット遺跡探索</h1>
+    <p class="lead">最初の機体のタイプを選んでください</p>
+    <div id="typeList"></div>
+  </section>
+
   <!-- マップ画面 -->
-  <section id="mapScreen" class="screen">
+  <section id="mapScreen" class="screen" hidden>
     <div id="status">
-      <span>地下<b id="floor">1</b>階</span>
-      <span>HP <b id="hp">40</b>/<b id="maxhp">40</b><span class="bar hp" id="hpbar"><i></i></span></span>
-      <span>EN <b id="en">100</b><span class="bar en" id="enbar"><i></i></span></span>
+      <div id="floorLabel">1F</div>
+      <div id="teamRows"></div>
     </div>
     <canvas id="cv"></canvas>
     <div class="log" id="mapLog"><div></div><div></div><div></div></div>
@@ -168,18 +215,14 @@
     <div class="ehead">
       <div class="row"><span id="eName">ガードロボ</span><span id="eHpText">8/8</span></div>
       <span class="bar ehp wide" id="eHpBar"><i></i></span>
+      <div id="charge" hidden></div>
     </div>
-    <div class="arena">
-      <div class="floorline"></div>
+    <div class="arena" id="arena">
       <div class="sprite" id="eSprite">g</div>
-      <div class="sprite" id="pSprite">@</div>
+      <div id="allies"></div>
       <div id="fx"></div>
     </div>
-    <div class="pbars">
-      <span>HP</span><span class="bar hp" id="bHpBar"><i></i></span><span id="bHp">40/40</span>
-      <span>EN</span><span class="bar en" id="bEnBar"><i></i></span><span id="bEn">100</span>
-      <span class="st" id="bState"></span>
-    </div>
+    <div id="party"></div>
     <div class="log" id="battleLog"><div></div><div></div><div></div></div>
     <div id="cmdTitle">コマンド</div>
     <div id="cmds"></div>
@@ -190,6 +233,7 @@
 <div class="overlay" id="menu" hidden>
   <div class="dialog">
     <h2>メニュー</h2>
+    <div class="tabs" id="menuTabs"></div>
     <div id="menuBody"></div>
     <div class="center"><button class="big" id="menuClose">とじる</button></div>
   </div>
@@ -210,61 +254,94 @@
 // ================================================================
 //  調整用の定数・データ
 // ================================================================
-const PLAYER_HP = 40;
-const PLAYER_ENERGY = 100;
-// エネルギーは「ぶそう」でだけ減る。歩いても減らない
-const STAIRS_ENERGY_BONUS = 30;    // 次の階へ進んだときのエネルギー回復
-const WIN_ENERGY_BONUS = 5;        // 戦闘に勝ったときのエネルギー回復
-const DAMAGE_VARIANCE = 1;         // ダメージのぶれ（±）
+// ?debug=1 を付けたときだけ、全機体のHPを大きくする（テスト用）
+const DEBUG = /[?&]debug=1(&|$)/.test(location.search);
+const DEBUG_HP_BONUS = 600;
 
-const TACKLE = { name: "たいあたり", power: 4, acc: 95 };
+const STAIRS_ENERGY_BONUS = 30;    // 次の階へ進んだとき、全員のエネルギー回復
+const WIN_ENERGY_BONUS = 5;        // 戦闘に勝ったとき、生きている全員のエネルギー回復
+const REVIVE_HP_RATE = 0.25;       // バトル後、HP0の機体が復活するときのHP（最大HP比）
+const DAMAGE_VARIANCE = 1;         // ダメージのぶれ（±）
+const BATTLE_WAIT = 300;           // バトル中のメッセージ待ち時間(ms)。タップで飛ばせる
+
+const TACKLE_BASE = 4;             // たいあたりの基本威力
+const TACKLE_ACC = 95;
 const ESCAPE_RATE = 50;            // にげる成功率(%)
 const ESCAPE_STUN_TURNS = 3;       // 逃げた後、敵が追ってこないターン数
+const TEAM_MAX = 3;
 
-// パーツ（武装）。power=威力 acc=命中(%) en=消費エネルギー
+// 機体レベル
+const LEVEL_MAX = 20;
+const expToNext = lv => 8 + 4 * lv;          // 次のレベルに必要な経験値
+const LEVEL_HP_GROWTH = 5;
+const LEVEL_EN_GROWTH = 3;
+const TACKLE_GROWTH = 0.7;                   // たいあたり威力 = 基本 + floor((Lv-1) × これ)
+const EXP_FLOOR_SCALE = 0.1;                 // 経験値 × (1 + これ × (階-1))、切り上げ
+
+// 最初のタイプ（Lv1の値）
+const START_TYPES = [
+  { key: "assault",   label: "突撃型",   name: "ブレイカー",   hp: 50, en: 80,  tackle: TACKLE_BASE + 2, accBonus: 0,  evade: 0,
+    part: "g1", desc: "HPが高く、たいあたりが強い。正面から殴り合うタイプ。" },
+  { key: "artillery", label: "砲撃型",   name: "キャノニア",   hp: 36, en: 130, tackle: TACKLE_BASE,     accBonus: 0,  evade: 0,
+    part: "m1", desc: "エネルギーが多く、ミサイルを撃ち続けられる。打たれ弱い。" },
+  { key: "mobile",    label: "高機動型", name: "スプリンター", hp: 40, en: 100, tackle: TACKLE_BASE,     accBonus: 10, evade: 15,
+    part: "l1", desc: "攻撃の命中+10%、敵の攻撃を15%で回避する。レーザーで戦う。" },
+];
+const STARTING_ITEMS = { repair: 1, cell: 0 };
+
+// パーツ（武装）。power=威力 acc=命中(%) en=消費エネルギー。レベルでは変わらない
 const PARTS = [
-  { id: "g1", type: "gun",     name: "ハンドガンK7",     power: 6,  acc: 92, en: 3 },
-  { id: "g2", type: "gun",     name: "ツインバルカン",   power: 8,  acc: 90, en: 5 },
-  { id: "g3", type: "gun",     name: "レールライフル",   power: 11, acc: 93, en: 8 },
-  { id: "m1", type: "missile", name: "マイクロミサイル", power: 11, acc: 76, en: 6 },
+  { id: "g1", type: "gun",     name: "ハンドガンK7",       power: 6,  acc: 92, en: 3 },
+  { id: "g2", type: "gun",     name: "ツインバルカン",     power: 8,  acc: 90, en: 5 },
+  { id: "g3", type: "gun",     name: "レールライフル",     power: 11, acc: 93, en: 8 },
+  { id: "m1", type: "missile", name: "マイクロミサイル",   power: 11, acc: 76, en: 6 },
   { id: "m2", type: "missile", name: "クラスターミサイル", power: 15, acc: 73, en: 9 },
-  { id: "m3", type: "missile", name: "ヘビーミサイル",   power: 21, acc: 70, en: 13 },
-  { id: "l1", type: "laser",   name: "ビームレーザー",   power: 17, acc: 90, en: 14 },
-  { id: "l2", type: "laser",   name: "プラズマレーザー", power: 25, acc: 92, en: 20 },
+  { id: "m3", type: "missile", name: "ヘビーミサイル",     power: 21, acc: 70, en: 13 },
+  { id: "l1", type: "laser",   name: "ビームレーザー",     power: 17, acc: 90, en: 14 },
+  { id: "l2", type: "laser",   name: "プラズマレーザー",   power: 25, acc: 92, en: 20 },
 ];
 const PART_TYPE_LABEL = { gun: "ガン", missile: "ミサイル", laser: "レーザー" };
 const SLOT_COUNT = 3;
-const STARTING_PARTS = ["g1"];     // 最初から持っているパーツ（[] で丸腰スタート）
 
-// 敵。drop=落とすパーツの系統
+// 通常の敵（基本値）。drop=落とすパーツの系統。ally=仲間になったときの基本値（Lv1）
 const ENEMY_TYPES = [
-  { key: "small", name: "ガードロボ",   ch: "g", color: "#e8a33a", hp: 8,  atk: 3, acc: 80, minFloor: 1, drop: "gun",     weight: 5 },
-  { key: "mid",   name: "ハンターロボ", ch: "h", color: "#d77be0", hp: 16, atk: 5, acc: 80, minFloor: 3, drop: "missile", weight: 3 },
-  { key: "large", name: "タイタンロボ", ch: "T", color: "#ef5a5a", hp: 30, atk: 8, acc: 75, minFloor: 6, drop: "laser",   weight: 2 },
+  { key: "small", name: "ガードロボ",   ch: "g", color: "#e8a33a", hp: 8,  atk: 3, acc: 80, exp: 4,  minFloor: 1, weight: 5, drop: "gun",
+    recruit: 0.12, ally: { hp: 24, en: 60,  tackle: 3, part: "g1" } },
+  { key: "mid",   name: "ハンターロボ", ch: "h", color: "#d77be0", hp: 16, atk: 5, acc: 80, exp: 8,  minFloor: 3, weight: 3, drop: "missile",
+    recruit: 0.08, ally: { hp: 34, en: 80,  tackle: 4, part: "m1" } },
+  { key: "large", name: "タイタンロボ", ch: "T", color: "#ef5a5a", hp: 30, atk: 8, acc: 75, exp: 14, minFloor: 6, weight: 2, drop: "laser",
+    recruit: 0.05, ally: { hp: 46, en: 100, tackle: 6, part: "l1" } },
 ];
-const BOSSES = {
-  5:  { name: "ゲートキーパー",     ch: "B", color: "#ff8a3c", hp: 60,  atk: 8,  acc: 80, drops: ["m2", "m3", "l1"] },
-  10: { name: "遺跡の守護機オメガ", ch: "Ω", color: "#ff4a6e", hp: 100, atk: 12, acc: 80, drops: ["l2"] },
-};
-const FINAL_FLOOR = 10;
-const BOSS_HEAVY_RATE = 0.25;      // ボスが強攻撃を使う確率（威力1.5倍・命中-10）
-const ENEMY_BASE_COUNT = 2;        // 敵数 = BASE + 階数（上限あり）
-const ENEMY_MAX_COUNT = 10;
-const ENEMY_HP_GROWTH = 0.12;      // 1階ごとのHP増加率
-const ENEMY_ATK_GROWTH_EVERY = 3;  // この階数ごとに攻撃+1
+// 階による補正：HP × (0.6 + 0.12×(階-1))、攻撃 × (0.7 + 0.08×(階-1))、切り上げ
+const ENEMY_HP_SCALE = { base: 0.6, perFloor: 0.3 };
+const ENEMY_ATK_SCALE = { base: 0.7, perFloor: 0.1 };
+const EARLY_FLOORS = 2;            // 1〜2階は敵が少なく、命中も低め
+const EARLY_ENEMY_COUNT = [2, 3];
+const EARLY_ACC_PENALTY = 10;
+const enemyCountFor = f => f <= 4 ? f + 2 : Math.min(6, f - 1);   // 3階以降の敵の数
 const ENEMY_SIGHT = 7;
 const PART_DROP_RATE = 0.5;
 const ITEM_DROP_RATE = 0.35;
+
+// ボス（階の補正はかけない）
+const BOSSES = {
+  5:  { name: "ゲートキーパー",     ch: "B", color: "#ff8a3c", hp: 230, atk: 16, acc: 85, exp: 40, drops: ["m2", "m3", "l1"] },
+  10: { name: "遺跡の守護機オメガ", ch: "Ω", color: "#ff4a6e", hp: 400, atk: 26, acc: 85, exp: 0,  drops: ["l2"], doubleBelowHalf: true },
+};
+const FINAL_FLOOR = 10;
+const BOSS_CHARGE_EVERY = 3;       // 3ターンに1回「力を溜める」→ 次のターンに強攻撃
+const BOSS_HEAVY_MULT = 2;
+const BOSS_HEAVY_ACC_DOWN = 10;
 
 // アイテム
 const ITEMS = {
   repair: { name: "修理キット",     ch: "+", color: "#5fe07a", value: 15 },
   cell:   { name: "エネルギーセル", ch: "e", color: "#43b4f0", value: 30 },
 };
-const STARTING_ITEMS = { repair: 1, cell: 0 };
 const MAP_ITEM_MIN = 2, MAP_ITEM_MAX = 4;
+const BOSS_PREP_ITEMS = { repair: 2, cell: 2 };
 
-// スキル。lv は 1〜SKILL_MAX_LEVEL。使うたびに +1
+// スキル（効果はスキルレベルで決まる。機体レベルでは変わらない）
 const SKILL_MAX_LEVEL = 10;
 const SKILLS = [
   { id: "double", name: "連続攻撃",
@@ -272,7 +349,7 @@ const SKILLS = [
     desc: lv => `2回攻撃 威力${2 + Math.ceil(lv / 2)}×2 命中${84 + lv}%` },
   { id: "guard", name: "防御",
     ratio: lv => Math.max(0.2, 0.5 - 0.03 * (lv - 1)),
-    desc: lv => `次の被ダメージを${Math.round(100 * Math.max(0.2, 0.5 - 0.03 * (lv - 1)))}%に` },
+    desc: lv => `次に狙われたときの被ダメージを${Math.round(100 * Math.max(0.2, 0.5 - 0.03 * (lv - 1)))}%に` },
   { id: "focus", name: "集中攻撃",
     bonus: lv => 20 + 3 * (lv - 1),
     desc: lv => `次のぶそうの命中+${20 + 3 * (lv - 1)}%` },
@@ -285,11 +362,12 @@ const ROOM_TRIES = 50, ROOM_MAX = 9;
 // ================================================================
 //  状態
 // ================================================================
-const WALL = 0, FLOOR = 1, STAIRS = 2;
-let map, seen, visible, enemies, groundItems, player, floorNo, logLines;
-let mode = "map";       // map | battle | menu | over
+const WALL = 0, FLOOR = 1, STAIRS = 2, HEAL = 3, BOSSFLOOR = 4, GATE = 5;
+let map, seen, visible, enemies, groundItems, floorNo, logLines;
+let team, inv, pos, bestLevel;
+let mode = "select";    // select | map | battle | menu | over
 let battle = null;
-let menuPending = null; // 交換先スロットを選んでいるパーツの所持番号
+let menuState = { unit: 0, pending: null, confirmRelease: false };
 
 const $ = id => document.getElementById(id);
 const cv = $("cv"), ctx = cv.getContext("2d");
@@ -299,25 +377,94 @@ const rnd = n => Math.floor(Math.random() * n);
 const rndRange = (a, b) => a + rnd(b - a + 1);
 const roll = pct => Math.random() * 100 < pct;
 const partById = id => PARTS.find(p => p.id === id);
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+const isBossFloor = f => !!BOSSES[f];
+const leader = () => team[0];
+const alive = () => team.filter(u => u.hp > 0);
+
+// ================================================================
+//  機体
+// ================================================================
+const maxHpOf = u => u.baseHp + LEVEL_HP_GROWTH * (u.lv - 1) + (DEBUG ? DEBUG_HP_BONUS : 0);
+const maxEnOf = u => u.baseEn + LEVEL_EN_GROWTH * (u.lv - 1);
+const tackleOf = u => u.baseTackle + Math.floor((u.lv - 1) * TACKLE_GROWTH);
+
+function createUnit(o) {
+  const u = {
+    name: o.name, ch: o.ch, color: o.color, isLeader: !!o.isLeader, kind: o.kind,
+    baseHp: o.hp, baseEn: o.en, baseTackle: o.tackle, accBonus: o.accBonus || 0, evade: o.evade || 0,
+    lv: o.lv || 1, exp: 0, pendingLv: 0,
+    equip: new Array(SLOT_COUNT).fill(null),
+    skills: Object.fromEntries(SKILLS.map(s => [s.id, 1])),
+    guard: 0, focus: 0,
+  };
+  u.maxHp = maxHpOf(u); u.hp = u.maxHp;
+  u.maxEn = maxEnOf(u); u.en = u.maxEn;
+  return u;
+}
+
+function uniqueName(base) {
+  if (!team.some(u => u.name === base)) return base;
+  for (const s of ["B", "C", "D"]) if (!team.some(u => u.name === `${base}${s}`)) return `${base}${s}`;
+  return base;
+}
+
+// パーツは共有の持ち物。装備は inv.parts の番号で持つ
+function isEquipped(i) { return team.some(u => u.equip.includes(i)); }
+function addPart(id, prefer) {
+  inv.parts.push(id);
+  const idx = inv.parts.length - 1;
+  const order = prefer ? [prefer, ...team.filter(u => u !== prefer)] : team;
+  const u = order.find(u => u.equip.includes(null));
+  if (u) u.equip[u.equip.indexOf(null)] = idx;
+  return u;
+}
+
+function addExp(u, amount) {
+  if (u.lv >= LEVEL_MAX) return;
+  u.exp += amount;
+}
+// レベルアップはバトルが終わってから処理する
+function processLevelUps() {
+  for (const u of team) {
+    const before = u.lv;
+    while (u.lv < LEVEL_MAX && u.exp >= expToNext(u.lv)) {
+      u.exp -= expToNext(u.lv);
+      u.lv++;
+    }
+    if (u.lv >= LEVEL_MAX) u.exp = 0;
+    if (u.lv !== before) {
+      const hpUp = maxHpOf(u) - u.maxHp, enUp = maxEnOf(u) - u.maxEn;
+      u.maxHp += hpUp; u.maxEn += enUp;
+      if (u.hp > 0) u.hp += hpUp;
+      u.en += enUp;
+      log(`${u.name}はLv${u.lv}になった！`);
+      bestLevel = Math.max(bestLevel, u.lv);
+    }
+  }
+}
 
 // ================================================================
 //  マップ生成
 // ================================================================
-function generateMap() {
+function blankMap() {
   map = []; seen = []; visible = [];
   for (let y = 0; y < MAP_H; y++) {
     map.push(new Array(MAP_W).fill(WALL));
     seen.push(new Array(MAP_W).fill(false));
     visible.push(new Array(MAP_W).fill(false));
   }
+}
+function fillRect(x, y, w, h, t) { for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) map[yy][xx] = t; }
+
+function generateMap() {
+  blankMap();
   const rooms = [];
   for (let i = 0; i < ROOM_TRIES && rooms.length < ROOM_MAX; i++) {
     const w = rndRange(4, 8), h = rndRange(3, 6);
     const x = rndRange(1, MAP_W - w - 2), y = rndRange(1, MAP_H - h - 2);
     if (rooms.some(o => x <= o.x + o.w && x + w >= o.x && y <= o.y + o.h && y + h >= o.y)) continue;
     rooms.push({ x, y, w, h });
-    for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) map[yy][xx] = FLOOR;
+    fillRect(x, y, w, h, FLOOR);
   }
   for (let i = 1; i < rooms.length; i++) {
     const a = center(rooms[i - 1]), b = center(rooms[i]);
@@ -330,53 +477,58 @@ function center(r) { return { x: r.x + (r.w >> 1), y: r.y + (r.h >> 1) }; }
 function hCorr(x1, x2, y) { for (let x = Math.min(x1, x2); x <= Math.max(x1, x2); x++) map[y][x] = FLOOR; }
 function vCorr(y1, y2, x) { for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) map[y][x] = FLOOR; }
 
+const covers = (e, x, y) => x >= e.x && x < e.x + e.size && y >= e.y && y < e.y + e.size;
+const enemyAt = (x, y) => enemies.find(e => covers(e, x, y));
+
 function occupied(x, y) {
-  return (player.x === x && player.y === y) ||
-         enemies.some(e => e.x === x && e.y === y) ||
-         groundItems.some(it => it.x === x && it.y === y) ||
-         map[y][x] === STAIRS;
+  return (pos.x === x && pos.y === y) || !!enemyAt(x, y) ||
+         groundItems.some(it => it.x === x && it.y === y) || map[y][x] !== FLOOR;
 }
 function freeCellIn(r) {
   for (let t = 0; t < 60; t++) {
     const x = rndRange(r.x, r.x + r.w - 1), y = rndRange(r.y, r.y + r.h - 1);
-    if (map[y][x] === FLOOR && !occupied(x, y)) return { x, y };
+    if (!occupied(x, y)) return { x, y };
   }
   return null;
 }
 
-function makeEnemy(def, x, y, isBoss) {
-  const hp = isBoss ? def.hp : Math.round(def.hp * (1 + ENEMY_HP_GROWTH * (floorNo - 1)));
-  const atk = isBoss ? def.atk : def.atk + Math.floor((floorNo - 1) / ENEMY_ATK_GROWTH_EVERY);
-  return { def, name: def.name, ch: def.ch, color: def.color, x, y, hp, maxHp: hp, atk, acc: def.acc,
-           boss: !!isBoss, awake: false, stun: 0 };
+function scaled(base, s) { return Math.max(1, Math.ceil(base * (s.base + s.perFloor * (floorNo - 1)))); }
+function makeEnemy(def, x, y) {
+  const hp = scaled(def.hp, ENEMY_HP_SCALE);
+  return { def, name: def.name, ch: def.ch, color: def.color, x, y, size: 1,
+           hp, maxHp: hp, atk: scaled(def.atk, ENEMY_ATK_SCALE),
+           acc: def.acc - (floorNo <= EARLY_FLOORS ? EARLY_ACC_PENALTY : 0),
+           exp: Math.ceil(def.exp * (1 + EXP_FLOOR_SCALE * (floorNo - 1))),
+           boss: false, awake: false, stun: 0 };
+}
+function makeBoss(def, x, y) {
+  return { def, name: def.name, ch: def.ch, color: def.color, x, y, size: 2,
+           hp: def.hp, maxHp: def.hp, atk: def.atk, acc: def.acc, exp: def.exp,
+           boss: true, awake: true, stun: 0 };
 }
 
 function pickEnemyType() {
   const pool = ENEMY_TYPES.filter(t => floorNo >= t.minFloor);
-  let total = pool.reduce((s, t) => s + t.weight, 0), r = Math.random() * total;
+  let r = Math.random() * pool.reduce((s, t) => s + t.weight, 0);
   for (const t of pool) { if ((r -= t.weight) < 0) return t; }
   return pool[0];
 }
 
 function newFloor() {
   enemies = []; groundItems = [];
+  if (isBossFloor(floorNo)) { bossFloor(); return; }
+
   let rooms = generateMap();
   while (rooms.length < 4) rooms = generateMap();
-
   const start = center(rooms[0]);
-  player.x = start.x; player.y = start.y;
-
-  const last = rooms[rooms.length - 1];
-  const s = freeCellIn(last);
+  pos = { x: start.x, y: start.y };
+  const s = freeCellIn(rooms[rooms.length - 1]);
   map[s.y][s.x] = STAIRS;
 
-  // ボスは階段の上に立ちふさがる
-  if (BOSSES[floorNo]) enemies.push(makeEnemy(BOSSES[floorNo], s.x, s.y, true));
-
-  const count = Math.min(ENEMY_MAX_COUNT, ENEMY_BASE_COUNT + floorNo);
+  const count = floorNo <= EARLY_FLOORS ? rndRange(...EARLY_ENEMY_COUNT) : enemyCountFor(floorNo);
   for (let i = 0; i < count; i++) {
     const p = freeCellIn(rooms[1 + rnd(rooms.length - 1)]);
-    if (p) enemies.push(makeEnemy(pickEnemyType(), p.x, p.y, false));
+    if (p) enemies.push(makeEnemy(pickEnemyType(), p.x, p.y));
   }
   const itemCount = rndRange(MAP_ITEM_MIN, MAP_ITEM_MAX);
   for (let i = 0; i < itemCount; i++) {
@@ -386,17 +538,48 @@ function newFloor() {
   updateFov();
 }
 
+// ボス階：準備部屋 → 1本道の通路 → ボス部屋 → ボスの後ろに階段（左から右へ）
+const BOSS_LAYOUT = {
+  prep: { x: 2, y: 10, w: 7, h: 7 },     // 準備部屋
+  corridorY: 13, corridorX: [9, 13],      // 通路（9 が出口の目印）
+  room: { x: 14, y: 6, w: 10, h: 15 },    // ボス部屋（準備部屋より大きい）
+  boss: { x: 22, y: 12 },                 // ボス（2×2）
+  stairs: { x: 25, y: 13 },               // ボスの真後ろ。(24,13) はボスの横からしか入れない
+  start: { x: 3, y: 13 },
+  heal: { x: 5, y: 13 },
+  items: [[3, 11], [7, 11], [3, 15], [7, 15]],
+};
+function bossFloor() {
+  blankMap();
+  const L = BOSS_LAYOUT;
+  fillRect(L.prep.x, L.prep.y, L.prep.w, L.prep.h, FLOOR);
+  for (let x = L.corridorX[0]; x <= L.corridorX[1]; x++) map[L.corridorY][x] = FLOOR;
+  map[L.corridorY][L.corridorX[0]] = GATE;
+  fillRect(L.room.x, L.room.y, L.room.w, L.room.h, BOSSFLOOR);
+  map[L.stairs.y][L.stairs.x - 1] = BOSSFLOOR;
+  map[L.stairs.y][L.stairs.x] = STAIRS;
+  map[L.heal.y][L.heal.x] = HEAL;
+  pos = { ...L.start };
+  enemies.push(makeBoss(BOSSES[floorNo], L.boss.x, L.boss.y));
+  const keys = [];
+  for (const [k, n] of Object.entries(BOSS_PREP_ITEMS)) for (let i = 0; i < n; i++) keys.push(k);
+  keys.forEach((k, i) => { const [x, y] = L.items[i % L.items.length]; groundItems.push({ x, y, key: k }); });
+  // ボス階は全体を見せる
+  for (let y = 0; y < MAP_H; y++) { seen[y].fill(true); visible[y].fill(true); }
+}
+
 // ================================================================
 //  視界
 // ================================================================
 function updateFov() {
+  if (isBossFloor(floorNo)) return;
   for (let y = 0; y < MAP_H; y++) visible[y].fill(false);
   for (let dy = -FOV_RADIUS; dy <= FOV_RADIUS; dy++) {
     for (let dx = -FOV_RADIUS; dx <= FOV_RADIUS; dx++) {
       if (dx * dx + dy * dy > FOV_RADIUS * FOV_RADIUS + 1) continue;
-      const tx = player.x + dx, ty = player.y + dy;
+      const tx = pos.x + dx, ty = pos.y + dy;
       if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) continue;
-      if (lineOfSight(player.x, player.y, tx, ty)) { visible[ty][tx] = true; seen[ty][tx] = true; }
+      if (lineOfSight(pos.x, pos.y, tx, ty)) { visible[ty][tx] = true; seen[ty][tx] = true; }
     }
   }
 }
@@ -436,51 +619,69 @@ const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0], wait: [0
 function playerMove(dir) {
   if (mode !== "map") return;
   const [dx, dy] = DIRS[dir];
-  const nx = player.x + dx, ny = player.y + dy;
+  const nx = pos.x + dx, ny = pos.y + dy;
 
   if (dx || dy) {
-    const target = enemies.find(e => e.x === nx && e.y === ny);
+    const target = enemyAt(nx, ny);
     if (target) { startBattle(target); return; }
     if (map[ny][nx] === WALL) return;
-    player.x = nx; player.y = ny;
+    const wasBossRoom = map[pos.y][pos.x] === BOSSFLOOR;
+    pos.x = nx; pos.y = ny;
     pickUpGround();
-    if (map[ny][nx] === STAIRS) { descend(); return; }
+    const t = map[ny][nx];
+    if (t === STAIRS) { descend(); return; }
+    if (t === HEAL) healAll();
+    if (t === GATE && dx > 0) log("この先はボス部屋。準備はいいか？");
+    if (t === BOSSFLOOR && !wasBossRoom && enemies.some(e => e.boss)) {
+      log(`強敵の気配がする…。「${enemies.find(e => e.boss).name}」が待ち構えている！`);
+    }
   }
-
   enemiesAct();
   updateFov();
   renderMap();
 }
 
+function healAll() {
+  for (const u of team) { u.hp = u.maxHp; u.en = u.maxEn; }
+  log("回復ポイント：チーム全員のHPとエネルギーが全回復した。");
+}
+
 function pickUpGround() {
-  const it = groundItems.find(i => i.x === player.x && i.y === player.y);
+  const it = groundItems.find(i => i.x === pos.x && i.y === pos.y);
   if (!it) return;
   groundItems = groundItems.filter(i => i !== it);
-  player.items[it.key]++;
-  log(`${ITEMS[it.key].name}を拾った。（所持${player.items[it.key]}）`);
+  if (it.key === "part") {
+    const u = addPart(it.part);
+    log(`パーツ「${partById(it.part).name}」を拾った！${u ? `（${u.name}に装備）` : "（メニューで装備）"}`);
+  } else {
+    inv.items[it.key]++;
+    log(`${ITEMS[it.key].name}を拾った。（所持${inv.items[it.key]}）`);
+  }
 }
 
 function descend() {
   floorNo++;
-  const before = player.energy;
-  player.energy = Math.min(PLAYER_ENERGY, player.energy + STAIRS_ENERGY_BONUS);
+  for (const u of team) u.en = Math.min(u.maxEn, u.en + STAIRS_ENERGY_BONUS);
   newFloor();
-  log(`地下${floorNo}階へ降りた。（EN+${player.energy - before}）`);
-  if (BOSSES[floorNo]) log("強い気配がする…。階段の前に何かいる。");
+  if (isBossFloor(floorNo)) {
+    log(`${floorNo}F ボスフロアに着いた。（全員EN+${STAIRS_ENERGY_BONUS}）`);
+    log("準備部屋だ。回復ポイント + で全回復できる。");
+  } else {
+    log(`${floorNo}Fへ降りた。（全員EN+${STAIRS_ENERGY_BONUS}）`);
+  }
   renderMap();
 }
 
 function enemiesAct() {
   for (const e of enemies) {
-    if (e.boss) continue;                 // ボスは階段から動かない
+    if (e.boss) continue;               // ボスは動かない
     if (e.stun > 0) { e.stun--; continue; }
-    const dist = Math.abs(e.x - player.x) + Math.abs(e.y - player.y);
-    if (!e.awake && dist <= ENEMY_SIGHT && lineOfSight(e.x, e.y, player.x, player.y)) e.awake = true;
-
+    const dist = Math.abs(e.x - pos.x) + Math.abs(e.y - pos.y);
+    if (!e.awake && dist <= ENEMY_SIGHT && lineOfSight(e.x, e.y, pos.x, pos.y)) e.awake = true;
     if (e.awake) {
-      if (dist === 1) { startBattle(e); return; }  // 体当たりしてきた
-      const sx = Math.sign(player.x - e.x), sy = Math.sign(player.y - e.y);
-      const tries = Math.abs(player.x - e.x) >= Math.abs(player.y - e.y) ? [[sx, 0], [0, sy]] : [[0, sy], [sx, 0]];
+      if (dist === 1) { startBattle(e); return; }
+      const sx = Math.sign(pos.x - e.x), sy = Math.sign(pos.y - e.y);
+      const tries = Math.abs(pos.x - e.x) >= Math.abs(pos.y - e.y) ? [[sx, 0], [0, sy]] : [[0, sy], [sx, 0]];
       for (const [mx, my] of tries) {
         if ((mx || my) && canEnemyMove(e.x + mx, e.y + my)) { e.x += mx; e.y += my; break; }
       }
@@ -492,22 +693,35 @@ function enemiesAct() {
 }
 function canEnemyMove(x, y) {
   if (map[y][x] !== FLOOR) return false;
-  if (player.x === x && player.y === y) return false;
-  return !enemies.some(o => o.x === x && o.y === y);
+  if (pos.x === x && pos.y === y) return false;
+  return !enemyAt(x, y);
 }
 
 // ================================================================
 //  バトル
 // ================================================================
+let skipWait = null;
+function pause(ms = BATTLE_WAIT) {
+  return new Promise(res => {
+    const t = setTimeout(done, ms);
+    function done() { clearTimeout(t); skipWait = null; res(); }
+    skipWait = done;
+  });
+}
+
 function startBattle(e) {
   mode = "battle";
   e.awake = true;
-  battle = { enemy: e, menu: "main", busy: false, guard: 0, focus: 0 };
-  log(e.boss ? `ボス「${e.name}」が立ちはだかる！` : `${e.name}が現れた！`);
+  for (const u of team) { u.guard = 0; u.focus = 0; }
+  battle = { enemy: e, menu: "main", busy: false, actor: team.findIndex(u => u.hp > 0),
+             round: 1, bossTurn: 0, heavyReady: false, itemKey: null, downs: 0 };
+  log(e.boss ? `ボス「${e.name}」との戦闘！` : `${e.name}が現れた！`);
   $("mapScreen").hidden = true;
   $("battle").hidden = false;
   const sp = $("eSprite");
   sp.className = "sprite" + (e.boss ? " boss" : "");
+  $("eName").className = e.boss ? "boss" : "";
+  $("arena").classList.toggle("bossArena", e.boss);
   sp.textContent = e.ch;
   sp.style.color = e.color;
   sp.style.borderColor = e.color;
@@ -516,211 +730,275 @@ function startBattle(e) {
   renderBattle();
 }
 
+// バトル終了後の後片付け（勝ち・逃げ共通）
+function afterBattle() {
+  for (const u of team) {
+    u.guard = 0; u.focus = 0;
+    if (u.hp <= 0) { u.hp = Math.max(1, Math.floor(u.maxHp * REVIVE_HP_RATE)); log(`${u.name}が再起動した。（HP${u.hp}）`); }
+  }
+  processLevelUps();
+}
+
 function endBattle() {
   battle = null;
   mode = "map";
   $("battle").hidden = true;
   $("mapScreen").hidden = false;
+  afterBattle();
   updateFov();
   resize();
 }
 
-function varied(power) { return Math.max(1, power + rndRange(-DAMAGE_VARIANCE, DAMAGE_VARIANCE)); }
+const varied = power => Math.max(1, power + rndRange(-DAMAGE_VARIANCE, DAMAGE_VARIANCE));
+function showFx(text, color) { const f = $("fx"); f.textContent = text; f.style.color = color; }
+function bump(el) { if (!el) return; el.classList.remove("hit"); void el.offsetWidth; el.classList.add("hit"); }
 
-function playerHit(label, power, acc) {
+function attack(u, label, power, acc) {
   const e = battle.enemy;
-  if (!roll(acc)) { log(`${label}！ …しかし外れた。`); showFx("MISS", "#aaa"); return; }
+  acc = Math.min(100, acc + u.accBonus);
+  if (!roll(acc)) { log(`${u.name}の${label}！ 外れた。`); showFx("MISS", "#aaa"); return; }
   const dmg = varied(power);
   e.hp = Math.max(0, e.hp - dmg);
-  log(`${label}！ ${e.name}に${dmg}ダメージ。`);
+  log(`${u.name}の${label}！ ${dmg}ダメージ。`);
   showFx(`-${dmg}`, "#ffd447");
-  anim($("eSprite"), "hit");
+  bump($("eSprite"));
 }
 
-function anim(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
-function showFx(text, color) { const f = $("fx"); f.textContent = text; f.style.color = color; }
+function levelUpSkill(u, id) {
+  if (u.skills[id] < SKILL_MAX_LEVEL) u.skills[id]++;
+}
 
-function levelUpSkill(id) {
-  if (player.skills[id] < SKILL_MAX_LEVEL) {
-    player.skills[id]++;
-    const s = SKILLS.find(s => s.id === id);
-    log(`${s.name}のレベルが${player.skills[id]}に上がった！`);
+function useItem(key, target) {
+  inv.items[key]--;
+  if (key === "repair") {
+    const before = target.hp;
+    target.hp = Math.min(target.maxHp, target.hp + ITEMS.repair.value);
+    log(`${ITEMS.repair.name}で${target.name}のHPが${target.hp - before}回復。`);
+  } else {
+    const before = target.en;
+    target.en = Math.min(target.maxEn, target.en + ITEMS.cell.value);
+    log(`${ITEMS.cell.name}で${target.name}のENが${target.en - before}回復。`);
   }
 }
 
-// 各コマンドの中身。"escaped" を返すとバトル終了
+// 各コマンド。"escaped" を返すとバトル終了
 const ACTIONS = {
-  tackle() { playerHit(TACKLE.name, TACKLE.power, TACKLE.acc); },
-  weapon(slot) {
-    const part = partById(player.parts[player.equip[slot]]);
-    player.energy -= part.en;
-    const acc = Math.min(100, part.acc + battle.focus);
-    battle.focus = 0;
-    playerHit(part.name, part.power, acc);
+  tackle(u) { attack(u, "たいあたり", tackleOf(u), TACKLE_ACC); },
+  weapon(u, slot) {
+    const part = partById(inv.parts[u.equip[slot]]);
+    u.en -= part.en;
+    const acc = part.acc + u.focus;
+    u.focus = 0;
+    attack(u, part.name, part.power, acc);
   },
-  skill(id) {
-    const s = SKILLS.find(s => s.id === id), lv = player.skills[id];
+  skill(u, id) {
+    const s = SKILLS.find(s => s.id === id), lv = u.skills[id];
     if (id === "double") {
-      log(`${s.name}！`);
-      playerHit("1発目", s.hitPower(lv), s.hitAcc(lv));
-      if (battle.enemy.hp > 0) playerHit("2発目", s.hitPower(lv), s.hitAcc(lv));
+      attack(u, "連続攻撃(1)", s.hitPower(lv), s.hitAcc(lv));
+      if (battle.enemy.hp > 0) attack(u, "連続攻撃(2)", s.hitPower(lv), s.hitAcc(lv));
     } else if (id === "guard") {
-      battle.guard = s.ratio(lv);
-      log(`${s.name}の構え！ 次の被ダメージを${Math.round(battle.guard * 100)}%に抑える。`);
+      u.guard = s.ratio(lv);
+      log(`${u.name}は防御の構え。（被ダメージ${Math.round(u.guard * 100)}%）`);
     } else if (id === "focus") {
-      battle.focus = s.bonus(lv);
-      log(`${s.name}！ 次のぶそうの命中が+${battle.focus}%。`);
+      u.focus = s.bonus(lv);
+      log(`${u.name}は集中した。（次のぶそう命中+${u.focus}%）`);
     }
-    levelUpSkill(id);
+    levelUpSkill(u, id);
   },
-  item(key) {
-    player.items[key]--;
-    if (key === "repair") {
-      const before = player.hp;
-      player.hp = Math.min(player.maxHp, player.hp + ITEMS.repair.value);
-      log(`${ITEMS.repair.name}を使った。HPが${player.hp - before}回復。`);
-    } else {
-      const before = player.energy;
-      player.energy = Math.min(PLAYER_ENERGY, player.energy + ITEMS.cell.value);
-      log(`${ITEMS.cell.name}を使った。ENが${player.energy - before}回復。`);
-    }
-  },
-  escape() {
+  item(u, arg) { useItem(arg.key, arg.target); },
+  escape(u) {
     if (roll(ESCAPE_RATE)) {
       log("うまく逃げ切った！");
       battle.enemy.stun = ESCAPE_STUN_TURNS;
       return "escaped";
     }
-    log("逃げられなかった！");
+    log(`${u.name}は逃げようとしたが、失敗した！`);
   },
 };
 
-async function runTurn(action, arg) {
+function nextActor(from) {
+  for (let i = from + 1; i < team.length; i++) if (team[i].hp > 0) return i;
+  return -1;
+}
+
+async function runCommand(action, arg) {
   if (!battle || battle.busy) return;
   battle.busy = true;
   battle.menu = "main";
-  const result = ACTIONS[action](arg);
+  const u = team[battle.actor];
+  const result = ACTIONS[action](u, arg);
   renderBattle();
-  await sleep(550);
+  await pause();
 
   if (result === "escaped") { endBattle(); return; }
-  if (battle.enemy.hp <= 0) { await winBattle(); return; }
+  if (battle.enemy.hp <= 0) { winBattle(); return; }
 
-  enemyTurn();
-  renderBattle();
-  if (player.hp <= 0) {
-    await sleep(600);
-    gameOver(`${battle.enemy.name}に倒された…`);
+  const next = nextActor(battle.actor);
+  if (next >= 0) {
+    battle.actor = next;
+    battle.busy = false;
+    renderBattle();
     return;
   }
-  await sleep(250);
+  // 味方全員が行動したら、敵の番
+  battle.actor = -1;
+  renderBattle();
+  await enemyPhase();
+  if (alive().length === 0) {
+    await pause(500);
+    gameOver(`${battle.enemy.name}にチームが全滅させられた…`);
+    return;
+  }
+  battle.round++;
+  battle.actor = nextActor(-1);
   battle.busy = false;
   renderBattle();
 }
 
-function enemyTurn() {
+function randomAlive() { const a = alive(); return a.length ? a[rnd(a.length)] : null; }
+
+function enemyStrike(e, u, power, acc, label) {
+  const guard = u.guard;
+  u.guard = 0;   // 狙われたら防御は消える
+  if (!roll(acc)) { log(`${label}！ ${u.name}への攻撃は外れた。`); showFx("MISS", "#8fd"); return; }
+  if (u.evade && roll(u.evade)) { log(`${label}！ ${u.name}はひらりとかわした。`); showFx("回避", "#8fd"); return; }
+  let dmg = varied(power);
+  if (guard) dmg = Math.max(1, Math.round(dmg * guard));
+  u.hp = Math.max(0, u.hp - dmg);
+  log(`${label}！ ${u.name}に${dmg}ダメージ${guard ? "（防御）" : ""}。`);
+  showFx(`-${dmg}`, "#ff6a6a");
+  bump($("ally" + team.indexOf(u)));
+  if (u.hp === 0) { battle.downs++; log(`${u.name}は動けなくなった！`); }
+}
+
+async function enemyPhase() {
   const e = battle.enemy;
-  let power = e.atk, acc = e.acc, label = `${e.name}の攻撃`;
-  if (e.boss && Math.random() < BOSS_HEAVY_RATE) {
-    power = Math.round(e.atk * 1.5); acc -= 10; label = `${e.name}の強攻撃`;
+  if (!e.boss) {
+    const t = randomAlive();
+    if (t) enemyStrike(e, t, e.atk, e.acc, `${e.name}の攻撃`);
+    renderBattle();
+    await pause();
+    return;
   }
-  if (!roll(acc)) {
-    log(`${label}！ …ひらりとかわした。`);
-    showFx("回避", "#8fd");
-  } else {
-    let dmg = varied(power);
-    if (battle.guard) dmg = Math.max(1, Math.round(dmg * battle.guard));
-    player.hp = Math.max(0, player.hp - dmg);
-    log(`${label}！ ${dmg}ダメージを受けた${battle.guard ? "（防御）" : ""}。`);
-    showFx(`-${dmg}`, "#ff6a6a");
-    anim($("pSprite"), "flash");
-    battle.guard = 0;   // 攻撃を受けたら防御は消える
+  battle.bossTurn++;
+  if (battle.heavyReady) {
+    battle.heavyReady = false;
+    const t = randomAlive();
+    if (t) enemyStrike(e, t, e.atk * BOSS_HEAVY_MULT, e.acc - BOSS_HEAVY_ACC_DOWN, `${e.name}の強攻撃`);
+    renderBattle();
+    await pause();
+    return;
+  }
+  if (battle.bossTurn % BOSS_CHARGE_EVERY === 0) {
+    battle.heavyReady = true;
+    log(`${e.name}は力を溜めている…！ 次は強攻撃だ。`);
+    showFx("力を溜めている", "#ffb02e");
+    renderBattle();
+    await pause();
+    return;
+  }
+  const times = e.def.doubleBelowHalf && e.hp <= e.maxHp / 2 ? 2 : 1;
+  for (let i = 0; i < times; i++) {
+    const t = randomAlive();
+    if (!t) break;
+    enemyStrike(e, t, e.atk, e.acc, times > 1 ? `${e.name}の連撃(${i + 1})` : `${e.name}の攻撃`);
+    renderBattle();
+    await pause();
   }
 }
 
-async function winBattle() {
+function winBattle() {
   const e = battle.enemy;
-  $("eSprite").classList.add("dead");
+  battle.result = { rounds: battle.round, downs: battle.downs, boss: e.boss };
+  lastBattle = battle.result;
   enemies = enemies.filter(o => o !== e);
-  const enBefore = player.energy;
-  player.energy = Math.min(PLAYER_ENERGY, player.energy + WIN_ENERGY_BONUS);
-  log(`${e.name}を破壊した！（EN+${player.energy - enBefore}）`);
+  const living = alive();
+  for (const u of living) { u.en = Math.min(u.maxEn, u.en + WIN_ENERGY_BONUS); addExp(u, e.exp); }
+  log(`${e.name}を破壊した！${e.exp ? ` EXP+${e.exp}` : ""}`);
 
   if (e.boss && floorNo >= FINAL_FLOOR) {
     renderBattle();
-    await sleep(900);
-    gameClear();
+    setTimeout(gameClear, 700);
     return;
   }
 
-  let partId = null;
   if (e.boss) {
-    partId = e.def.drops[rnd(e.def.drops.length)];
-  } else if (Math.random() < PART_DROP_RATE) {
-    // 浅い階では系統内の弱いものが出やすい
-    const pool = PARTS.filter(p => p.type === e.def.drop);
-    const maxIdx = Math.min(pool.length, 1 + Math.floor(floorNo / 3));
-    partId = pool[rnd(maxIdx)].id;
+    // 落とし物はボスのいた場所に出る
+    const id = e.def.drops[rnd(e.def.drops.length)];
+    groundItems.push({ x: e.x, y: e.y, key: "part", part: id });
+    log(`${partById(id).name}が落ちた！ 奥の階段が使える。`);
+  } else {
+    if (Math.random() < PART_DROP_RATE) {
+      const pool = PARTS.filter(p => p.type === e.def.drop);
+      const id = pool[rnd(Math.min(pool.length, 1 + Math.floor(floorNo / 3)))].id;
+      const u = addPart(id);
+      log(`パーツ「${partById(id).name}」を入手！${u ? `（${u.name}に装備）` : ""}`);
+    }
+    if (Math.random() < ITEM_DROP_RATE) {
+      const key = Math.random() < 0.5 ? "repair" : "cell";
+      inv.items[key]++;
+      log(`${ITEMS[key].name}を手に入れた。`);
+    }
+    if (team.length < TEAM_MAX && Math.random() < e.def.recruit) recruit(e.def);
   }
-  if (partId) gainPart(partId);
-  if (Math.random() < ITEM_DROP_RATE) {
-    const key = Math.random() < 0.5 ? "repair" : "cell";
-    player.items[key]++;
-    log(`${ITEMS[key].name}を手に入れた。`);
-  }
-  if (e.boss) log("階段への道が開いた！");
-
   battle.menu = "result";
+  battle.actor = -1;
   battle.busy = false;
   renderBattle();
 }
 
-function gainPart(id) {
-  player.parts.push(id);
-  const idx = player.parts.length - 1;
-  const free = player.equip.indexOf(null);
-  if (free >= 0) {
-    player.equip[free] = idx;
-    log(`パーツ「${partById(id).name}」を入手、スロット${free + 1}に装備した！`);
-  } else {
-    log(`パーツ「${partById(id).name}」を入手！（メニューで装備）`);
-  }
+// 仲間は、最初の機体と同じレベルで加わる
+function recruit(def) {
+  const u = createUnit({ name: uniqueName(def.name), ch: def.ch, color: def.color, kind: def.key,
+    hp: def.ally.hp, en: def.ally.en, tackle: def.ally.tackle, lv: leader().lv });
+  team.push(u);
+  addPart(def.ally.part, u);
+  log(`${u.name}が仲間になった！（Lv${u.lv}）`);
 }
 
-// コマンド一覧を作る
+// コマンド一覧
 function battleCommands() {
   const b = battle, cmds = [];
+  if (b.menu === "result") return [{ label: "つづける", sub: "マップにもどる", act: endBattle }];
+  if (b.actor < 0) return [];
+  const u = team[b.actor];
   const back = { label: "もどる", back: true, act: () => { b.menu = "main"; renderBattle(); } };
   if (b.menu === "main") {
-    cmds.push({ label: "たいあたり", sub: `威力${TACKLE.power} 命中${TACKLE.acc}%`, act: () => runTurn("tackle") });
+    cmds.push({ label: "たいあたり", sub: `威力${tackleOf(u)} 命中${Math.min(100, TACKLE_ACC + u.accBonus)}%`, act: () => runCommand("tackle") });
     cmds.push({ label: "ぶそう", sub: "パーツで攻撃", act: () => { b.menu = "weapon"; renderBattle(); } });
     cmds.push({ label: "スキル", sub: "技を使う", act: () => { b.menu = "skill"; renderBattle(); } });
-    cmds.push({ label: "アイテム", sub: `修理${player.items.repair} セル${player.items.cell}`, act: () => { b.menu = "item"; renderBattle(); } });
+    cmds.push({ label: "アイテム", sub: `修理${inv.items.repair} セル${inv.items.cell}`, act: () => { b.menu = "item"; renderBattle(); } });
     cmds.push({ label: "にげる", sub: b.enemy.boss ? "ボスからは逃げられない" : `成功率${ESCAPE_RATE}%`,
-                disabled: b.enemy.boss, act: () => runTurn("escape") });
+                disabled: b.enemy.boss, act: () => runCommand("escape") });
   } else if (b.menu === "weapon") {
-    player.equip.forEach((pi, slot) => {
+    u.equip.forEach((pi, slot) => {
       if (pi === null) { cmds.push({ label: `スロット${slot + 1}：なし`, disabled: true }); return; }
-      const p = partById(player.parts[pi]);
-      const acc = Math.min(100, p.acc + b.focus);
+      const p = partById(inv.parts[pi]);
+      const acc = Math.min(100, p.acc + u.focus + u.accBonus);
       cmds.push({ label: p.name, sub: `威力${p.power} 命中${acc}% EN${p.en}`,
-                  disabled: player.energy < p.en, act: () => runTurn("weapon", slot) });
+                  disabled: u.en < p.en, act: () => runCommand("weapon", slot) });
     });
     cmds.push(back);
   } else if (b.menu === "skill") {
     for (const s of SKILLS) {
-      const lv = player.skills[s.id];
-      cmds.push({ label: `${s.name} Lv${lv}`, sub: s.desc(lv), act: () => runTurn("skill", s.id) });
+      const lv = u.skills[s.id];
+      cmds.push({ label: `${s.name} Lv${lv}`, sub: s.desc(lv), act: () => runCommand("skill", s.id) });
     }
     cmds.push(back);
   } else if (b.menu === "item") {
-    cmds.push({ label: `${ITEMS.repair.name} ×${player.items.repair}`, sub: `HP+${ITEMS.repair.value}`,
-                disabled: player.items.repair <= 0 || player.hp >= player.maxHp, act: () => runTurn("item", "repair") });
-    cmds.push({ label: `${ITEMS.cell.name} ×${player.items.cell}`, sub: `EN+${ITEMS.cell.value}`,
-                disabled: player.items.cell <= 0 || player.energy >= PLAYER_ENERGY, act: () => runTurn("item", "cell") });
+    for (const key of ["repair", "cell"]) {
+      cmds.push({ label: `${ITEMS[key].name} ×${inv.items[key]}`, sub: key === "repair" ? `HP+${ITEMS[key].value}` : `EN+${ITEMS[key].value}`,
+                  disabled: inv.items[key] <= 0, act: () => { b.itemKey = key; b.menu = "itemTarget"; renderBattle(); } });
+    }
     cmds.push(back);
-  } else if (b.menu === "result") {
-    cmds.push({ label: "つづける", sub: "マップにもどる", act: endBattle });
+  } else if (b.menu === "itemTarget") {
+    const key = b.itemKey;
+    for (const t of alive()) {
+      const full = key === "repair" ? t.hp >= t.maxHp : t.en >= t.maxEn;
+      cmds.push({ label: t.name, sub: key === "repair" ? `HP ${t.hp}/${t.maxHp}` : `EN ${t.en}/${t.maxEn}`,
+                  disabled: full, act: () => runCommand("item", { key, target: t }) });
+    }
+    cmds.push({ label: "もどる", back: true, act: () => { b.menu = "item"; renderBattle(); } });
   }
   return cmds;
 }
@@ -731,37 +1009,69 @@ function renderBattle() {
   $("eName").textContent = (e.boss ? "BOSS " : "") + e.name;
   $("eHpText").textContent = `HP ${e.hp}/${e.maxHp}`;
   $("eHpBar").firstElementChild.style.width = (100 * e.hp / e.maxHp) + "%";
-  $("bHp").textContent = `${player.hp}/${player.maxHp}`;
-  $("bHp").classList.toggle("low", player.hp <= player.maxHp * 0.3);
-  $("bEn").textContent = player.energy;
-  $("bHpBar").firstElementChild.style.width = (100 * player.hp / player.maxHp) + "%";
-  $("bEnBar").firstElementChild.style.width = (100 * player.energy / PLAYER_ENERGY) + "%";
-  const st = [];
-  if (battle.guard) st.push(`防御中（${Math.round(battle.guard * 100)}%）`);
-  if (battle.focus) st.push(`集中中（命中+${battle.focus}%）`);
-  $("bState").textContent = st.join("　");
+  $("charge").textContent = "⚡ 力を溜めている！ 次のターンに強攻撃";
+  $("charge").hidden = !battle.heavyReady;
 
-  const titles = { main: "コマンド", weapon: "ぶそう：パーツを選ぶ", skill: "スキルを選ぶ", item: "アイテムを選ぶ", result: "勝利！" };
-  $("cmdTitle").textContent = titles[battle.menu];
+  // 味方の表示
+  const allies = $("allies");
+  allies.textContent = "";
+  team.forEach((u, i) => {
+    const s = document.createElement("div");
+    s.className = "sprite ally" + (i === battle.actor ? " active" : "") + (u.hp <= 0 ? " down" : "");
+    s.id = "ally" + i;
+    s.textContent = u.isLeader ? "@" : u.ch;
+    s.style.color = u.isLeader ? "#ffd447" : u.color;
+    s.style.borderColor = u.isLeader ? "#ffd447" : u.color;
+    allies.append(s);
+  });
+  const party = $("party");
+  party.textContent = "";
+  team.forEach((u, i) => {
+    const r = document.createElement("div");
+    r.className = "prow" + (i === battle.actor ? " active" : "") + (u.hp <= 0 ? " down" : "");
+    r.innerHTML = `<span class="nm"></span><span class="bar hp"><i></i></span><span class="num hpn"></span><span class="num enn"></span>`;
+    r.querySelector(".nm").textContent = u.name;
+    const small = document.createElement("small"); small.textContent = ` Lv${u.lv}`;
+    r.querySelector(".nm").append(small);
+    r.querySelector("i").style.width = (100 * u.hp / u.maxHp) + "%";
+    r.querySelector(".hpn").textContent = u.hp > 0 ? `${u.hp}/${u.maxHp}` : "停止";
+    r.querySelector(".hpn").classList.toggle("low", u.hp > 0 && u.hp <= u.maxHp * 0.3);
+    r.querySelector(".enn").textContent = `EN${u.en}`;
+    const st = [];
+    if (u.guard) st.push(`防御中 ${Math.round(u.guard * 100)}%`);
+    if (u.focus) st.push(`集中 命中+${u.focus}%`);
+    if (st.length) { const d = document.createElement("span"); d.className = "st"; d.textContent = st.join("　"); r.append(d); }
+    party.append(r);
+  });
 
-  currentCmds = battleCommands();
+  const titles = { main: "の行動", weapon: "：パーツを選ぶ", skill: "：スキルを選ぶ", item: "：アイテムを選ぶ", itemTarget: "：使う相手を選ぶ" };
+  const title = $("cmdTitle");
+  title.textContent = "";
+  if (battle.menu === "result") title.textContent = "勝利！";
+  else if (battle.actor >= 0 && !battle.busy) {
+    const b = document.createElement("b"); b.textContent = team[battle.actor].name;
+    title.append(b, titles[battle.menu]);
+  } else title.textContent = battle.actor < 0 ? `${e.name}の行動…` : "…";
+
+  currentCmds = battle.busy ? [] : battleCommands();
   const box = $("cmds");
   box.textContent = "";
   currentCmds.forEach((c, i) => {
     const btn = document.createElement("button");
-    const keyLabel = c.back ? "0" : String(i + 1);
-    btn.innerHTML = `<span><span class="k">${keyLabel}</span></span>`;
-    btn.firstChild.append(c.label);
+    const k = document.createElement("span"); k.className = "k"; k.textContent = c.back ? "0" : String(i + 1);
+    const line = document.createElement("span"); line.append(k, c.label);
+    btn.append(line);
     if (c.sub) { const sm = document.createElement("small"); sm.textContent = c.sub; btn.append(sm); }
     if (c.back) btn.classList.add("back");
-    btn.disabled = !!c.disabled || battle.busy;
+    btn.disabled = !!c.disabled;
     btn.addEventListener("click", () => { if (!btn.disabled && c.act) c.act(); });
     box.append(btn);
   });
 }
 
 function battleKey(key) {
-  if (!battle || battle.busy) return false;
+  if (!battle) return false;
+  if (battle.busy) { if (skipWait) skipWait(); return true; }
   if (key === "0" || key === "Escape" || key === "Backspace") {
     const back = currentCmds.find(c => c.back);
     if (back) { back.act(); return true; }
@@ -778,12 +1088,12 @@ function battleKey(key) {
 }
 
 // ================================================================
-//  メニュー（装備の付け替え・アイテム・スキル）
+//  メニュー
 // ================================================================
 function openMenu() {
   if (mode !== "map") return;
   mode = "menu";
-  menuPending = null;
+  menuState = { unit: 0, pending: null, confirmRelease: false };
   renderMenu();
   $("menu").hidden = false;
 }
@@ -807,45 +1117,66 @@ function partInfo(id, extra) {
   info.append(name, el("small", "", `威力${p.power}　命中${p.acc}%　EN${p.en}`));
   return info;
 }
-function rowButton(label, fn, disabled) {
-  const b = el("button", "", label);
+function rowButton(label, fn, disabled, cls) {
+  const b = el("button", cls || "", label);
   b.disabled = !!disabled;
   b.addEventListener("click", fn);
   return b;
 }
 
 function renderMenu() {
+  const ms = menuState;
+  if (ms.unit >= team.length) ms.unit = 0;
+  const u = team[ms.unit];
+
+  const tabs = $("menuTabs");
+  tabs.textContent = "";
+  team.forEach((t, i) => {
+    tabs.append(rowButton(`${t.name} Lv${t.lv}`, () => { menuState = { unit: i, pending: null, confirmRelease: false }; renderMenu(); }, false, i === ms.unit ? "on" : ""));
+  });
+
   const body = $("menuBody");
   body.textContent = "";
 
-  body.append(el("h3", "", `装備スロット（${SLOT_COUNT}）`));
-  player.equip.forEach((pi, slot) => {
+  // ステータス
+  const g = el("div", "sgrid");
+  const stat = (k, v) => { const d = el("div", "", k + " "); d.append(el("b", "", v)); g.append(d); };
+  stat("Lv", u.lv >= LEVEL_MAX ? `${u.lv}（最大）` : String(u.lv));
+  stat("次のLvまで", u.lv >= LEVEL_MAX ? "—" : `${expToNext(u.lv) - u.exp} EXP`);
+  stat("HP", `${u.hp}/${u.maxHp}`);
+  stat("EN", `${u.en}/${u.maxEn}`);
+  stat("たいあたり", `威力${tackleOf(u)}`);
+  stat("特性", [u.accBonus ? `命中+${u.accBonus}%` : "", u.evade ? `回避${u.evade}%` : ""].filter(Boolean).join(" ") || "—");
+  body.append(g);
+
+  body.append(el("h3", "", `${u.name}の装備（${SLOT_COUNT}枠）`));
+  u.equip.forEach((pi, slot) => {
     const row = el("div", "mrow");
     if (pi === null) row.append(el("div", "info empty", `スロット${slot + 1}：なし`));
-    else row.append(partInfo(player.parts[pi], `スロット${slot + 1}`));
+    else row.append(partInfo(inv.parts[pi], `スロット${slot + 1}`));
     const btns = el("div", "btns");
-    if (menuPending !== null) {
-      btns.append(rowButton("ここに装備", () => { player.equip[slot] = menuPending; menuPending = null; renderMenu(); }));
+    if (ms.pending !== null) {
+      btns.append(rowButton("ここに装備", () => { u.equip[slot] = ms.pending; ms.pending = null; renderMenu(); }));
     } else if (pi !== null) {
-      btns.append(rowButton("はずす", () => { player.equip[slot] = null; renderMenu(); }));
+      btns.append(rowButton("はずす", () => { u.equip[slot] = null; renderMenu(); }));
     }
     row.append(btns);
     body.append(row);
   });
 
-  body.append(el("h3", "", "所持パーツ"));
-  const unequipped = player.parts.map((id, i) => i).filter(i => !player.equip.includes(i));
-  if (unequipped.length === 0) body.append(el("div", "mrow empty", "装備していないパーツはありません"));
-  for (const i of unequipped) {
+  body.append(el("h3", "", "持ち物のパーツ（だれも装備していないもの）"));
+  const free = inv.parts.map((_, i) => i).filter(i => !isEquipped(i));
+  if (free.length === 0) body.append(el("div", "mrow empty", "ありません。他の機体から外すとここに入ります"));
+  for (const i of free) {
     const row = el("div", "mrow");
-    row.append(partInfo(player.parts[i], menuPending === i ? "← 装備先のスロットを選んでください" : ""));
+    row.append(partInfo(inv.parts[i], ms.pending === i ? "← 付ける枠を選んでください" : ""));
     const btns = el("div", "btns");
-    if (menuPending === i) {
-      btns.append(rowButton("やめる", () => { menuPending = null; renderMenu(); }));
+    if (ms.pending === i) {
+      btns.append(rowButton("やめる", () => { ms.pending = null; renderMenu(); }));
     } else {
       btns.append(rowButton("装備", () => {
-        const free = player.equip.indexOf(null);
-        if (free >= 0) player.equip[free] = i; else menuPending = i;
+        const f = u.equip.indexOf(null);
+        if (f >= 0) u.equip[f] = i; else ms.pending = i;
         renderMenu();
       }));
     }
@@ -853,35 +1184,58 @@ function renderMenu() {
     body.append(row);
   }
 
-  body.append(el("h3", "", "アイテム"));
+  body.append(el("h3", "", `アイテム（${u.name}に使う）`));
   for (const key of ["repair", "cell"]) {
     const it = ITEMS[key], row = el("div", "mrow");
-    const info = el("div", "info", `${it.name} ×${player.items[key]}`);
-    info.append(el("small", "", key === "repair" ? `HP+${it.value}（いま ${player.hp}/${player.maxHp}）` : `EN+${it.value}（いま ${player.energy}/${PLAYER_ENERGY}）`));
-    const full = key === "repair" ? player.hp >= player.maxHp : player.energy >= PLAYER_ENERGY;
+    const info = el("div", "info", `${it.name} ×${inv.items[key]}`);
+    info.append(el("small", "", key === "repair" ? `HP+${it.value}` : `EN+${it.value}`));
+    const full = key === "repair" ? u.hp >= u.maxHp : u.en >= u.maxEn;
     const btns = el("div", "btns");
-    btns.append(rowButton("使う", () => { ACTIONS.item(key); renderMenu(); }, player.items[key] <= 0 || full));
+    btns.append(rowButton("使う", () => { useItem(key, u); renderMenu(); }, inv.items[key] <= 0 || full));
     row.append(info, btns);
     body.append(row);
   }
 
   body.append(el("h3", "", "スキル（使うたびにレベルアップ）"));
   for (const s of SKILLS) {
-    const lv = player.skills[s.id], row = el("div", "mrow");
+    const lv = u.skills[s.id], row = el("div", "mrow");
     const info = el("div", "info", `${s.name}　Lv${lv}${lv >= SKILL_MAX_LEVEL ? "（最大）" : ""}`);
     info.append(el("small", "", s.desc(lv)));
     row.append(info);
     body.append(row);
   }
+
+  if (!u.isLeader) {
+    body.append(el("h3", "", "チーム"));
+    const row = el("div", "mrow");
+    const btns = el("div", "btns");
+    if (ms.confirmRelease) {
+      row.append(el("div", "info", `${u.name}を手放しますか？ 装備パーツは持ち物に戻ります。`));
+      btns.append(rowButton("やめる", () => { ms.confirmRelease = false; renderMenu(); }));
+      btns.append(rowButton("手放す", () => releaseAlly(u), false, "danger"));
+    } else {
+      row.append(el("div", "info", "この仲間をチームから外す"));
+      btns.append(rowButton("手放す", () => { ms.confirmRelease = true; renderMenu(); }, false, "danger"));
+    }
+    row.append(btns);
+    body.append(row);
+  }
+}
+
+function releaseAlly(u) {
+  if (u.isLeader) return;
+  team = team.filter(t => t !== u);
+  log(`${u.name}と別れた。`);
+  menuState = { unit: 0, pending: null, confirmRelease: false };
+  renderMenu();
 }
 
 // ================================================================
 //  描画（マップ）
 // ================================================================
 function resize() {
-  if (mode === "battle") return;
+  if (mode === "battle" || mode === "select") return;
   const byW = Math.floor((Math.min(window.innerWidth, 520) - 26) / VIEW);
-  // キャンバス以外が占める高さを測ってから、残りでマスの大きさを決める
   const others = $("mapScreen").offsetHeight - cv.offsetHeight + 24;
   const byH = Math.floor((window.innerHeight - others) / VIEW);
   tile = Math.max(14, Math.min(32, byW, byH));
@@ -889,14 +1243,23 @@ function resize() {
   cv.style.width = cv.style.height = tile * VIEW + "px";
   cv.width = cv.height = Math.round(tile * VIEW * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  if (player) renderMap();
+  if (team) renderMap();
 }
+
+const TILE_COLORS = {
+  [FLOOR]:     ["#2b2b33", "#16161a"],
+  [STAIRS]:    ["#2b2b33", "#16161a"],
+  [HEAL]:      ["#1d3a26", "#12221a"],
+  [GATE]:      ["#3a3418", "#221f10"],
+  [BOSSFLOOR]: ["#3e171b", "#24100f"],
+};
 
 function renderMap() {
   const half = VIEW >> 1;
-  const camX = Math.max(0, Math.min(MAP_W - VIEW, player.x - half));
-  const camY = Math.max(0, Math.min(MAP_H - VIEW, player.y - half));
+  const camX = Math.max(0, Math.min(MAP_W - VIEW, pos.x - half));
+  const camY = Math.max(0, Math.min(MAP_H - VIEW, pos.y - half));
   const size = tile * VIEW;
+  const toScreen = (x, y) => [(x - camX) * tile, (y - camY) * tile];
 
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, size, size);
@@ -912,24 +1275,36 @@ function renderMap() {
       if (t === WALL) {
         ctx.fillStyle = vis ? "#5a5248" : "#2a2622";
         ctx.fillRect(px, py, tile, tile);
-      } else {
-        ctx.fillStyle = vis ? "#2b2b33" : "#16161a";
-        ctx.fillRect(px + 1, py + 1, tile - 2, tile - 2);
-        if (t === STAIRS) drawChar(">", px, py, vis ? "#fff" : "#777");
+        continue;
       }
+      ctx.fillStyle = TILE_COLORS[t][vis ? 0 : 1];
+      ctx.fillRect(px + 1, py + 1, tile - 2, tile - 2);
+      if (t === STAIRS) drawChar(">", px, py, vis ? "#fff" : "#777");
+      if (t === HEAL) drawChar("+", px, py, "#5dff8a");
+      if (t === GATE) drawChar("¦", px, py, "#ffd447");
     }
   }
-  const toScreen = (x, y) => [(x - camX) * tile, (y - camY) * tile];
   for (const it of groundItems) {
     if (!seen[it.y][it.x]) continue;
-    drawChar(ITEMS[it.key].ch, ...toScreen(it.x, it.y), visible[it.y][it.x] ? ITEMS[it.key].color : "#555");
+    const ch = it.key === "part" ? "P" : ITEMS[it.key].ch;
+    const color = it.key === "part" ? "#ff7be0" : ITEMS[it.key].color;
+    drawChar(ch, ...toScreen(it.x, it.y), visible[it.y][it.x] ? color : "#555");
   }
   for (const e of enemies) {
     if (!visible[e.y][e.x]) continue;
     const [px, py] = toScreen(e.x, e.y);
     if (e.boss) {
-      ctx.fillStyle = "#4a1a1a";
-      ctx.fillRect(px + 1, py + 1, tile - 2, tile - 2);
+      // ボスは2×2マスで大きく表示
+      const s = tile * 2;
+      ctx.fillStyle = "#5a1a1e";
+      ctx.fillRect(px + 1, py + 1, s - 2, s - 2);
+      ctx.strokeStyle = e.color; ctx.lineWidth = 2;
+      ctx.strokeRect(px + 2, py + 2, s - 4, s - 4);
+      ctx.fillStyle = e.color;
+      ctx.font = `bold ${Math.floor(s * 0.75)}px monospace`;
+      ctx.fillText(e.ch, px + s / 2, py + s / 2 + 2);
+      ctx.font = `bold ${Math.floor(tile * 0.75)}px monospace`;
+      continue;
     }
     drawChar(e.ch, px, py, e.stun > 0 ? "#777" : e.color);
     if (e.hp < e.maxHp) {
@@ -937,7 +1312,7 @@ function renderMap() {
       ctx.fillStyle = "#f44"; ctx.fillRect(px + 2, py + tile - 4, (tile - 4) * e.hp / e.maxHp, 3);
     }
   }
-  drawChar("@", ...toScreen(player.x, player.y), "#ffd447");
+  drawChar("@", ...toScreen(pos.x, pos.y), "#ffd447");
   updateStatus();
 }
 function drawChar(ch, px, py, color) {
@@ -946,60 +1321,94 @@ function drawChar(ch, px, py, color) {
   ctx.fillText(ch, px + tile / 2, py + tile / 2 + 1);
 }
 function updateStatus() {
-  $("floor").textContent = floorNo;
-  $("hp").textContent = player.hp;
-  $("maxhp").textContent = player.maxHp;
-  $("en").textContent = player.energy;
-  $("hpbar").firstElementChild.style.width = (100 * player.hp / player.maxHp) + "%";
-  $("enbar").firstElementChild.style.width = (100 * player.energy / PLAYER_ENERGY) + "%";
-  $("hp").classList.toggle("low", player.hp <= player.maxHp * 0.3);
-  $("en").classList.toggle("low", player.energy <= 20);
+  const fl = $("floorLabel");
+  fl.textContent = isBossFloor(floorNo) ? `${floorNo}F ボスフロア` : `${floorNo}F`;
+  fl.classList.toggle("bossfl", isBossFloor(floorNo));
+  const rows = $("teamRows");
+  rows.textContent = "";
+  for (const u of team) {
+    const r = el("div", "trow");
+    const nm = el("span", "nm", u.name); nm.append(el("small", "", ` Lv${u.lv}`));
+    const bar = el("span", "bar hp"); const i = el("i"); i.style.width = (100 * u.hp / u.maxHp) + "%"; bar.append(i);
+    const hp = el("span", "num", `${u.hp}/${u.maxHp}`);
+    hp.classList.toggle("low", u.hp <= u.maxHp * 0.3);
+    r.append(nm, bar, hp, el("span", "num", `EN${u.en}`));
+    rows.append(r);
+  }
 }
 
 // ================================================================
 //  ゲームの開始・終了
 // ================================================================
-function startGame() {
+function showSelect() {
+  mode = "select";
+  $("endScreen").hidden = true;
+  $("menu").hidden = true;
+  $("battle").hidden = true;
+  $("mapScreen").hidden = true;
+  $("select").hidden = false;
+  const list = $("typeList");
+  list.textContent = "";
+  START_TYPES.forEach((t, i) => {
+    const b = el("button", "typeCard");
+    const nm = el("div", "tname"); nm.append(el("span", "k", String(i + 1)), t.label, el("small", "", t.name));
+    const st = el("div", "stats");
+    const add = (k, v) => { const s = el("span", "", k + " "); s.append(el("b", "", v)); st.append(s); };
+    add("HP", String(t.hp)); add("EN", String(t.en)); add("たいあたり", `威力${t.tackle}`);
+    add("初期パーツ", partById(t.part).name);
+    b.append(nm, el("div", "desc", t.desc), st);
+    b.addEventListener("click", () => startGame(t.key));
+    list.append(b);
+  });
+}
+
+function startGame(typeKey) {
+  const t = START_TYPES.find(x => x.key === typeKey);
   floorNo = 1;
   logLines = [];
-  player = {
-    x: 0, y: 0, hp: PLAYER_HP, maxHp: PLAYER_HP, energy: PLAYER_ENERGY,
-    parts: [...STARTING_PARTS],
-    equip: new Array(SLOT_COUNT).fill(null),
-    items: { ...STARTING_ITEMS },
-    skills: Object.fromEntries(SKILLS.map(s => [s.id, 1])),
-  };
-  player.parts.forEach((_, i) => { if (i < SLOT_COUNT) player.equip[i] = i; });
+  team = [];
+  inv = { parts: [], items: { ...STARTING_ITEMS } };
+  team.push(createUnit({ name: t.name, ch: "@", color: "#ffd447", isLeader: true, kind: t.key,
+    hp: t.hp, en: t.en, tackle: t.tackle, accBonus: t.accBonus, evade: t.evade }));
+  addPart(t.part, team[0]);
+  bestLevel = 1;
   battle = null;
   mode = "map";
+  $("select").hidden = true;
   $("endScreen").hidden = true;
   $("menu").hidden = true;
   $("battle").hidden = true;
   $("mapScreen").hidden = false;
   newFloor();
   renderLog();
-  log("地下遺跡に潜入した。階段 > を探せ。");
+  log(`${t.label}「${t.name}」で地下遺跡に潜入した。階段 > を探せ。`);
   resize();
 }
 
 function gameOver(msg) {
   mode = "over";
   log(msg);
+  bestLevel = Math.max(bestLevel, ...team.map(u => u.lv));
   $("endTitle").textContent = "機能停止…";
   $("endTitle").style.color = "#ff6a6a";
-  $("endText").textContent = `${msg}　到達階：地下${floorNo}階`;
+  $("endText").textContent = `${msg}　到達階：${floorNo}F　最高機体レベル：Lv${bestLevel}`;
   $("endScreen").hidden = false;
   $("retry").focus();
 }
 
 function gameClear() {
   mode = "over";
+  processLevelUps();
+  bestLevel = Math.max(bestLevel, ...team.map(u => u.lv));
   $("endTitle").textContent = "遺跡踏破！";
   $("endTitle").style.color = "#ffd447";
-  $("endText").textContent = `地下${floorNo}階の守護機を倒し、遺跡の最深部にたどり着いた！`;
+  $("endText").textContent = `${floorNo}Fの守護機を倒し、遺跡の最深部にたどり着いた！　最高機体レベル：Lv${bestLevel}`;
   $("endScreen").hidden = false;
   $("retry").focus();
 }
+
+// テスト用：直近のバトル結果
+let lastBattle = null;
 
 // ================================================================
 //  入力
@@ -1010,8 +1419,13 @@ const KEYMAP = {
   " ": "wait", ".": "wait",
 };
 document.addEventListener("keydown", ev => {
+  if (mode === "select") {
+    const n = parseInt(ev.key, 10);
+    if (n >= 1 && n <= START_TYPES.length) { ev.preventDefault(); startGame(START_TYPES[n - 1].key); }
+    return;
+  }
   if (mode === "over") {
-    if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); startGame(); }
+    if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); showSelect(); }
     return;
   }
   if (mode === "menu") {
@@ -1029,7 +1443,9 @@ document.addEventListener("keydown", ev => {
   playerMove(dir);
 });
 
-// 十字ボタン：押しっぱなしで連続移動
+// バトル中の待ち時間はタップで飛ばせる
+$("battle").addEventListener("pointerdown", () => { if (battle && battle.busy && skipWait) skipWait(); });
+
 let holdTimer = null;
 function stopHold() { clearTimeout(holdTimer); clearInterval(holdTimer); holdTimer = null; }
 document.querySelectorAll("#pad button").forEach(btn => {
@@ -1048,10 +1464,11 @@ document.querySelectorAll("#pad button").forEach(btn => {
 });
 $("menuBtn").addEventListener("click", openMenu);
 $("menuClose").addEventListener("click", closeMenu);
-$("retry").addEventListener("click", startGame);
+$("retry").addEventListener("click", showSelect);
 window.addEventListener("resize", resize);
 
-startGame();
+if (DEBUG) document.body.append(el("div", "debug", "DEBUG MODE"));
+showSelect();
 </script>
 </body>
 </html>
