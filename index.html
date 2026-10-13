@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>ロボット遺跡探索</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #111; color: #ddd;
+    font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Meiryo", sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  #app {
+    max-width: 520px; margin: 0 auto; height: 100%;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 8px;
+  }
+  #status {
+    width: 100%; display: flex; justify-content: space-between; flex-wrap: wrap;
+    gap: 4px 12px; font-size: 15px; padding: 4px 2px 8px;
+  }
+  #status span b { color: #fff; }
+  .bar { display: inline-block; width: 60px; height: 8px; background: #333; vertical-align: middle; margin-left: 4px; border-radius: 2px; overflow: hidden; }
+  .bar i { display: block; height: 100%; }
+  #hpbar i { background: #e55; }
+  #enbar i { background: #4bf; }
+  #stage { position: relative; }
+  canvas { display: block; background: #000; border: 1px solid #333; image-rendering: pixelated; }
+  #log {
+    width: 100%; min-height: 4.2em; margin-top: 8px; padding: 4px 8px;
+    background: #1a1a1a; border: 1px solid #333; font-size: 14px; line-height: 1.4em;
+  }
+  #log div:nth-child(1) { color: #888; }
+  #log div:nth-child(2) { color: #aaa; }
+  #log div:nth-child(3) { color: #fff; }
+  #pad {
+    margin-top: 10px; display: grid;
+    grid-template-columns: repeat(3, 64px); grid-template-rows: repeat(3, 56px); gap: 6px;
+  }
+  #pad button {
+    font-size: 22px; background: #2a2a2a; color: #eee; border: 1px solid #555; border-radius: 10px;
+    touch-action: manipulation;
+  }
+  #pad button:active { background: #444; }
+  #pad .wait { font-size: 13px; }
+  #overlay {
+    position: absolute; inset: 0; display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.8); text-align: center;
+  }
+  #overlay.show { display: flex; }
+  #overlay h2 { margin: 0 0 8px; color: #f66; }
+  #overlay p { margin: 0 0 16px; }
+  #overlay button {
+    font-size: 18px; padding: 10px 24px; background: #3a6; color: #fff; border: none; border-radius: 8px;
+  }
+  #help { font-size: 12px; color: #777; margin-top: 6px; text-align: center; }
+  /* PCなど広い画面では十字ボタンを小さめに */
+  @media (hover: hover) and (pointer: fine) {
+    #pad { grid-template-columns: repeat(3, 48px); grid-template-rows: repeat(3, 40px); }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="status">
+    <span>階: <b id="floor">1</b>F</span>
+    <span>HP: <b id="hp">30</b>/<b id="maxhp">30</b><span class="bar" id="hpbar"><i></i></span></span>
+    <span>EN: <b id="en">100</b><span class="bar" id="enbar"><i></i></span></span>
+    <span>攻撃: <b id="atk">3</b></span>
+  </div>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="overlay">
+      <h2>機能停止…</h2>
+      <p id="result"></p>
+      <button id="retry">もう一度</button>
+    </div>
+  </div>
+  <div id="log"><div></div><div></div><div></div></div>
+  <div id="pad">
+    <span></span><button data-dir="up">▲</button><span></span>
+    <button data-dir="left">◀</button><button data-dir="wait" class="wait">待機</button><button data-dir="right">▶</button>
+    <span></span><button data-dir="down">▼</button><span></span>
+  </div>
+  <div id="help">矢印キー / WASD で移動、スペースで待機</div>
+</div>
+
+<script>
+"use strict";
+
+// ===== 調整用の定数 =====
+const PLAYER_HP = 30;
+const PLAYER_ATK = 3;
+const PLAYER_ENERGY = 100;
+const ENERGY_PER_STEP = 1;
+const STARVE_DAMAGE = 1;          // エネルギー0のときターンごとに減るHP
+const STAIRS_ENERGY_BONUS = 20;   // 階段で次の階へ進んだときのエネルギー回復
+
+const ENEMY_TYPES = {
+  small: { name: "ガードロボ",   ch: "g", color: "#e8a33a", hp: 6,  atk: 2, minFloor: 1 },
+  large: { name: "ハンターロボ", ch: "H", color: "#e04848", hp: 14, atk: 4, minFloor: 3 },
+};
+const ENEMY_BASE_COUNT = 2;       // 1階の敵数 = BASE + 階数
+const ENEMY_HP_GROWTH = 0.15;     // 1階ごとのHP増加率
+const ENEMY_ATK_GROWTH_EVERY = 3; // この階数ごとに敵の攻撃+1
+const ENEMY_SIGHT = 7;            // 敵がプレイヤーに気づく距離
+
+const ITEM_TYPES = {
+  repair: { name: "修理キット",     ch: "+", color: "#5e5", value: 10 },
+  cell:   { name: "エネルギーセル", ch: "e", color: "#4bf", value: 30 },
+  power:  { name: "パワーパーツ",   ch: "P", color: "#f5d", value: 1 },
+};
+const ITEM_COUNT_MIN = 2;
+const ITEM_COUNT_MAX = 4;
+
+const MAP_W = 36;
+const MAP_H = 28;
+const VIEW = 15;                  // 画面に表示するマス数（縦横）
+const FOV_RADIUS = 6;
+const ROOM_TRIES = 40;
+const ROOM_MAX = 9;
+
+// ===== 状態 =====
+const WALL = 0, FLOOR = 1, STAIRS = 2;
+let map, seen, visible, enemies, items, player, floorNo, gameOver, logLines;
+
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+let tile = 24;
+
+const rnd = (n) => Math.floor(Math.random() * n);
+const rndRange = (a, b) => a + rnd(b - a + 1);
+
+// ===== マップ生成 =====
+function generateMap() {
+  map = []; seen = []; visible = [];
+  for (let y = 0; y < MAP_H; y++) {
+    map.push(new Array(MAP_W).fill(WALL));
+    seen.push(new Array(MAP_W).fill(false));
+    visible.push(new Array(MAP_W).fill(false));
+  }
+  const rooms = [];
+  for (let i = 0; i < ROOM_TRIES && rooms.length < ROOM_MAX; i++) {
+    const w = rndRange(4, 8), h = rndRange(3, 6);
+    const x = rndRange(1, MAP_W - w - 2), y = rndRange(1, MAP_H - h - 2);
+    const r = { x, y, w, h };
+    if (rooms.some(o => x <= o.x + o.w && x + w >= o.x && y <= o.y + o.h && y + h >= o.y)) continue;
+    rooms.push(r);
+    for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) map[yy][xx] = FLOOR;
+  }
+  // 部屋を順番に通路でつなぐ
+  for (let i = 1; i < rooms.length; i++) {
+    const a = center(rooms[i - 1]), b = center(rooms[i]);
+    if (Math.random() < 0.5) { hCorr(a.x, b.x, a.y); vCorr(a.y, b.y, b.x); }
+    else { vCorr(a.y, b.y, a.x); hCorr(a.x, b.x, b.y); }
+  }
+  return rooms;
+}
+function center(r) { return { x: r.x + (r.w >> 1), y: r.y + (r.h >> 1) }; }
+function hCorr(x1, x2, y) { for (let x = Math.min(x1, x2); x <= Math.max(x1, x2); x++) map[y][x] = FLOOR; }
+function vCorr(y1, y2, x) { for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) map[y][x] = FLOOR; }
+
+function randomFreeCellIn(r) {
+  for (let t = 0; t < 50; t++) {
+    const x = rndRange(r.x, r.x + r.w - 1), y = rndRange(r.y, r.y + r.h - 1);
+    if (map[y][x] === FLOOR && !occupied(x, y)) return { x, y };
+  }
+  return null;
+}
+function occupied(x, y) {
+  return (player && player.x === x && player.y === y) ||
+         enemies.some(e => e.x === x && e.y === y) ||
+         items.some(it => it.x === x && it.y === y);
+}
+
+function newFloor() {
+  enemies = []; items = [];
+  let rooms = generateMap();
+  while (rooms.length < 3) rooms = generateMap();
+
+  const start = center(rooms[0]);
+  player.x = start.x; player.y = start.y;
+  const s = randomFreeCellIn(rooms[rooms.length - 1]);
+  map[s.y][s.x] = STAIRS;
+
+  // 敵（最初の部屋には置かない）
+  const enemyCount = ENEMY_BASE_COUNT + floorNo;
+  const types = Object.values(ENEMY_TYPES).filter(t => floorNo >= t.minFloor);
+  for (let i = 0; i < enemyCount; i++) {
+    const r = rooms[1 + rnd(rooms.length - 1)];
+    const p = randomFreeCellIn(r);
+    if (!p) continue;
+    // 大型は出現率やや低め
+    const t = types.length > 1 && Math.random() < 0.35 ? types[1] : types[0];
+    const hp = Math.round(t.hp * (1 + ENEMY_HP_GROWTH * (floorNo - 1)));
+    const atk = t.atk + Math.floor((floorNo - 1) / ENEMY_ATK_GROWTH_EVERY);
+    enemies.push({ x: p.x, y: p.y, type: t, hp, maxHp: hp, atk, awake: false });
+  }
+
+  // アイテム
+  const itemKeys = Object.keys(ITEM_TYPES);
+  const itemCount = rndRange(ITEM_COUNT_MIN, ITEM_COUNT_MAX);
+  for (let i = 0; i < itemCount; i++) {
+    const p = randomFreeCellIn(rooms[rnd(rooms.length)]);
+    if (!p) continue;
+    // パワーパーツは少し出にくくする
+    let key = itemKeys[rnd(itemKeys.length)];
+    if (key === "power" && Math.random() < 0.5) key = itemKeys[rnd(2)];
+    items.push({ x: p.x, y: p.y, type: ITEM_TYPES[key] });
+  }
+  updateFov();
+}
+
+// ===== 視界 =====
+function updateFov() {
+  for (let y = 0; y < MAP_H; y++) visible[y].fill(false);
+  for (let dy = -FOV_RADIUS; dy <= FOV_RADIUS; dy++) {
+    for (let dx = -FOV_RADIUS; dx <= FOV_RADIUS; dx++) {
+      if (dx * dx + dy * dy > FOV_RADIUS * FOV_RADIUS + 1) continue;
+      const tx = player.x + dx, ty = player.y + dy;
+      if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) continue;
+      if (lineOfSight(player.x, player.y, tx, ty)) { visible[ty][tx] = true; seen[ty][tx] = true; }
+    }
+  }
+}
+function lineOfSight(x0, y0, x1, y1) {
+  let dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+  let err = dx - dy, x = x0, y = y0;
+  while (!(x === x1 && y === y1)) {
+    if (!(x === x0 && y === y0) && map[y][x] === WALL) return false;
+    const e2 = 2 * err;
+    if (e2 > -dy) { err -= dy; x += sx; }
+    if (e2 < dx) { err += dx; y += sy; }
+  }
+  return true;
+}
+
+// ===== ログ =====
+function log(msg) {
+  logLines.push(msg);
+  while (logLines.length > 3) logLines.shift();
+  const divs = document.querySelectorAll("#log div");
+  const pad = 3 - logLines.length;
+  divs.forEach((d, i) => { d.textContent = i < pad ? "" : logLines[i - pad]; });
+}
+
+// ===== ターン処理 =====
+const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0], wait: [0, 0] };
+
+function playerAct(dir) {
+  if (gameOver) return;
+  const [dx, dy] = DIRS[dir];
+  const nx = player.x + dx, ny = player.y + dy;
+
+  if (dx !== 0 || dy !== 0) {
+    const target = enemies.find(e => e.x === nx && e.y === ny);
+    if (target) {
+      attackEnemy(target);
+    } else if (map[ny][nx] === WALL) {
+      return; // 壁にはぶつかるだけでターンを消費しない
+    } else {
+      player.x = nx; player.y = ny;
+      pickUpItem();
+      if (map[ny][nx] === STAIRS) {
+        descend();
+        render();
+        return;
+      }
+    }
+  }
+
+  // エネルギー消費
+  if (player.energy > 0) {
+    player.energy = Math.max(0, player.energy - ENERGY_PER_STEP);
+    if (player.energy === 0) log("エネルギー切れ！ 機体が損傷していく…");
+  } else {
+    player.hp -= STARVE_DAMAGE;
+    if (checkDeath("エネルギー切れ")) { render(); return; }
+  }
+
+  enemiesAct();
+  updateFov();
+  render();
+}
+
+function attackEnemy(e) {
+  e.hp -= player.atk;
+  e.awake = true;
+  if (e.hp <= 0) {
+    log(`${e.type.name}に${player.atk}ダメージ！ 破壊した！`);
+    enemies = enemies.filter(o => o !== e);
+  } else {
+    log(`${e.type.name}に${player.atk}ダメージ！`);
+  }
+}
+
+function pickUpItem() {
+  const it = items.find(i => i.x === player.x && i.y === player.y);
+  if (!it) return;
+  items = items.filter(i => i !== it);
+  const t = it.type;
+  if (t === ITEM_TYPES.repair) {
+    const before = player.hp;
+    player.hp = Math.min(player.maxHp, player.hp + t.value);
+    log(`${t.name}を拾った。HPが${player.hp - before}回復。`);
+  } else if (t === ITEM_TYPES.cell) {
+    const before = player.energy;
+    player.energy = Math.min(PLAYER_ENERGY, player.energy + t.value);
+    log(`${t.name}を拾った。エネルギーが${player.energy - before}回復。`);
+  } else if (t === ITEM_TYPES.power) {
+    player.atk += t.value;
+    log(`${t.name}を拾った。攻撃力が${t.value}上がった！`);
+  }
+}
+
+function descend() {
+  floorNo++;
+  const before = player.energy;
+  player.energy = Math.min(PLAYER_ENERGY, player.energy + STAIRS_ENERGY_BONUS);
+  newFloor();
+  log(`階段を降りた。地下${floorNo}階。（EN+${player.energy - before}）`);
+}
+
+function enemiesAct() {
+  for (const e of enemies) {
+    if (gameOver) return;
+    const dist = Math.abs(e.x - player.x) + Math.abs(e.y - player.y);
+    if (!e.awake && dist <= ENEMY_SIGHT && lineOfSight(e.x, e.y, player.x, player.y)) e.awake = true;
+
+    if (dist === 1) {
+      player.hp -= e.atk;
+      log(`${e.type.name}の攻撃！ ${e.atk}ダメージ。`);
+      if (checkDeath(e.type.name)) return;
+      continue;
+    }
+    if (e.awake) {
+      const sx = Math.sign(player.x - e.x), sy = Math.sign(player.y - e.y);
+      const tries = Math.abs(player.x - e.x) >= Math.abs(player.y - e.y)
+        ? [[sx, 0], [0, sy]] : [[0, sy], [sx, 0]];
+      for (const [mx, my] of tries) {
+        if ((mx || my) && canEnemyMove(e.x + mx, e.y + my)) { e.x += mx; e.y += my; break; }
+      }
+    } else if (Math.random() < 0.3) {
+      const d = Object.values(DIRS)[rnd(4)];
+      if (canEnemyMove(e.x + d[0], e.y + d[1])) { e.x += d[0]; e.y += d[1]; }
+    }
+  }
+}
+function canEnemyMove(x, y) {
+  if (map[y][x] === WALL) return false;
+  if (player.x === x && player.y === y) return false;
+  return !enemies.some(o => o.x === x && o.y === y);
+}
+
+function checkDeath(cause) {
+  if (player.hp > 0) return false;
+  player.hp = 0;
+  gameOver = true;
+  log(`${cause}によって機能停止した…`);
+  document.getElementById("result").textContent = `到達階：地下${floorNo}階`;
+  document.getElementById("overlay").classList.add("show");
+  return true;
+}
+
+// ===== 描画 =====
+function resize() {
+  const padH = 3 * 56 + 2 * 6 + 10;
+  const reserved = 40 + 70 + padH + 30;  // ステータス・ログ・十字ボタン・余白
+  const byW = Math.floor((Math.min(window.innerWidth, 520) - 18) / VIEW);
+  const byH = Math.floor((window.innerHeight - reserved) / VIEW);
+  tile = Math.max(14, Math.min(32, byW, byH));
+  const dpr = window.devicePixelRatio || 1;
+  cv.style.width = cv.style.height = tile * VIEW + "px";
+  cv.width = cv.height = Math.round(tile * VIEW * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (player) render();
+}
+
+function render() {
+  // カメラ（プレイヤー中心、マップ端で止める）
+  const half = VIEW >> 1;
+  const camX = Math.max(0, Math.min(MAP_W - VIEW, player.x - half));
+  const camY = Math.max(0, Math.min(MAP_H - VIEW, player.y - half));
+
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, tile * VIEW, tile * VIEW);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `bold ${Math.floor(tile * 0.75)}px monospace`;
+
+  for (let vy = 0; vy < VIEW; vy++) {
+    for (let vx = 0; vx < VIEW; vx++) {
+      const x = camX + vx, y = camY + vy;
+      if (!seen[y][x]) continue;
+      const vis = visible[y][x];
+      const px = vx * tile, py = vy * tile;
+      const t = map[y][x];
+      if (t === WALL) {
+        ctx.fillStyle = vis ? "#5a5248" : "#2a2622";
+        ctx.fillRect(px, py, tile, tile);
+      } else {
+        ctx.fillStyle = vis ? "#2b2b33" : "#16161a";
+        ctx.fillRect(px + 1, py + 1, tile - 2, tile - 2);
+        if (t === STAIRS) drawChar(">", px, py, vis ? "#fff" : "#777");
+      }
+    }
+  }
+  for (const it of items) {
+    if (!seen[it.y][it.x]) continue;
+    const vis = visible[it.y][it.x];
+    drawChar(it.type.ch, (it.x - camX) * tile, (it.y - camY) * tile, vis ? it.type.color : "#555");
+  }
+  for (const e of enemies) {
+    if (!visible[e.y][e.x]) continue;
+    const px = (e.x - camX) * tile, py = (e.y - camY) * tile;
+    if (px < 0 || py < 0 || px >= tile * VIEW || py >= tile * VIEW) continue;
+    drawChar(e.type.ch, px, py, e.type.color);
+    // HPバー
+    if (e.hp < e.maxHp) {
+      ctx.fillStyle = "#400";
+      ctx.fillRect(px + 2, py + tile - 4, tile - 4, 3);
+      ctx.fillStyle = "#f44";
+      ctx.fillRect(px + 2, py + tile - 4, (tile - 4) * e.hp / e.maxHp, 3);
+    }
+  }
+  drawChar("@", (player.x - camX) * tile, (player.y - camY) * tile, "#ffe24a");
+  updateStatus();
+}
+function drawChar(ch, px, py, color) {
+  if (px < 0 || py < 0 || px >= tile * VIEW || py >= tile * VIEW) return;
+  ctx.fillStyle = color;
+  ctx.fillText(ch, px + tile / 2, py + tile / 2 + 1);
+}
+
+function updateStatus() {
+  document.getElementById("floor").textContent = floorNo;
+  document.getElementById("hp").textContent = player.hp;
+  document.getElementById("maxhp").textContent = player.maxHp;
+  document.getElementById("en").textContent = player.energy;
+  document.getElementById("atk").textContent = player.atk;
+  document.querySelector("#hpbar i").style.width = (100 * player.hp / player.maxHp) + "%";
+  document.querySelector("#enbar i").style.width = (100 * player.energy / PLAYER_ENERGY) + "%";
+  document.getElementById("hp").style.color = player.hp <= player.maxHp * 0.3 ? "#f66" : "";
+  document.getElementById("en").style.color = player.energy <= 20 ? "#f66" : "";
+}
+
+// ===== 開始 =====
+function startGame() {
+  floorNo = 1;
+  gameOver = false;
+  logLines = [];
+  player = { x: 0, y: 0, hp: PLAYER_HP, maxHp: PLAYER_HP, atk: PLAYER_ATK, energy: PLAYER_ENERGY };
+  document.getElementById("overlay").classList.remove("show");
+  document.querySelectorAll("#log div").forEach(d => d.textContent = "");
+  newFloor();
+  log("地下遺跡に潜入した。階段 > を探せ。");
+  render();
+}
+
+// ===== 入力 =====
+const KEYMAP = {
+  ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
+  w: "up", s: "down", a: "left", d: "right",
+  W: "up", S: "down", A: "left", D: "right",
+  " ": "wait", ".": "wait",
+};
+document.addEventListener("keydown", (ev) => {
+  if (gameOver && (ev.key === "Enter" || ev.key === " ")) { ev.preventDefault(); startGame(); return; }
+  const dir = KEYMAP[ev.key];
+  if (!dir) return;
+  ev.preventDefault();
+  playerAct(dir);
+});
+
+// 十字ボタン：押しっぱなしで連続移動
+let holdTimer = null;
+function stopHold() { clearTimeout(holdTimer); clearInterval(holdTimer); holdTimer = null; }
+document.querySelectorAll("#pad button").forEach(btn => {
+  btn.addEventListener("pointerdown", (ev) => {
+    ev.preventDefault();
+    stopHold();
+    const dir = btn.dataset.dir;
+    playerAct(dir);
+    if (dir === "wait") return;
+    holdTimer = setTimeout(() => { holdTimer = setInterval(() => playerAct(dir), 120); }, 350);
+  });
+  ["pointerup", "pointerleave", "pointercancel"].forEach(t => btn.addEventListener(t, stopHold));
+  btn.addEventListener("contextmenu", ev => ev.preventDefault());
+});
+document.getElementById("retry").addEventListener("click", startGame);
+window.addEventListener("resize", resize);
+
+resize();
+startGame();
+</script>
+</body>
+</html>
