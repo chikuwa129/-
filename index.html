@@ -212,9 +212,9 @@
 // ================================================================
 const PLAYER_HP = 40;
 const PLAYER_ENERGY = 100;
-const ENERGY_PER_STEP = 1;
-const STARVE_DAMAGE = 1;           // エネルギー0でマップを歩いたときのHP減少
-const STAIRS_ENERGY_BONUS = 20;    // 次の階へ進んだときのエネルギー回復
+// エネルギーは「ぶそう」でだけ減る。歩いても減らない
+const STAIRS_ENERGY_BONUS = 30;    // 次の階へ進んだときのエネルギー回復
+const WIN_ENERGY_BONUS = 5;        // 戦闘に勝ったときのエネルギー回復
 const DAMAGE_VARIANCE = 1;         // ダメージのぶれ（±）
 
 const TACKLE = { name: "たいあたり", power: 4, acc: 95 };
@@ -447,14 +447,6 @@ function playerMove(dir) {
     if (map[ny][nx] === STAIRS) { descend(); return; }
   }
 
-  if (player.energy > 0) {
-    player.energy = Math.max(0, player.energy - ENERGY_PER_STEP);
-    if (player.energy === 0) log("エネルギー切れ！ 歩くたびに機体が損傷する…");
-  } else {
-    player.hp -= STARVE_DAMAGE;
-    if (player.hp <= 0) { player.hp = 0; renderMap(); gameOver("エネルギー切れで機能停止した…"); return; }
-  }
-
   enemiesAct();
   updateFov();
   renderMap();
@@ -650,7 +642,9 @@ async function winBattle() {
   const e = battle.enemy;
   $("eSprite").classList.add("dead");
   enemies = enemies.filter(o => o !== e);
-  log(`${e.name}を破壊した！`);
+  const enBefore = player.energy;
+  player.energy = Math.min(PLAYER_ENERGY, player.energy + WIN_ENERGY_BONUS);
+  log(`${e.name}を破壊した！（EN+${player.energy - enBefore}）`);
 
   if (e.boss && floorNo >= FINAL_FLOOR) {
     renderBattle();
