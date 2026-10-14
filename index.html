@@ -3428,6 +3428,10 @@ document.addEventListener("keydown", ev => {
 // バトル中の待ち時間はタップで飛ばせる
 $("battle").addEventListener("pointerdown", () => { if (battle && battle.busy && skipWait) skipWait(); });
 
+let swallowClickUntil = 0;
+document.addEventListener("click", ev => {
+  if (Date.now() < swallowClickUntil) { swallowClickUntil = 0; ev.stopPropagation(); ev.preventDefault(); }
+}, true);
 let holdTimer = null;
 function stopHold() { clearTimeout(holdTimer); clearInterval(holdTimer); holdTimer = null; }
 document.querySelectorAll("#pad button").forEach(btn => {
@@ -3435,7 +3439,10 @@ document.querySelectorAll("#pad button").forEach(btn => {
     ev.preventDefault();
     stopHold();
     const dir = btn.dataset.dir;
+    const before = mode;
     playerMove(dir);
+    // 押した瞬間に画面が切り替わったら（バトル開始など）、同じタップの click が新しい画面のボタン（「その他」など）に当たらないようにする
+    if (mode !== before) swallowClickUntil = Date.now() + 600;
     if (dir === "wait") return;
     holdTimer = setTimeout(() => {
       holdTimer = setInterval(() => { if (mode === "map") playerMove(dir); else stopHold(); }, 130);
