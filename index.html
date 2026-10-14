@@ -70,6 +70,13 @@
   .trow .bar { width: 100%; }
   .trow .num { text-align: right; }
   #cv { background: #000; }
+  #mapWrap { position: relative; }
+  #mini { position: absolute; top: 4px; right: 4px; border: 1px solid #50525c; cursor: pointer; }
+  #mini[hidden] { display: none; }
+  #miniFull { position: fixed; inset: 0; z-index: 30; background: rgba(0,0,0,.88); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+  #miniFull[hidden] { display: none; }
+  #miniFull .hint { font-size: 12px; color: #aaa; }
+  #miniBig { border: 1px solid #50525c; }
 
   /* 高さを固定して、長い行が折り返しても画面がずれないようにする（新しい行が下に残る） */
   .log {
@@ -83,8 +90,10 @@
 
   #controls { display: flex; align-items: center; gap: 18px; }
   #pad { display: grid; grid-template-columns: repeat(3, 58px); grid-template-rows: repeat(3, 48px); gap: 6px; }
-  #pad button, #menuBtn { font-size: 20px; background: #26272d; border: 1px solid #50525c; border-radius: 10px; }
-  #pad button:active, #menuBtn:active { background: #3a3c44; }
+  #pad button, #menuBtn, #miniBtn { font-size: 20px; background: #26272d; border: 1px solid #50525c; border-radius: 10px; }
+  #pad button:active, #menuBtn:active, #miniBtn:active { background: #3a3c44; }
+  #sideBtns { display: flex; flex-direction: column; gap: 8px; }
+  #miniBtn { width: 76px; height: 48px; font-size: 15px; }
   #pad .wait { font-size: 13px; }
   #menuBtn { width: 76px; height: 62px; font-size: 15px; }
   #help { font-size: 12px; color: #666; text-align: center; }
@@ -320,7 +329,7 @@
       <div id="floorLabel">1F</div>
       <div id="teamRows"></div>
     </div>
-    <canvas id="cv"></canvas>
+    <div id="mapWrap"><canvas id="cv"></canvas><canvas id="mini" class="px" hidden></canvas></div>
     <div class="log" id="mapLog"><div></div><div></div><div></div></div>
     <div id="controls">
       <div id="pad">
@@ -328,9 +337,10 @@
         <button data-dir="left" aria-label="左">◀</button><button data-dir="wait" class="wait">待機</button><button data-dir="right" aria-label="右">▶</button>
         <span></span><button data-dir="down" aria-label="下">▼</button><span></span>
       </div>
-      <button id="menuBtn">メニュー</button>
+      <div id="sideBtns"><button id="menuBtn">メニュー</button><button id="miniBtn">地図</button></div>
     </div>
-    <div id="help">矢印キー / WASD：移動　スペース：待機　M：メニュー</div>
+    <div id="help">矢印キー / WASD：移動　スペース：待機　M：メニュー　N：地図</div>
+    <div id="miniFull" hidden><canvas id="miniBig" class="px"></canvas><div class="hint">タップ / N / Esc で閉じる</div></div>
   </section>
 
   <!-- バトル画面 -->
@@ -511,6 +521,20 @@ const DROP_CHANCE = 0.35;          // 通常の敵がパーツを落とす確率
 const DROP_PITY_AFTER = 4;         // 通常の敵を続けてこの数だけ倒して1個も落ちなかったら、次は必ず落とす
 const FLOOR_PARTS = 1;             // 通常階に置くパーツの数
 const ITEM_DROP_RATE = 0.35;
+// レア個体（金色に光る強敵）。?rare=1 で毎階必ず出る、?rare=0 で出ない（テスト用）
+const RARE_BASE_CHANCE = 0.08;     // その階に出る確率
+const RARE_PER_BOSS = 0.04;        // 倒したボス1体につき
+const RARE_STAT_MULT = 1.3;        // HPと攻撃（階の補正後）にかける
+const RARE_EXP_MULT = 2;
+const RARE_DROP_SR = 0.85, RARE_DROP_LEGEND = 0.15;   // 必ずパーツを落とす。レア度の確率
+const RARE_MIN_DIST_FROM_STAIRS = 10;
+const RARE_VISIBLE_DIST = 8;       // この距離以内なら、未探索でも光点が見える
+const RARE_PARAM = (m => m ? m[1] === "1" : null)(location.search.match(/[?&]rare=([01])(&|$)/));
+// ミニマップ
+const MINI_CELL_MIN = 2, MINI_CELL_MAX = 4;   // 1マスの大きさ(px)
+const MINI_WIDE_MIN = 600;         // この幅以上の画面では、マップの右上に常に出す
+const MINI_OPACITY = 0.7;
+const BLINK_MS = 500;              // 点滅（キラキラ、ミニマップの点）
 // 通常の敵が落とすパーツのレア度の確率 [ノーマル, レア, スーパーレア, レジェンド]
 const DROP_RARITY = [
   { maxFloor: 3, rates: [0.90, 0.10, 0.00, 0] },
@@ -721,6 +745,10 @@ function prepareSprites() {
   SPR.boss = { g: SPR.rex.g, p: { ...BATTLE.rex.p, ...BOSS_PALETTE }, w: BATTLE_W, h: BATTLE_H };
   for (const [k, d] of Object.entries(MAPICON)) SPR["m_" + k] = { g: buildSprite(d, MAP_N, MAP_N), p: d.p, w: MAP_N, h: MAP_N };
   for (const [k, t] of Object.entries(TILES)) SPR["t_" + k] = { g: t.g, p: t.p, w: MAP_N, h: MAP_N };
+  const re = buildRareSprite(MAPICON.enemy, MAP_N, MAP_N);
+  SPR.m_rare = { g: re.grid, p: re.pal, w: MAP_N + 2 * RARE_PAD, h: MAP_N + 2 * RARE_PAD };
+  SPR.m_glint = { g: addGlow(padGrid(buildSprite(GLINT, MAP_N, MAP_N), RARE_PAD)), p: { ...GLINT.p, G1: "#ffd23a", G2: "#fff0a8" },
+                  w: MAP_N + 2 * RARE_PAD, h: MAP_N + 2 * RARE_PAD };
 }
 // 整数倍に拡大した画像（キャッシュ）。flip=左右反転
 const spriteCache = new Map();
@@ -750,6 +778,77 @@ function spriteEl(key, s, flip) {
   return c;
 }
 
+// ---- レア個体の絵：今ある絵に、金色の縁取り2重・金色寄りの色・キラキラを足す ----
+function padGrid(b,P){
+  const h=b.length,w=b[0].length,g=makeGrid(w+2*P,h+2*P);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++)g[y+P][x+P]=b[y][x];
+  return g;
+}
+function ringOf(src,key){
+  const H=src.length,W=src[0].length,r=makeGrid(W,H);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    if(!src[y][x]){
+      const nb=(y>0&&src[y-1][x])||(y<H-1&&src[y+1][x])||(x>0&&src[y][x-1])||(x<W-1&&src[y][x+1]);
+      if(nb)r[y][x]=key;
+    }
+  }
+  return r;
+}
+function addGlow(g){
+  const H=g.length,W=g[0].length,o=g.map(r=>r.slice());
+  const r1=ringOf(g,"G1");
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(r1[y][x])o[y][x]="G1";
+  const r2=ringOf(o,"G2");
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(r2[y][x])o[y][x]="G2";
+  return o;
+}
+function hexToRgb(c){return[parseInt(c.substr(1,2),16),parseInt(c.substr(3,2),16),parseInt(c.substr(5,2),16)];}
+function tintGold(c){
+  if(c==="#2b2b2b")return c;
+  const a=hexToRgb(c),b=hexToRgb("#ffd23a");
+  return "#"+a.map((v,i)=>Math.round(v*0.5+b[i]*0.5).toString(16).padStart(2,"0")).join("");
+}
+function rarePalette(p){
+  const t={};
+  for(const k in p)t[k]=tintGold(p[k]);
+  if(p.q)t.q="#ffd23a";
+  t.e="#ffffff";t.G1="#ffd23a";t.G2="#fff0a8";
+  return t;
+}
+function buildRareSprite(def,w,h){
+  const b=buildSprite(def,w,h);
+  return {grid:addGlow(padGrid(b,2)),pal:rarePalette(def.p)};
+}
+const SPARKS_MAP=[[3,3],[14,6]];
+const SPARKS_BATTLE=[[4,6],[32,4],[34,22],[9,25]];
+function drawSparks(ctx,sparks,ox,oy,S,on){
+  if(!on)return;
+  sparks.forEach(([x,y])=>{
+    ctx.fillStyle="#fff6c0";
+    [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dx,dy])=>ctx.fillRect(ox+(x+dx)*S,oy+(y+dy)*S,S,S));
+    ctx.fillStyle="#ffffff";
+    ctx.fillRect(ox+x*S,oy+y*S,S,S);
+  });
+}
+const GLINT={p:{k:"#2b2b2b",g:"#ffd23a",w:"#ffffff"},o:[["P",[[6,2],[9,6],[6,10],[3,6]],"g"],["R",5,5,2,2,"w"]],a:[]};
+const RARE_PAD = 2;   // レアの絵は上下左右に2ドット大きい。描くときは左上を 2ドット×倍率 ずらす
+// 動物ごとに、初めて使うときに1回だけ作る（バトル用 rare_<動物>、マップ用 m_rare、光点 m_glint）
+function rareSpriteKey(animal) {
+  const key = "rare_" + animal;
+  if (!SPR[key]) {
+    const r = buildRareSprite(BATTLE[animal], BATTLE_W, BATTLE_H);
+    SPR[key] = { g: r.grid, p: r.pal, w: BATTLE_W + 2 * RARE_PAD, h: BATTLE_H + 2 * RARE_PAD };
+  }
+  return key;
+}
+// キラキラ付きのレアの絵を描く（x, y は元の絵の左上。flip=左右反転）
+function drawRare(c2, key, sparks, x, y, s, flip) {
+  const img = spriteImage(key, s, flip), sp = SPR[key];
+  const ox = x - RARE_PAD * s, oy = y - RARE_PAD * s;
+  c2.drawImage(img, ox, oy);
+  drawSparks(c2, flip ? sparks.map(([sx, sy]) => [sp.w - 1 - sx, sy]) : sparks, ox, oy, s, blinkOn);
+}
+
 // ================================================================
 //  状態
 // ================================================================
@@ -764,6 +863,8 @@ let saveFailed = false;
 // 設定（セーブに含める）：演出、確認なしで即実行、仲間のおまかせ、ひとうち、ミニマップの常時表示、一括回復の確認なし
 const DEFAULT_SETTINGS = { fx: true, instant: false, allyAuto: true, oneHit: true, miniMap: true, bulkNoConfirm: false };
 let settings = { ...DEFAULT_SETTINGS };
+let blinkOn = true;        // 0.5秒ごとに反転（キラキラ、ミニマップの点）
+let fightStats = {};       // ひとうちの記録（階ごと。セーブしない）{ 階: { oneHit, battle } }
 let dropMiss = 0;          // 救済の数え（出発ごとに0。セーブしない）
 let mode = "select";    // select | map | battle | menu | over
 let battle = null;
@@ -995,11 +1096,39 @@ function makeBoss(def, x, y) {
            hp: def.hp, maxHp: def.hp, atk: def.atk, acc: def.acc, exp: def.exp,
            boss: true, awake: true, stun: 0 };
 }
+function makeRare(def, x, y) {
+  const e = makeEnemy(def, x, y);
+  e.hp = e.maxHp = Math.ceil(e.hp * RARE_STAT_MULT);
+  e.atk = Math.ceil(e.atk * RARE_STAT_MULT);
+  e.exp *= RARE_EXP_MULT;
+  e.rare = true;
+  e.name = "レア" + e.name;
+  return e;
+}
 function chooseAnimal(e) {
   if (e.sprite) return;
   const list = e.def.animals.filter(a => floorNo >= a.minFloor);
   e.sprite = list[rnd(list.length)].sprite;
-  e.name = animalName(e.sprite);
+  e.name = (e.rare ? "レア" : "") + animalName(e.sprite);
+}
+// レア個体を置くか（階に入るたびに判定）。置く場所は階段から遠いところ
+function rareChance() {
+  if (RARE_PARAM !== null) return RARE_PARAM ? 1 : 0;
+  const bosses = Object.values(progress.bossDefeated).filter(Boolean).length;
+  return RARE_BASE_CHANCE + RARE_PER_BOSS * bosses;
+}
+function placeRare(stairs) {
+  if (Math.random() >= rareChance()) return;
+  const cells = [];
+  for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+    if (map[y][x] !== FLOOR || occupied(x, y)) continue;
+    if (Math.abs(x - pos.x) + Math.abs(y - pos.y) <= 2) continue;
+    cells.push({ x, y, d: Math.abs(x - stairs.x) + Math.abs(y - stairs.y) });
+  }
+  if (!cells.length) return;
+  const far = cells.filter(c => c.d >= RARE_MIN_DIST_FROM_STAIRS);
+  const p = far.length ? far[rnd(far.length)] : cells.reduce((a, b) => b.d > a.d ? b : a);
+  enemies.push(makeRare(pickEnemyType(), p.x, p.y));
 }
 
 function pickEnemyType() {
@@ -1038,6 +1167,7 @@ function newFloor() {
     groundItems.push({ x: p.x, y: p.y, key: "part", part: floorRarityPart(types[rnd(types.length)]) });
     placed++;
   }
+  placeRare(s);
   updateFov();
 }
 
@@ -1133,13 +1263,18 @@ const logText = () => logLines.map(l => l.t);
 const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0], wait: [0, 0] };
 
 function playerMove(dir) {
-  if (mode !== "map") return;
+  if (mode !== "map" || miniOpen) return;
   const [dx, dy] = DIRS[dir];
   const nx = pos.x + dx, ny = pos.y + dy;
 
   if (dx || dy) {
     const target = enemyAt(nx, ny);
-    if (target) { startBattle(target); return; }
+    if (target) {
+      if (!canOneHit(target)) { startBattle(target); return; }
+      oneHit(target);
+      enemiesAct(); updateFov(); renderMap();
+      return;
+    }
     if (map[ny][nx] === WALL) return;
     const wasBossRoom = map[pos.y][pos.x] === BOSSFLOOR;
     pos.x = nx; pos.y = ny;
@@ -1198,7 +1333,11 @@ function enemiesAct() {
     const dist = Math.abs(e.x - pos.x) + Math.abs(e.y - pos.y);
     if (!e.awake && dist <= ENEMY_SIGHT && lineOfSight(e.x, e.y, pos.x, pos.y)) e.awake = true;
     if (e.awake) {
-      if (dist === 1) { startBattle(e); return; }
+      if (dist === 1) {
+        if (!canOneHit(e)) { startBattle(e); return; }
+        oneHit(e);
+        continue;
+      }
       const sx = Math.sign(pos.x - e.x), sy = Math.sign(pos.y - e.y);
       const tries = Math.abs(pos.x - e.x) >= Math.abs(pos.y - e.y) ? [[sx, 0], [0, sy]] : [[0, sy], [sx, 0]];
       for (const [mx, my] of tries) {
@@ -1236,9 +1375,11 @@ function battleScales() {
 }
 
 function startBattle(e) {
+  toggleMini(false);
   mode = "battle";
   e.awake = true;
   chooseAnimal(e);
+  if (!e.boss && !e.rare) { const fs = fightStats[floorNo] || (fightStats[floorNo] = { oneHit: 0, battle: 0 }); fs.battle++; }
   for (const u of team) u.bs = freshBattleState();
   battle = { enemy: e, menu: "moves", busy: false, actor: team.findIndex(u => u.hp > 0),
              round: 1, bossTurn: 0, heavyReady: false, itemKey: null, downs: 0, selected: null,
@@ -1256,7 +1397,7 @@ function startBattle(e) {
   const sc = battleScales();
   const ew = $("eWrap");
   ew.textContent = "";
-  const ec = spriteEl(e.sprite, e.boss ? sc.boss : sc.enemy, true);
+  const ec = e.rare ? rareEl(e, sc.enemy) : spriteEl(e.sprite, e.boss ? sc.boss : sc.enemy, true);
   ec.id = "eSprite";
   ew.append(ec);
   const allies = $("allies");
@@ -1268,6 +1409,23 @@ function startBattle(e) {
     allies.append(d);
   });
   beginTurn();
+}
+
+// バトル画面のレア個体の絵（キラキラは点滅のたびに描き直す）。縁取りの分だけ外にはみ出させる
+function rareEl(e, s) {
+  const key = rareSpriteKey(e.sprite), sp = SPR[key];
+  const c = document.createElement("canvas");
+  c.width = sp.w * s; c.height = sp.h * s; c.className = "px";
+  c.dataset.sprite = key; c.dataset.scale = s; c.dataset.flip = "1"; c.dataset.rare = "1";
+  c.style.margin = `${-RARE_PAD * s}px`;
+  paintRareEl(c);
+  return c;
+}
+function paintRareEl(c) {
+  const s = +c.dataset.scale, x2 = c.getContext("2d");
+  x2.imageSmoothingEnabled = false;
+  x2.clearRect(0, 0, c.width, c.height);
+  drawRare(x2, c.dataset.sprite, SPARKS_BATTLE, RARE_PAD * s, RARE_PAD * s, s, true);
 }
 
 // バトル終了後の後片付け（勝ち・逃げ共通）
@@ -1640,6 +1798,10 @@ function rollNormalDrop(e) {
   dropMiss = 0;
   return floorRarityPart(e.def.drop);
 }
+function rollRareDrop(e) {
+  const rarity = Math.random() < RARE_DROP_LEGEND ? 3 : 2;
+  return PARTS.find(p => p.type === e.def.drop && p.rarity === rarity).id;
+}
 function rollBossDrop(f) {
   const rarity = pickWeighted(BOSS_DROP_RARITY[f]);
   const types = Object.keys(PART_TYPE_LABEL);
@@ -1677,20 +1839,47 @@ function winBattle() {
     // ボスのパーツは、倒した瞬間に自動で手に入る（メッセージはマップに戻ってから）
     logPartGain(gainPart(rollBossDrop(floorNo)), "手に入れた", res);
     res("奥の階段が使える。");
+  } else if (e.rare) {
+    // レア個体は必ずパーツを落とす（救済の数えには含めない）。仲間にはならない
+    logPartGain(gainPart(rollRareDrop(e)), "手に入れた", res);
   } else {
-    const id = rollNormalDrop(e);
-    if (id) logPartGain(gainPart(id), "手に入れた", res);
-    if (Math.random() < ITEM_DROP_RATE) {
-      const key = Math.random() < 0.5 ? "repair" : "cell";
-      inv.items[key]++;
-      res(`${ITEMS[key].name}を手に入れた。`);
-    }
-    if (team.length < TEAM_MAX && Math.random() < e.def.recruit) recruit(e, res);
+    normalSpoils(e, res);
   }
   battle.menu = "result";
   battle.actor = -1;
   battle.busy = false;
   renderBattle();
+}
+
+// 通常の敵を倒したときの落とし物と仲間（バトルでも、ひとうちでも同じ）
+function normalSpoils(e, res) {
+  const id = rollNormalDrop(e);
+  if (id) logPartGain(gainPart(id), "手に入れた", res);
+  if (Math.random() < ITEM_DROP_RATE) {
+    const key = Math.random() < 0.5 ? "repair" : "cell";
+    inv.items[key]++;
+    res(`${ITEMS[key].name}を手に入れた。`);
+  }
+  if (team.length < TEAM_MAX && Math.random() < e.def.recruit) recruit(e, res);
+}
+
+// ---- ひとうち：たいあたり1回で必ず倒せる通常の敵は、バトルに入らず倒す ----
+// たいあたりの最小ダメージ（会心なし、レベル倍率込み、ぶれの下限）
+const tackleMinDamage = u => Math.max(1, Math.max(1, Math.round(tackleOf(u) * levelMult(u))) - DAMAGE_VARIANCE);
+function canOneHit(e) {
+  if (!e || e.boss || e.rare || !settings.oneHit) return false;
+  const hero = leader();
+  return !!hero && hero.hp > 0 && tackleMinDamage(hero) >= e.hp;
+}
+function oneHit(e) {
+  chooseAnimal(e);
+  enemies = enemies.filter(o => o !== e);
+  for (const u of alive()) addExp(u, e.exp);
+  const fs = fightStats[floorNo] || (fightStats[floorNo] = { oneHit: 0, battle: 0 });
+  fs.oneHit++;
+  mapLog(`ひとうちで倒した！（経験値 +${e.exp}）`);
+  normalSpoils(e, mapLog);
+  processLevelUps();
 }
 
 // 仲間は、最初の機体と同じレベルで加わる。名前と絵と固有技は元の動物
@@ -2317,12 +2506,15 @@ function renderMap() {
   for (const e of enemies) {
     if (!visible[e.y][e.x]) continue;
     if (e.boss) { draw("m_boss", e.x, e.y, 2); continue; }   // ボスは2倍で2×2マス
-    draw("m_enemy", e.x, e.y);
+    const px = (e.x - camX) * T, py = (e.y - camY) * T;
+    if (e.rare) drawRare(ctx, "m_rare", SPARKS_MAP, px, py, s, false);
+    else draw("m_enemy", e.x, e.y);
     if (e.hp < e.maxHp) {
-      const px = (e.x - camX) * T, py = (e.y - camY) * T;
       ctx.fillStyle = "#400"; ctx.fillRect(px + s, py + T - 2 * s, T - 2 * s, s);
       ctx.fillStyle = "#f44"; ctx.fillRect(px + s, py + T - 2 * s, (T - 2 * s) * e.hp / e.maxHp, s);
     }
+    // ひとうちできる敵の頭上に白い点
+    if (canOneHit(e)) { ctx.fillStyle = "#fff"; ctx.fillRect(px + 5 * s, py - s, 2 * s, 2 * s); }
   }
   draw("m_player", pos.x, pos.y);
   // 探索済みだが今見えていないマスは暗くする
@@ -2331,8 +2523,104 @@ function renderMap() {
     const x = camX + vx, y = camY + vy;
     if (seen[y][x] && !visible[y][x]) ctx.fillRect(vx * T, vy * T, T, T);
   }
+  // 見えていないレア個体も、近ければ金色の光点を出す（未探索の暗いマスでも）
+  for (const e of enemies) {
+    if (!e.rare || visible[e.y][e.x] || !rareGlintShown(e)) continue;
+    drawRare(ctx, "m_glint", SPARKS_MAP, (e.x - camX) * T, (e.y - camY) * T, s, false);
+  }
   updateStatus();
+  updateMini();
 }
+const rareGlintShown = e => Math.hypot(e.x - pos.x, e.y - pos.y) <= RARE_VISIBLE_DIST;
+// レア個体がマップに見えているか（アイコンか光点）
+const rareShown = e => visible[e.y][e.x] || rareGlintShown(e);
+
+// ================================================================
+//  ミニマップ：探索済みの範囲だけ。点滅する点（未探索の出口、レア個体）は上から重ねる
+// ================================================================
+const MINI_COLORS = { floor: "#cfcab0", wall: "#4b4a5c", player: "#4fe0ff", stairs: "#ffffff", heal: "#3fcf6e", item: "#ffd23a", enemy: "#e0443a", rare: "#ffd23a", frontier: "#ffffff" };
+const miniBase = document.createElement("canvas");   // 点滅しない部分（マップが変わったときだけ描き直す）
+let miniBaseCell = 0, miniOpen = false;
+const isWide = () => window.innerWidth >= MINI_WIDE_MIN;
+const walkable = (x, y) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H && map[y][x] !== WALL;
+// 未探索の出口：探索済みの歩けるマスで、上下左右に「歩けるのに未探索」のマスがあるもの
+function frontierCells() {
+  const out = [];
+  for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+    if (!seen[y][x] || !walkable(x, y)) continue;
+    if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => walkable(x + dx, y + dy) && !seen[y + dy][x + dx])) out.push({ x, y });
+  }
+  return out;
+}
+function paintMiniBase(c) {
+  miniBase.width = MAP_W * c; miniBase.height = MAP_H * c; miniBaseCell = c;
+  const g = miniBase.getContext("2d"), dot = (x, y, col, n = 1) => { g.fillStyle = col; g.fillRect(x * c, y * c, c * n, c * n); };
+  for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+    if (!seen[y][x]) continue;
+    const t = map[y][x];
+    dot(x, y, t === WALL ? MINI_COLORS.wall : t === STAIRS ? MINI_COLORS.stairs : t === HEAL ? MINI_COLORS.heal : MINI_COLORS.floor);
+  }
+  for (const it of groundItems) if (seen[it.y][it.x]) dot(it.x, it.y, MINI_COLORS.item);
+  for (const e of enemies) {
+    if (e.rare || !visible[e.y][e.x]) continue;
+    dot(e.x, e.y, MINI_COLORS.enemy, e.size);
+  }
+  dot(pos.x, pos.y, MINI_COLORS.player);
+}
+// target に、ベース＋点滅する点を描く（倍率 k = target の1マス / ベースの1マス）
+function paintMini(target) {
+  const k = target.width / miniBase.width, c = miniBaseCell * k, g = target.getContext("2d");
+  g.imageSmoothingEnabled = false;
+  g.fillStyle = "#000"; g.fillRect(0, 0, target.width, target.height);
+  g.drawImage(miniBase, 0, 0, target.width, target.height);
+  if (!blinkOn) return;
+  const d = Math.max(1, Math.round(c / 2)), off = Math.floor((c - d) / 2);
+  g.fillStyle = MINI_COLORS.frontier;
+  for (const f of frontierCells()) g.fillRect(f.x * c + off, f.y * c + off, d, d);
+  g.fillStyle = MINI_COLORS.rare;
+  for (const e of enemies) if (e.rare && rareShown(e)) g.fillRect(e.x * c, e.y * c, c, c);
+}
+function updateMini(blinkOnly) {
+  const mini = $("mini"), show = !!map && isWide() && settings.miniMap && mode === "map";
+  mini.hidden = !show;
+  mini.style.opacity = MINI_OPACITY;
+  if (!map) return;
+  if (!blinkOnly) {
+    // 広い画面の小さい地図：マップの幅の4割くらいに収まる 2〜4px
+    const c = Math.max(MINI_CELL_MIN, Math.min(MINI_CELL_MAX, Math.floor(cv.offsetWidth * 0.4 / MAP_W)));
+    paintMiniBase(c * pxRatio);
+    mini.width = miniBase.width; mini.height = miniBase.height;
+    mini.style.width = MAP_W * c + "px"; mini.style.height = MAP_H * c + "px";
+  }
+  if (show) paintMini(mini);
+  if (miniOpen) paintBigMini();
+}
+// 画面いっぱいの地図（狭い画面はボタンかNキーで開く。広い画面でも拡大して見られる）
+function paintBigMini() {
+  const big = $("miniBig");
+  const s = Math.max(1, Math.floor(Math.min((window.innerWidth - 24) / MAP_W, (window.innerHeight - 70) / MAP_H)));
+  const w = MAP_W * s * pxRatio, h = MAP_H * s * pxRatio;
+  if (big.width !== w || big.height !== h) { big.width = w; big.height = h; }
+  big.style.width = MAP_W * s + "px"; big.style.height = MAP_H * s + "px";
+  paintMini(big);
+}
+function toggleMini(open = !miniOpen) {
+  if (open && mode !== "map") return;
+  miniOpen = open;
+  $("miniFull").hidden = !open;
+  if (open) paintBigMini();
+}
+// 点滅：全画面共通の0.5秒タイマー。必要なときだけ描き直す
+setInterval(() => {
+  blinkOn = !blinkOn;
+  if (mode === "map" && map && enemies) {
+    if (enemies.some(e => e.rare && rareShown(e))) renderMap();
+    else updateMini(true);
+  } else if (mode === "battle" && battle && battle.enemy.rare) {
+    const c = $("eSprite");
+    if (c && c.dataset.rare) paintRareEl(c);
+  }
+}, BLINK_MS);
 function updateStatus() {
   const fl = $("floorLabel");
   fl.textContent = isBossFloor(floorNo) ? `${floorNo}F ボスフロア` : `${floorNo}F`;
@@ -2384,6 +2672,7 @@ function showSelect() {
 //  はじめから / 村 / 出発 / 全滅 / クリア
 // ================================================================
 function hideAllScreens() {
+  miniOpen = false;
   for (const id of ["title", "village", "select", "mapScreen", "battle"]) $(id).hidden = true;
   for (const id of ["endScreen", "menu", "dialog", "other"]) $(id).hidden = true;
 }
@@ -2701,6 +2990,11 @@ document.addEventListener("keydown", ev => {
     if (battleKey(ev.key)) ev.preventDefault();
     return;
   }
+  if (miniOpen) {
+    if (["Escape", "n", "N", "m", "M", "Enter", " "].includes(ev.key)) { ev.preventDefault(); toggleMini(false); }
+    return;
+  }
+  if (ev.key === "n" || ev.key === "N") { ev.preventDefault(); toggleMini(true); return; }
   if (ev.key === "m" || ev.key === "M") { ev.preventDefault(); openMenu(); return; }
   const dir = KEYMAP[ev.key];
   if (!dir) return;
@@ -2727,7 +3021,10 @@ document.querySelectorAll("#pad button").forEach(btn => {
   ["pointerup", "pointerleave", "pointercancel"].forEach(t => btn.addEventListener(t, stopHold));
   btn.addEventListener("contextmenu", ev => ev.preventDefault());
 });
-$("menuBtn").addEventListener("click", openMenu);
+$("menuBtn").addEventListener("click", () => { if (!miniOpen) openMenu(); });
+$("miniBtn").addEventListener("click", () => toggleMini());
+$("mini").addEventListener("click", () => toggleMini(true));
+$("miniFull").addEventListener("click", () => toggleMini(false));
 $("menuClose").addEventListener("click", closeMenu);
 $("retry").addEventListener("click", () => goVillage());
 $("btnDepart").addEventListener("click", openDepart);
@@ -2738,7 +3035,7 @@ $("btnBackVillage").addEventListener("click", askReturnVillage);
 $("btnVillageMenu").addEventListener("click", openMenu);
 $("btnNewFromVillage").addEventListener("click", askNewGame);
 $("btnNewFromTitle").addEventListener("click", askNewGame);
-window.addEventListener("resize", resize);
+window.addEventListener("resize", () => { resize(); if (miniOpen) paintBigMini(); });
 
 prepareSprites();
 if (DEBUG) document.body.append(el("div", "debug", "DEBUG MODE"));
