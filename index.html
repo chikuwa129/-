@@ -55,13 +55,16 @@
   .typeCard .desc { font-size: 12px; color: #c4c5cc; }
   .typeCard .stats { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 12px; font-variant-numeric: tabular-nums; }
   .typeCard .stats b { color: #fff; }
+  .typeCard .role { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px; background: #3d8fd9; color: #fff; margin-left: 6px; vertical-align: 3px; font-weight: normal; }
+  .typeCard .sw { font-size: 12px; color: #c4c5cc; }
+  .typeCard .sw b { color: #8fe08f; font-weight: normal; } .typeCard .sw i { color: #ff9a8a; font-style: normal; }
 
   /* マップ画面 */
   #status { width: 100%; display: grid; gap: 3px; font-size: 13px; font-variant-numeric: tabular-nums; }
   #floorLabel { font-size: 15px; font-weight: bold; }
   #teamRows { display: grid; gap: 3px; min-height: calc(3 * 19px + 6px); align-content: start; }
   #floorLabel.bossfl { color: var(--boss); }
-  .trow { display: grid; grid-template-columns: minmax(0, 1fr) 70px 64px 52px; align-items: center; gap: 6px; }
+  .trow { display: grid; grid-template-columns: minmax(0, 1fr) 70px 64px 66px; align-items: center; gap: 6px; }
   .trow .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .trow .nm small { color: var(--dim); }
   .trow .bar { width: 100%; }
@@ -114,24 +117,43 @@
   .hit { animation: shake .2s; }
   @keyframes shake { 0%,100% { transform: translateX(0); } 50% { transform: translateX(5px); } }
   @media (prefers-reduced-motion: reduce) { .hit { animation: none; } }
-  #fx { position: absolute; left: 0; right: 0; top: 40%; text-align: center; font-size: 20px; font-weight: bold; pointer-events: none; text-shadow: 0 2px 4px #000; }
+  /* 演出：ダメージの数字（跳ねる）、技名、閃光、揺れ */
+  #fx { position: absolute; top: 30%; font-size: 20px; font-weight: bold; pointer-events: none; text-shadow: 0 2px 4px #000; z-index: 2; }
+  #fx.enemy { right: 18%; } #fx.miss { right: 42%; } #fx.ally { left: 22%; top: 45%; } #fx.center { left: 0; right: 0; text-align: center; }
+  #fx.critNum { font-size: 30px; }
+  #fx.pop { animation: pop .4s ease-out; }
+  @keyframes pop { 0% { transform: translateY(6px) scale(.8); } 40% { transform: translateY(-14px) scale(1.15); } 100% { transform: translateY(-6px) scale(1); } }
+  #banner { position: absolute; left: 0; right: 0; top: 6px; text-align: center; font-size: 22px; font-weight: bold; color: #fff;
+    text-shadow: 0 2px 6px #000, 0 0 2px #000; pointer-events: none; opacity: 0; z-index: 3; }
+  #banner.show { animation: banner .5s ease-out forwards; }
+  @keyframes banner { 0% { opacity: 0; transform: scale(.9); } 15% { opacity: 1; transform: scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
+  #flash { position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 20; }
+  #flash.show { animation: flash1 .1s linear; }
+  @keyframes flash1 { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
+  .shake2 { animation: shake2 .2s linear; }
+  @keyframes shake2 { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-5px); } }
+  @media (prefers-reduced-motion: reduce) { #fx.pop, #banner.show, .shake2 { animation: none; } #banner.show { opacity: 1; } }
 
   #party { width: 100%; display: grid; gap: 3px; font-size: 13px; font-variant-numeric: tabular-nums; }
   .prow {
-    display: grid; grid-template-columns: minmax(0, 1fr) 80px 58px 48px; align-items: center; gap: 6px;
+    display: grid; grid-template-columns: minmax(0, 1fr) 80px 54px 66px; align-items: center; gap: 6px;
     padding: 3px 6px; border: 1px solid transparent; border-radius: 6px;
   }
   .prow.active { border-color: var(--accent); background: #26231a; }
   .prow.down { opacity: 0.45; }
   .prow .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .prow .nm small { color: var(--dim); }
-  .prow .bar { width: 100%; height: 9px; }
+  .prow .bar { width: 100%; height: 8px; }
+  .bars { display: grid; gap: 2px; }
+  .bars .bar.en { height: 5px; }
+  .bar.en i { background: var(--en); }
   .prow .num { text-align: right; }
   .prow .st { grid-column: 1 / -1; font-size: 11px; color: #8fd; }
 
   #cmdTitle { width: 100%; font-size: 12px; color: var(--dim); letter-spacing: .06em; }
   #cmdTitle b { color: var(--accent); font-weight: normal; }
-  #cmds { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  #cmds { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
+  #cmds button { min-width: 0; }
   #cmds button {
     min-height: 48px; padding: 5px 8px; text-align: left;
     background: #24252b; border: 1px solid #50525c; border-radius: 8px; font-size: 15px;
@@ -141,6 +163,20 @@
   #cmds button .k { color: var(--accent); font-size: 12px; margin-right: 4px; }
   #cmds button small { color: var(--dim); font-size: 11px; }
   #cmds button.back { background: #1c1d22; }
+  #cmds button.noen { opacity: .4; filter: grayscale(1); }
+  /* わざの一覧は1行に収めて、スマホでも決定ボタンまで1画面に入るようにする */
+  #cmds.moveList button { min-height: 42px; padding: 4px 8px; font-size: 14px; }
+  #cmds.moveList button > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; display: block; }
+  #cmds.moveList button small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #cmds button.sel { border-color: var(--accent); background: #2e2a1a; }
+  .mk { display: inline-block; font-size: 10px; padding: 0 4px; border-radius: 3px; margin-right: 4px; color: #111; vertical-align: 2px; }
+  .mk-gun { background: #e8c25a; } .mk-missile { background: #e98a5a; } .mk-laser { background: #6fd6f2; } .mk-unique { background: #b8e986; }
+  #moveInfo { width: 100%; min-height: calc(4 * 1.45em + 10px); background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 6px 10px; font-size: 13px;
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; }
+  #moveInfo .miName { font-weight: bold; grid-column: 1; }
+  #moveInfo .miDesc, #moveInfo .miLine { grid-column: 1; }
+  #moveInfo .miLine { color: var(--accent); font-variant-numeric: tabular-nums; }
+  #moveInfo .miGo { grid-column: 2; grid-row: 1 / 4; min-width: 76px; min-height: 52px; font-size: 16px; background: var(--ok); color: #fff; border: none; border-radius: 8px; }
 
   /* オーバーレイ */
   .overlay {
@@ -270,13 +306,17 @@
       <div id="allies"></div>
       <div id="eWrap"></div>
       <div id="fx"></div>
+      <div id="banner"></div>
     </div>
     <div id="party"></div>
     <div class="log" id="battleLog"><div></div><div></div><div></div></div>
+    <div id="moveInfo" hidden></div>
     <div id="cmdTitle">コマンド</div>
     <div id="cmds"></div>
   </section>
 </div>
+
+<div id="flash"></div>
 
 <!-- メニュー -->
 <div class="overlay" id="menu" hidden>
@@ -322,7 +362,7 @@ const REVIVE_HP_RATE = 0.25;       // バトル後、HP0の機体が復活する
 const DAMAGE_VARIANCE = 1;         // ダメージのぶれ（±）
 const BATTLE_WAIT = 300;           // バトル中のメッセージ待ち時間(ms)。タップで飛ばせる
 
-const TACKLE_BASE = 4;             // たいあたりの基本威力
+const TACKLE_BASE = 3;             // たいあたりの基本威力（主人公機）
 const TACKLE_ACC = 95;
 const ESCAPE_RATE = 50;            // にげる成功率(%)
 const ESCAPE_STUN_TURNS = 3;       // 逃げた後、敵が追ってこないターン数
@@ -333,7 +373,7 @@ const LEVEL_MAX = 20;
 const expToNext = lv => 8 + 4 * lv;          // 次のレベルに必要な経験値
 const LEVEL_HP_GROWTH = 5;
 const LEVEL_EN_GROWTH = 3;
-const TACKLE_GROWTH = 0.4;                   // たいあたり威力 = 基本 + floor((Lv-1) × これ)
+const TACKLE_GROWTH = 0.2;                   // たいあたり威力 = 基本 + floor((Lv-1) × これ)
 const EXP_FLOOR_SCALE = 0.1;                 // 経験値 × (1 + これ × (階-1))、切り上げ
 
 // 遊び方のモード。"adventure"=全滅しても強さを引き継いで村に戻る。"rogue"（全滅で最初から）は未実装
@@ -346,7 +386,7 @@ const DEFEAT_PENALTY = {
 
 // セーブ（localStorage）
 const SAVE_KEY = "robotRuinsSave";
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2;            // 2：わざの統合（防御と固有技のレベル、設定）。1 は読み込み時に移行する
 
 // 村から出発できる階（条件を満たしたものだけ選べる）
 const DEPARTURES = [
@@ -356,15 +396,30 @@ const DEPARTURES = [
   { floor: 10, label: "10階の準備部屋から",  ok: pr => pr.maxFloor >= 10 },
 ];
 
-// 最初のタイプ（Lv1の値）。sprite=バトル用の絵
+// 最初のタイプ（Lv1の値）。sprite=バトル用の絵、unique=固有技。並び順がタイプ選択画面の順
 const START_TYPES = [
-  { key: "assault",   label: "突撃型",   name: "ブレイカー",   sprite: "lion", hp: 50, en: 80,  tackle: TACKLE_BASE + 2, accBonus: 0,  evade: 0,
-    part: "g0", desc: "HPが高く、たいあたりが強い。正面から殴り合うタイプ。" },
-  { key: "artillery", label: "砲撃型",   name: "キャノニア",   sprite: "rex",  hp: 36, en: 130, tackle: TACKLE_BASE,     accBonus: 0,  evade: 0,
-    part: "m0", desc: "エネルギーが多く、ミサイルを撃ち続けられる。打たれ弱い。" },
-  { key: "mobile",    label: "高機動型", name: "スプリンター", sprite: "wolf", hp: 40, en: 100, tackle: TACKLE_BASE,     accBonus: 5,  evade: 10,
-    part: "l0", desc: "攻撃の命中+5%、敵の攻撃を10%で回避する。レーザーで戦う。" },
+  { key: "mobile",    label: "高機動型", name: "スプリンター", sprite: "wolf", hp: 40, en: 100, tackle: TACKLE_BASE, accBonus: 5, evade: 10,
+    part: "l0", unique: "blind", role: "初心者向け",
+    strong: "攻撃の命中+5%、敵の攻撃を10%で回避。被弾しにくく、安定して進める", weak: "一撃の重さは控えめ" },
+  { key: "assault",   label: "突撃型",   name: "ブレイカー",   sprite: "lion", hp: 50, en: 80,  tackle: TACKLE_BASE, accBonus: 0, evade: 0,
+    part: "g0", unique: "crit", role: "爽快感重視", critRate: 15,
+    strong: "HPが高く、攻撃が15%で会心（ダメージ×1.7）。会心が出ると大ダメージ", weak: "ENが少なく、重い武器は撃ち続けにくい" },
+  { key: "artillery", label: "砲撃型",   name: "キャノニア",   sprite: "rex",  hp: 36, en: 130, tackle: TACKLE_BASE, accBonus: 0, evade: 0,
+    part: "m0", unique: "barrage", role: "上級者向け", enGrowth: 5, partEnRate: 0.7, heavyAccBonus: 8,
+    strong: "パーツの消費EN×0.7、ミサイルとレーザーの命中+8%。重い武器を連発できる", weak: "HPが低く、打たれ弱い" },
 ];
+// タイプの強み
+const CRIT_MULT = 1.7;             // 会心のダメージ倍率（突撃型）
+const CRIT_CHARGE_BONUS = 10;      // ボスが力を溜めている間の会心率の上乗せ
+// 命中と回避
+const PLAYER_ACC_MIN = 50;         // 味方の命中率の下限
+const MISS_STREAK_BONUS = 10;      // 攻撃を外すたびに、その機体の次の命中+10%
+const MISS_STREAK_CAP = 30;        //   上限
+const EVADE_CAP = 30;              // 味方の回避率の上限
+const ENEMY_ACC_MIN = 60;          // 回避を引いたあとの敵の命中率の下限
+const EVADE_STREAK_BONUS = 15;     // 続けてかわすたびに、その機体への敵の次の命中+15%
+// 演出（ms）。1行動あたりの追加の待ち時間は FX_EXTRA_WAIT_MAX 以内
+const FX_BANNER_MS = 500, FX_SHAKE_MS = 200, FX_FLASH_MS = 100, FX_EXTRA_WAIT_MAX = 500;
 const STARTING_ITEMS = { repair: 1, cell: 0 };
 
 // レア度（0:ノーマル 1:レア 2:スーパーレア 3:レジェンド）
@@ -411,13 +466,13 @@ const BOSS_DROP_RARITY = { 5: [0, 0.65, 0.25, 0.10], 10: [0, 0, 0.70, 0.30] };
 // animals=同じ大きさの中からランダムに選ばれる動物（sprite=バトル用の絵、minFloor=出てくる階）
 const ENEMY_TYPES = [
   { key: "small", label: "小型", hp: 8,  atk: 3, acc: 80, exp: 4,  minFloor: 1, weight: 5, drop: "gun",
-    recruit: 0.12, ally: { hp: 24, en: 60,  tackle: 3, part: "g0" },
+    recruit: 0.12, ally: { hp: 24, en: 60,  tackle: 2, part: "g0" },
     animals: [{ sprite: "dango", minFloor: 1 }, { sprite: "turtle", minFloor: 1 }] },
   { key: "mid",   label: "中型", hp: 16, atk: 5, acc: 80, exp: 8,  minFloor: 3, weight: 3, drop: "missile",
-    recruit: 0.08, ally: { hp: 34, en: 80,  tackle: 4, part: "m0" },
+    recruit: 0.08, ally: { hp: 34, en: 80,  tackle: 3, part: "m0" },
     animals: [{ sprite: "lion", minFloor: 3 }, { sprite: "wolf", minFloor: 3 }, { sprite: "ptera", minFloor: 7 }, { sprite: "bird", minFloor: 7 }] },
   { key: "large", label: "大型", hp: 30, atk: 8, acc: 75, exp: 14, minFloor: 6, weight: 2, drop: "laser",
-    recruit: 0.05, ally: { hp: 46, en: 100, tackle: 6, part: "l0" },
+    recruit: 0.05, ally: { hp: 46, en: 100, tackle: 5, part: "l0" },
     animals: [{ sprite: "rex", minFloor: 6 }] },
 ];
 // 階による補正：HP × (0.6 + 0.3×(階-1))、攻撃 × (0.7 + 0.1×(階-1))、切り上げ
@@ -448,22 +503,34 @@ const ITEMS = {
 const MAP_ITEM_MIN = 2, MAP_ITEM_MAX = 4;
 const BOSS_PREP_ITEMS = { repair: 2, cell: 2 };
 
-// スキル（効果はスキルレベルで決まる。機体レベルでは変わらない）
+// ================================================================
+//  わざ。種類：basic（たいあたり）／guard（防御）／unique（固有技）／part（パーツ。データは PARTS）
+//  target："enemy"（敵1体）／"self"（自分）／"allyAll"（味方全員）。将来 "enemyAll" などを足す
+//  element：属性（今回は使わない）。固有技は Lv1 と Lv10 の値を持ち、その間は直線で増やす
+// ================================================================
 const SKILL_MAX_LEVEL = 10;
-const DOUBLE_BASE = 0.7, DOUBLE_PER_LV = 0.03;
-const SKILLS = [
-  // 連続攻撃：1回の威力 = たいあたり × (0.7 + 0.03×スキルLv)。命中はたいあたりと同じ
-  { id: "double", name: "連続攻撃",
-    rate: lv => DOUBLE_BASE + DOUBLE_PER_LV * lv,
-    hitPower: (lv, u) => Math.max(1, Math.round(tackleOf(u) * (DOUBLE_BASE + DOUBLE_PER_LV * lv))),
-    desc: (lv, u) => `2回攻撃 威力${Math.max(1, Math.round(tackleOf(u) * (DOUBLE_BASE + DOUBLE_PER_LV * lv)))}×2（たいあたりの${Math.round((DOUBLE_BASE + DOUBLE_PER_LV * lv) * 100)}%×2）` },
-  { id: "guard", name: "防御",
-    ratio: lv => Math.max(0.2, 0.5 - 0.03 * (lv - 1)),
-    desc: lv => `次に狙われたときの被ダメージを${Math.round(100 * Math.max(0.2, 0.5 - 0.03 * (lv - 1)))}%に` },
-  { id: "focus", name: "集中攻撃",
-    bonus: lv => 20 + 3 * (lv - 1),
-    desc: lv => `次のぶそうの命中+${20 + 3 * (lv - 1)}%` },
-];
+const GUARD_CUT = 0.5;                                    // 防御：次の被ダメージ×0.5
+const guardRecover = lv => 6 + Math.floor((lv - 1) * 0.67); // 防御のEN回復（Lv1で6、Lv10で12）
+const MOVES = {
+  tackle:  { id: "tackle",  name: "たいあたり", kind: "basic",  en: 0, acc: TACKLE_ACC, target: "enemy", effect: "damage", element: null,
+             desc: "ENを使わない基本の攻撃。ENが尽きたときのつなぎに" },
+  guard:   { id: "guard",   name: "防御",       kind: "guard",  en: 0, acc: null, target: "self", effect: "guard", element: null,
+             desc: "次に受けるダメージを半分にし、ENを回復する。攻撃はしない" },
+  // 主人公機（タイプごと）
+  crit:    { id: "crit",    name: "会心の一撃", kind: "unique", en: 6, target: "self", effect: "critUp", lv1: 50, lv10: 70, element: null, flash: "attack" },
+  barrage: { id: "barrage", name: "集中砲火",   kind: "unique", en: 4, target: "self", effect: "barrage", lv1: 1.3, lv10: 1.5, element: null, flash: "attack" },
+  blind:   { id: "blind",   name: "目くらまし", kind: "unique", en: 5, target: "self", effect: "blind", lv1: 1, lv10: 2, twoAtLv: 6, element: null, flash: "guard" },
+  // 仲間（動物ごと）
+  curl:    { id: "curl",    name: "まるまる",     kind: "unique", en: 5, target: "self", effect: "curl", cut: 70, lv1: 8, lv10: 15, element: null, flash: "heal" },
+  cover:   { id: "cover",   name: "かくれがえし", kind: "unique", en: 6, target: "self", effect: "cover", lv1: 50, lv10: 60, element: null, flash: "guard" },
+  roar:    { id: "roar",    name: "ほえる",       kind: "unique", en: 5, target: "enemy", effect: "roar", turns: 2, lv1: 25, lv10: 40, element: null, flash: "guard" },
+  claws:   { id: "claws",   name: "すばやい連爪", kind: "unique", en: 6, target: "enemy", effect: "damage", hits: 2, lv1: 1.3, lv10: 1.8, accMod: 10, element: null, flash: "attack" },
+  dive:    { id: "dive",    name: "空から急降下", kind: "unique", en: 8, target: "enemy", effect: "damage", lv1: 1.8, lv10: 2.4, sure: true, element: null, flash: "attack" },
+  hawkeye: { id: "hawkeye", name: "鷹の目",       kind: "unique", en: 5, target: "allyAll", effect: "accUp", lv1: 25, lv10: 40, element: null, flash: "guard" },
+  bite:    { id: "bite",    name: "大かみつき",   kind: "unique", en: 9, target: "enemy", effect: "damage", lv1: 2.2, lv10: 3.0, accMod: -15, stun: true, bossBonus: 1.2, element: null, flash: "attack" },
+};
+const ANIMAL_UNIQUE = { dango: "curl", turtle: "cover", lion: "roar", wolf: "claws", ptera: "dive", bird: "hawkeye", rex: "bite" };
+const FLASH_COLORS = { heal: "rgba(80,230,120,.35)", guard: "rgba(90,220,255,.35)", attack: "rgba(255,230,220,.45)" };
 
 // マップ
 const MAP_W = 36, MAP_H = 28, FOV_RADIUS = 6;
@@ -635,6 +702,7 @@ let team, inv, pos, bestLevel, partUid = 0;
 let typeKey = null;
 let progress = null;     // { maxFloor, bossDefeated: {5, 10}, cleared }
 let saveFailed = false;
+let settings = { fx: true, instant: false };   // 演出、確認なしで即実行（セーブに含める）
 let mode = "select";    // select | map | battle | menu | over
 let battle = null;
 let menuState = { unit: 0, pending: null, confirmRelease: false };
@@ -662,18 +730,22 @@ function pickWeighted(rates) {
 //  機体
 // ================================================================
 const maxHpOf = u => u.baseHp + LEVEL_HP_GROWTH * (u.lv - 1) + (DEBUG ? DEBUG_HP_BONUS : 0);
-const maxEnOf = u => u.baseEn + LEVEL_EN_GROWTH * (u.lv - 1);
+const maxEnOf = u => u.baseEn + (u.enGrowth || LEVEL_EN_GROWTH) * (u.lv - 1);
+const typeOf = u => u.isLeader ? START_TYPES.find(t => t.key === u.kind) : null;
+// 戦闘中だけの状態（戦闘ごとにリセット）
+const freshBattleState = () => ({ guard: 0, critUp: 0, barrage: 0, blind: 0, curl: 0, cover: 0, accUp: 0, missStreak: 0, evadeStreak: 0 });
 const tackleOf = u => u.baseTackle + Math.floor((u.lv - 1) * TACKLE_GROWTH);
 
 function createUnit(o) {
   const u = {
     name: o.name, sprite: o.sprite, isLeader: !!o.isLeader, kind: o.kind,
     baseHp: o.hp, baseEn: o.en, baseTackle: o.tackle, accBonus: o.accBonus || 0, evade: o.evade || 0,
+    enGrowth: o.enGrowth || LEVEL_EN_GROWTH, unique: o.unique || ANIMAL_UNIQUE[o.sprite] || "curl",
     lv: o.lv || 1, exp: 0,
     equip: new Array(SLOT_COUNT).fill(null),
     manual: false,   // 手動で付け替えた機体は、自動の入れ替え対象にしない
-    skills: Object.fromEntries(SKILLS.map(s => [s.id, 1])),
-    guard: 0, focus: 0,
+    skills: { guard: 1, unique: 1 },   // 防御と固有技のスキルレベル
+    bs: freshBattleState(),
   };
   u.maxHp = maxHpOf(u); u.hp = u.maxHp;
   u.maxEn = maxEnOf(u); u.en = u.maxEn;
@@ -1072,9 +1144,10 @@ function startBattle(e) {
   mode = "battle";
   e.awake = true;
   chooseAnimal(e);
-  for (const u of team) { u.guard = 0; u.focus = 0; }
+  for (const u of team) u.bs = freshBattleState();
   battle = { enemy: e, menu: "main", busy: false, actor: team.findIndex(u => u.hp > 0),
-             round: 1, bossTurn: 0, heavyReady: false, itemKey: null, downs: 0 };
+             round: 1, bossTurn: 0, heavyReady: false, itemKey: null, downs: 0, selected: null,
+             roarTurns: 0, roarRate: 0, stunned: false, stats: { moves: {} } };
   log(e.boss ? `ボス「${e.name}」との戦闘！` : `${e.name}が現れた！`);
   $("mapScreen").hidden = true;
   $("battle").hidden = false;
@@ -1102,7 +1175,7 @@ function startBattle(e) {
 // バトル終了後の後片付け（勝ち・逃げ共通）
 function afterBattle() {
   for (const u of team) {
-    u.guard = 0; u.focus = 0;
+    u.bs = freshBattleState();
     if (u.hp <= 0) { u.hp = Math.max(1, Math.floor(u.maxHp * REVIVE_HP_RATE)); log(`${u.name}が再起動した。（HP${u.hp}）`); }
   }
   processLevelUps();
@@ -1119,22 +1192,29 @@ function endBattle() {
 }
 
 const varied = power => Math.max(1, power + rndRange(-DAMAGE_VARIANCE, DAMAGE_VARIANCE));
-function showFx(text, color) { const f = $("fx"); f.textContent = text; f.style.color = color; }
-function bump(el) { if (!el) return; el.classList.remove("hit"); void el.offsetWidth; el.classList.add("hit"); }
 
-function attack(u, label, power, acc) {
-  const e = battle.enemy;
-  acc = Math.min(100, acc + u.accBonus);
-  if (!roll(acc)) { log(`${u.name}の${label}！ 外れた。`); showFx("MISS", "#aaa"); return; }
-  const dmg = varied(power);
-  e.hp = Math.max(0, e.hp - dmg);
-  log(`${u.name}の${label}！ ${dmg}ダメージ。`);
-  showFx(`-${dmg}`, "#ffd447");
-  bump($("eSprite"));
+// ---- 演出（設定でオフにできる。ダメージの数字とメッセージは常に出す） ----
+function restartAnim(el, cls) { if (!el) return; el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+function showBanner(text) {
+  if (!settings.fx) return false;
+  const b = $("banner"); b.textContent = text; restartAnim(b, "show");
+  return true;
+}
+function flashScreen(kind) {
+  if (!settings.fx || !kind) return;   // 1行動で1回だけ。点滅はしない
+  const f = $("flash"); f.style.background = FLASH_COLORS[kind]; restartAnim(f, "show");
+}
+function shake(el) { if (settings.fx) restartAnim(el, "shake2"); }
+function popNumber(text, color, where = "enemy", big = false) {
+  const f = $("fx");
+  f.textContent = text; f.style.color = color;
+  f.className = `${where}${big ? " critNum" : ""}`;
+  restartAnim(f, "pop");
 }
 
-function levelUpSkill(u, id) {
-  if (u.skills[id] < SKILL_MAX_LEVEL) u.skills[id]++;
+function levelUpSkill(u, key) {
+  if (key !== "guard" && key !== "unique") return;   // たいあたりとパーツにはスキルレベルがない
+  if (u.skills[key] < SKILL_MAX_LEVEL) u.skills[key]++;
 }
 
 function useItem(key, target) {
@@ -1150,30 +1230,149 @@ function useItem(key, target) {
   }
 }
 
+// ---- わざの計算 ----
+const lerp = (a, b, lv) => a + (b - a) * (Math.min(SKILL_MAX_LEVEL, Math.max(1, lv)) - 1) / (SKILL_MAX_LEVEL - 1);
+const lerpInt = (a, b, lv) => Math.floor(lerp(a, b, lv) + 1e-9);
+const lerpMul = (a, b, lv) => Math.floor(lerp(a, b, lv) * 100 + 1e-9) / 100;
+
+// その機体が使えるわざ（一覧の順：たいあたり、防御、固有技、自由枠1、自由枠2）
+function moveKeys(u) {
+  const keys = ["tackle", "guard", "unique"];
+  u.equip.forEach((it, i) => { if (it) keys.push("part" + i); });
+  return keys;
+}
+function moveDef(u, key) {
+  if (key === "tackle" || key === "guard") return MOVES[key];
+  if (key === "unique") return MOVES[u.unique];
+  const p = partOf(u.equip[+key.slice(4)]);
+  return { id: key, name: p.name, kind: "part", en: p.en, acc: p.acc, target: "enemy", effect: "damage", element: null, part: p };
+}
+function partEnCost(u, p) {
+  const t = typeOf(u);
+  let c = p.en;
+  if (t && t.partEnRate) c = Math.max(1, Math.ceil(c * t.partEnRate));   // 砲撃型の割引
+  if (u.bs.barrage) c = Math.max(1, Math.ceil(c / 2));                    // 集中砲火
+  return c;
+}
+// 味方の命中率（型の補正、鷹の目、連続ミスの補正、下限50%）
+function hitChance(u, base, opts = {}) {
+  if (opts.sure) return 100;
+  const t = typeOf(u);
+  let a = base + u.accBonus + (opts.mod || 0) + u.bs.accUp + Math.min(MISS_STREAK_CAP, u.bs.missStreak * MISS_STREAK_BONUS);
+  if (opts.part && t && t.heavyAccBonus && opts.part.type !== "gun") a += t.heavyAccBonus;
+  return Math.max(PLAYER_ACC_MIN, Math.min(100, a));
+}
+function critRateOf(u) {
+  const t = typeOf(u);
+  let r = (t && t.critRate) || 0;
+  if (r && battle && battle.enemy.boss && battle.heavyReady) r += CRIT_CHARGE_BONUS;
+  return r + u.bs.critUp;
+}
+// わざの中身（一覧の表示、予測、実行、ボットで共通に使う）
+function moveInfo(u, key) {
+  const d = moveDef(u, key);
+  const lv = key === "guard" ? u.skills.guard : key === "unique" ? u.skills.unique : 0;
+  const info = { key, def: d, name: d.name, kind: d.kind, lv, en: 0, damaging: false, hits: 1, power: 0, acc: null, sure: false, desc: "", short: "" };
+  const tk = tackleOf(u), vsBoss = !!(battle && battle.enemy.boss);
+  if (key === "tackle") {
+    Object.assign(info, { damaging: true, power: tk, acc: hitChance(u, TACKLE_ACC), short: `威力${tk}`, desc: d.desc });
+  } else if (key === "guard") {
+    const rec = guardRecover(lv);
+    Object.assign(info, { short: `EN+${rec}`, desc: `次に受けるダメージを半分にし、ENを${rec}回復する。攻撃はしない。` });
+  } else if (d.kind === "part") {
+    const p = d.part;
+    info.en = partEnCost(u, p);
+    info.power = u.bs.barrage ? Math.floor(p.power * u.bs.barrage) : p.power;
+    Object.assign(info, { damaging: true, acc: hitChance(u, p.acc, { part: p }), short: `威力${info.power}`,
+      desc: `${PART_TYPE_LABEL[p.type]}（${RARITY[p.rarity].name}）。${p.type === "gun" ? "外れにくい堅実な武器。" : p.type === "missile" ? "当たれば大きい一発逆転の武器。" : "強いがENを多く使う武器。"}${u.bs.barrage ? `集中砲火で威力×${u.bs.barrage}、EN半分。` : ""}` });
+  } else {
+    info.en = d.en;
+    switch (d.id) {
+      case "crit": { const v = lerpInt(d.lv1, d.lv10, lv); info.value = v; info.short = `会心+${v}%`; info.desc = `次の攻撃の会心率が+${v}%（1回限り）。`; break; }
+      case "barrage": { const m = lerpMul(d.lv1, d.lv10, lv); info.value = m; info.short = `次の武器×${m}`; info.desc = `次のパーツのわざの消費ENが半分、威力×${m}（1回限り）。`; break; }
+      case "blind": { const n = lv >= d.twoAtLv ? 2 : 1; info.value = n; info.short = `回避${n}回`; info.desc = `次の敵の攻撃を${n}回、確実にかわす。ボスの強攻撃はかわせない。`; break; }
+      case "curl": { const v = lerpInt(d.lv1, d.lv10, lv); info.value = v; info.short = `HP+${v}%`; info.desc = `次の被ダメージ−${d.cut}%。HPを最大の${v}%回復。`; break; }
+      case "cover": { const v = lerpInt(d.lv1, d.lv10, lv); info.value = v; info.short = `かばう−${v}%`; info.desc = `次の敵の攻撃を、狙われた相手に関係なく自分が受ける。受けるダメージ−${v}%。`; break; }
+      case "roar": { const v = lerpInt(d.lv1, d.lv10, lv); info.value = vsBoss ? Math.floor(v / 2) : v; info.short = `攻撃−${info.value}%`; info.desc = `敵の攻撃力を${d.turns}ターンの間−${v}%（ボスには半分）。`; break; }
+      case "hawkeye": { const v = lerpInt(d.lv1, d.lv10, lv); info.value = v; info.short = `全員命中+${v}%`; info.desc = `味方全員の次の攻撃の命中+${v}%（1人1回ずつ）。`; break; }
+      case "claws": { const m = lerpMul(d.lv1, d.lv10, lv); const per = Math.max(1, Math.round(tk * m / 2));
+        Object.assign(info, { damaging: true, hits: 2, power: per, acc: hitChance(u, TACKLE_ACC, { mod: d.accMod }), short: `威力${per}×2`, desc: `2回攻撃（合計はたいあたりの×${m}）。命中+${d.accMod}%。` }); break; }
+      case "dive": { const m = lerpMul(d.lv1, d.lv10, lv); const pw = Math.max(1, Math.floor(tk * m));
+        Object.assign(info, { damaging: true, power: pw, sure: true, acc: 100, short: `威力${pw}`, desc: `たいあたりの×${m}。必ず当たる。` }); break; }
+      case "bite": { const m = lerpMul(d.lv1, d.lv10, lv); let pw = Math.max(1, Math.floor(tk * m)); if (vsBoss) pw = Math.floor(pw * d.bossBonus);
+        Object.assign(info, { damaging: true, power: pw, acc: hitChance(u, TACKLE_ACC, { mod: d.accMod }), short: `威力${pw}`,
+          desc: `たいあたりの×${m}、命中${d.accMod}%。当たると敵は次のターン動けない（ボスには効かず、代わりにダメージ+20%）。` }); break; }
+    }
+  }
+  return info;
+}
+
+// 攻撃の処理（ダメージの式はパーツもたいあたりも固有技も同じ）
+function doDamage(u, info) {
+  const e = battle.enemy;
+  let hitAny = false;
+  for (let h = 0; h < info.hits && e.hp > 0; h++) {
+    const label = info.hits > 1 ? `${info.name}(${h + 1})` : info.name;
+    if (!info.sure && !roll(info.acc)) {
+      u.bs.missStreak = Math.min(MISS_STREAK_CAP / MISS_STREAK_BONUS, u.bs.missStreak + 1);
+      battle.stats.maxMissStreak = Math.max(battle.stats.maxMissStreak || 0, u.bs.missStreak);
+      log(`${u.name}の${label}！ 外れた。`);
+      popNumber("ミス", "#bbb", "miss");
+      continue;
+    }
+    u.bs.missStreak = 0;
+    let dmg = varied(info.power);
+    const crit = roll(critRateOf(u));
+    if (crit) dmg = Math.floor(dmg * CRIT_MULT);
+    e.hp = Math.max(0, e.hp - dmg);
+    hitAny = true;
+    log(`${u.name}の${label}！ ${crit ? "会心！ " : ""}${dmg}ダメージ。`, crit ? "#ffd447" : "");
+    popNumber(`-${dmg}`, crit ? "#ffd447" : "#fff", "enemy", crit);
+    shake($("eSprite"));
+  }
+  // 1回限りの効果はここで使い切る
+  u.bs.critUp = 0; u.bs.accUp = 0;
+  if (info.kind === "part") u.bs.barrage = 0;
+  if (hitAny && info.def.stun && !e.boss) { battle.stunned = true; log(`${e.name}はひるんで動けない！`); }
+}
+
+// わざを使う
+function executeMove(u, key) {
+  const info = moveInfo(u, key), d = info.def;
+  u.en -= info.en;
+  // 集計（テストと調整用）：わざの種類、攻撃の種類、固有技ごとの回数
+  const st = battle.stats;
+  st.moves[d.kind] = (st.moves[d.kind] || 0) + 1;
+  if (info.damaging) (st.attacks ||= {})[d.kind] = (st.attacks[d.kind] || 0) + 1;
+  if (d.kind === "unique") (st.uniques ||= {})[d.id] = (st.uniques[d.id] || 0) + 1;
+  showBanner(info.name);
+  if (d.kind === "unique") flashScreen(d.flash);
+  if (key === "guard") {
+    u.bs.guard = GUARD_CUT;
+    const rec = guardRecover(u.skills.guard), before = u.en;
+    u.en = Math.min(u.maxEn, u.en + rec);
+    log(`${u.name}は防御の構え。EN+${u.en - before}。`);
+  } else if (info.damaging) {
+    doDamage(u, info);
+  } else {
+    switch (d.id) {
+      case "crit": u.bs.critUp = info.value; log(`${u.name}は力をためた。次の攻撃の会心率+${info.value}%！`); break;
+      case "barrage": u.bs.barrage = info.value; log(`${u.name}は照準を合わせた。次のパーツはEN半分・威力×${info.value}！`); break;
+      case "blind": u.bs.blind = info.value; log(`${u.name}の目くらまし！ 次の攻撃を${info.value}回かわす。`); break;
+      case "curl": { u.bs.curl = d.cut; const before = u.hp; u.hp = Math.min(u.maxHp, u.hp + Math.floor(u.maxHp * info.value / 100));
+        log(`${u.name}はまるまった。HP+${u.hp - before}、次の被ダメージ−${d.cut}%。`); popNumber(`+${u.hp - before}`, "#5fe07a", "ally"); break; }
+      case "cover": u.bs.cover = info.value; log(`${u.name}は仲間をかばう構え。`); break;
+      case "roar": battle.roarTurns = d.turns; battle.roarRate = info.value; log(`${u.name}のほえる！ ${battle.enemy.name}の攻撃力が${d.turns}ターン−${info.value}%。`); break;
+      case "hawkeye": for (const a of alive()) a.bs.accUp = info.value; log(`${u.name}の鷹の目！ 味方全員の次の攻撃の命中+${info.value}%。`); break;
+    }
+  }
+  levelUpSkill(u, key === "guard" ? "guard" : d.kind === "unique" ? "unique" : null);
+}
+
 // 各コマンド。"escaped" を返すとバトル終了
 const ACTIONS = {
-  tackle(u) { attack(u, "たいあたり", tackleOf(u), TACKLE_ACC); },
-  weapon(u, slot) {
-    const part = partOf(u.equip[slot]);
-    u.en -= part.en;
-    const acc = part.acc + u.focus;
-    u.focus = 0;
-    attack(u, part.name, part.power, acc);
-  },
-  skill(u, id) {
-    const s = SKILLS.find(s => s.id === id), lv = u.skills[id];
-    if (id === "double") {
-      attack(u, "連続攻撃(1)", s.hitPower(lv, u), TACKLE_ACC);
-      if (battle.enemy.hp > 0) attack(u, "連続攻撃(2)", s.hitPower(lv, u), TACKLE_ACC);
-    } else if (id === "guard") {
-      u.guard = s.ratio(lv);
-      log(`${u.name}は防御の構え。（被ダメージ${Math.round(u.guard * 100)}%）`);
-    } else if (id === "focus") {
-      u.focus = s.bonus(lv);
-      log(`${u.name}は集中した。（次のぶそう命中+${u.focus}%）`);
-    }
-    levelUpSkill(u, id);
-  },
+  move(u, key) { executeMove(u, key); },
+  tackle(u) { executeMove(u, "tackle"); },      // 互換用
   item(u, arg) { useItem(arg.key, arg.target); },
   escape(u) {
     if (roll(ESCAPE_RATE)) {
@@ -1194,10 +1393,13 @@ async function runCommand(action, arg) {
   if (!battle || battle.busy) return;
   battle.busy = true;
   battle.menu = "main";
+  battle.selected = null;
   const u = team[battle.actor];
   const result = ACTIONS[action](u, arg);
   renderBattle();
-  await pause();
+  // 技名の表示があるときだけ、待ち時間を少し延ばす（追加は最大0.5秒）
+  const extra = settings.fx && (action === "move" || action === "tackle") ? Math.min(FX_EXTRA_WAIT_MAX, Math.max(0, FX_BANNER_MS - BATTLE_WAIT)) : 0;
+  await pause(BATTLE_WAIT + extra);
 
   if (result === "escaped") { endBattle(); return; }
   if (battle.enemy.hp <= 0) { winBattle(); return; }
@@ -1226,54 +1428,96 @@ async function runCommand(action, arg) {
 
 function randomAlive() { const a = alive(); return a.length ? a[rnd(a.length)] : null; }
 
-function enemyStrike(e, u, power, acc, label) {
-  const guard = u.guard;
-  u.guard = 0;   // 狙われたら防御は消える
-  if (!roll(acc)) { log(`${label}！ ${u.name}への攻撃は外れた。`); showFx("MISS", "#8fd"); return; }
-  if (u.evade && roll(u.evade)) { log(`${label}！ ${u.name}はひらりとかわした。`); showFx("回避", "#8fd"); return; }
+// 敵の攻撃。heavy=ボスの強攻撃（必中：回避も目くらましも無視。防御と軽減は有効）
+function enemyStrike(e, target, power, acc, label, heavy = false) {
+  // かくれがえし：狙われた相手に関係なく、構えている機体が受ける
+  let u = target, coverCut = 0;
+  const coverer = alive().find(a => a.bs.cover);
+  if (coverer) {
+    u = coverer; coverCut = coverer.bs.cover; coverer.bs.cover = 0;
+    if (coverer !== target) log(`${coverer.name}が${target.name}をかばった！`);
+  }
+  if (!heavy) {
+    if (u.bs.blind > 0) {
+      u.bs.blind--;
+      log(`${label}！ ${u.name}は目くらましでかわした。`);
+      popNumber("回避", "#8fd", "ally");
+      return;
+    }
+    const ev = Math.min(EVADE_CAP, u.evade);
+    const chance = Math.max(ENEMY_ACC_MIN, acc - ev) + u.bs.evadeStreak * EVADE_STREAK_BONUS;
+    if (!roll(chance)) {
+      if (ev > 0) { u.bs.evadeStreak++; log(`${label}！ ${u.name}はひらりとかわした。`); popNumber("回避", "#8fd", "ally"); }
+      else { log(`${label}！ ${u.name}への攻撃は外れた。`); popNumber("ミス", "#8fd", "ally"); }
+      return;
+    }
+  }
+  u.bs.evadeStreak = 0;
   let dmg = varied(power);
-  if (guard) dmg = Math.max(1, Math.round(dmg * guard));
+  const cut = [];
+  if (u.bs.guard) { dmg *= u.bs.guard; u.bs.guard = 0; cut.push("防御"); }
+  if (u.bs.curl) { dmg *= 1 - u.bs.curl / 100; u.bs.curl = 0; cut.push("まるまる"); }
+  if (coverCut) { dmg *= 1 - coverCut / 100; cut.push("かくれがえし"); }
+  dmg = Math.max(1, Math.round(dmg));
   u.hp = Math.max(0, u.hp - dmg);
-  log(`${label}！ ${u.name}に${dmg}ダメージ${guard ? "（防御）" : ""}。`);
-  showFx(`-${dmg}`, "#ff6a6a");
-  bump($("ally" + team.indexOf(u)));
+  log(`${label}！ ${u.name}に${dmg}ダメージ${cut.length ? `（${cut.join("・")}）` : ""}。`);
+  popNumber(`-${dmg}`, "#ff6a6a", "ally");
+  shake($("ally" + team.indexOf(u)));
   if (u.hp === 0) { battle.downs++; log(`${u.name}は動けなくなった！`); }
+}
+
+// ほえるで下がった攻撃力
+function enemyPower(e, mult = 1) {
+  let p = e.atk * mult;
+  if (battle.roarTurns > 0) p = p * (1 - battle.roarRate / 100);
+  return Math.max(1, Math.round(p));
 }
 
 async function enemyPhase() {
   const e = battle.enemy;
+  const endTurn = () => { if (battle.roarTurns > 0) battle.roarTurns--; };
+  if (battle.stunned) {
+    battle.stunned = false;
+    log(`${e.name}は動けない！`);
+    renderBattle(); await pause(); endTurn();
+    return;
+  }
   if (!e.boss) {
     const t = randomAlive();
-    if (t) enemyStrike(e, t, e.atk, e.acc, `${e.name}の攻撃`);
+    if (t) enemyStrike(e, t, enemyPower(e), e.acc, `${e.name}の攻撃`);
     renderBattle();
     await pause();
+    endTurn();
     return;
   }
   battle.bossTurn++;
   if (battle.heavyReady) {
     battle.heavyReady = false;
     const t = randomAlive();
-    if (t) enemyStrike(e, t, e.atk * BOSS_HEAVY_MULT, e.acc - BOSS_HEAVY_ACC_DOWN, `${e.name}の強攻撃`);
+    if (t) enemyStrike(e, t, enemyPower(e, BOSS_HEAVY_MULT), e.acc - BOSS_HEAVY_ACC_DOWN, `${e.name}の強攻撃`, true);
     renderBattle();
     await pause();
+    endTurn();
     return;
   }
   if (battle.bossTurn % BOSS_CHARGE_EVERY === 0) {
     battle.heavyReady = true;
     log(`${e.name}は力を溜めている…！ 次は強攻撃だ。`);
-    showFx("力を溜めている", "#ffb02e");
+    popNumber("力を溜めている", "#ffb02e", "center");
     renderBattle();
     await pause();
+    endTurn();
     return;
   }
   const times = e.def.doubleBelowHalf && e.hp <= e.maxHp / 2 ? 2 : 1;
   for (let i = 0; i < times; i++) {
     const t = randomAlive();
     if (!t) break;
-    enemyStrike(e, t, e.atk, e.acc, times > 1 ? `${e.name}の連撃(${i + 1})` : `${e.name}の攻撃`);
+    enemyStrike(e, t, enemyPower(e), e.acc, times > 1 ? `${e.name}の連撃(${i + 1})` : `${e.name}の攻撃`);
     renderBattle();
     await pause();
   }
+  endTurn();
 }
 
 // 落とすパーツを決める（系統とレア度）
@@ -1335,43 +1579,47 @@ function winBattle() {
   renderBattle();
 }
 
-// 仲間は、最初の機体と同じレベルで加わる。名前と絵は元の動物
+// 仲間は、最初の機体と同じレベルで加わる。名前と絵と固有技は元の動物
 function recruit(e) {
   const def = e.def;
   const u = createUnit({ name: uniqueName(e.name), sprite: e.sprite, kind: def.key,
-    hp: def.ally.hp, en: def.ally.en, tackle: def.ally.tackle, lv: leader().lv });
+    hp: def.ally.hp, en: def.ally.en, tackle: def.ally.tackle, lv: leader().lv, unique: ANIMAL_UNIQUE[e.sprite] });
   team.push(u);
   addPart(def.ally.part, u);
-  log(`${u.name}が仲間になった！（Lv${u.lv}）`);
+  log(`${u.name}が仲間になった！（Lv${u.lv}・固有技「${MOVES[u.unique].name}」）`);
 }
 
-// コマンド一覧
+// ---- コマンドの一覧 ----
+function pickMove(key) {
+  const u = team[battle.actor], info = moveInfo(u, key);
+  if (info.en > u.en) { log("ENが足りない！"); return; }
+  if (settings.instant || battle.selected === key) { runCommand("move", key); return; }
+  battle.selected = key;
+  renderBattle();
+}
 function battleCommands() {
   const b = battle, cmds = [];
   if (b.menu === "result") return [{ label: "つづける", sub: "マップにもどる", act: endBattle }];
   if (b.actor < 0) return [];
   const u = team[b.actor];
-  const back = { label: "もどる", back: true, act: () => { b.menu = "main"; renderBattle(); } };
+  const back = { label: "もどる", back: true, act: () => { b.menu = "main"; b.selected = null; renderBattle(); } };
   if (b.menu === "main") {
-    cmds.push({ label: "たいあたり", sub: `威力${tackleOf(u)} 命中${Math.min(100, TACKLE_ACC + u.accBonus)}%`, act: () => runCommand("tackle") });
-    cmds.push({ label: "ぶそう", sub: "パーツで攻撃", act: () => { b.menu = "weapon"; renderBattle(); } });
-    cmds.push({ label: "スキル", sub: "技を使う", act: () => { b.menu = "skill"; renderBattle(); } });
+    cmds.push({ label: "わざ", sub: "攻撃・防御・固有技・パーツ", act: () => { b.menu = "moves"; b.selected = null; renderBattle(); } });
     cmds.push({ label: "アイテム", sub: `修理${inv.items.repair} セル${inv.items.cell}`, act: () => { b.menu = "item"; renderBattle(); } });
     cmds.push({ label: "にげる", sub: b.enemy.boss ? "ボスからは逃げられない" : `成功率${ESCAPE_RATE}%`,
                 disabled: b.enemy.boss, act: () => runCommand("escape") });
-  } else if (b.menu === "weapon") {
-    u.equip.forEach((item, slot) => {
-      if (!item) { cmds.push({ label: `枠${slot + 1}：なし`, disabled: true }); return; }
-      const p = partOf(item);
-      const acc = Math.min(100, p.acc + u.focus + u.accBonus);
-      cmds.push({ label: partText(p), color: RARITY[p.rarity].color, sub: `威力${p.power} 命中${acc}% EN${p.en}`,
-                  disabled: u.en < p.en, act: () => runCommand("weapon", slot) });
-    });
-    cmds.push(back);
-  } else if (b.menu === "skill") {
-    for (const s of SKILLS) {
-      const lv = u.skills[s.id];
-      cmds.push({ label: `${s.name} Lv${lv}`, sub: s.desc(lv, u), act: () => runCommand("skill", s.id) });
+  } else if (b.menu === "moves") {
+    for (const key of moveKeys(u)) {
+      const info = moveInfo(u, key), d = info.def;
+      const lvTxt = info.lv ? ` Lv${info.lv}` : "";
+      // パーツの★は2行目の頭に出す（名前が長くても★が切れないように）
+      const stars = d.kind === "part" && d.part.rarity ? RARITY[d.part.rarity].stars + " " : "";
+      const c = { key, label: info.name + lvTxt,
+        sub: `${stars}EN${info.en}　${info.short}${info.acc != null ? `　命中${info.acc}%` : ""}`,
+        noen: info.en > u.en, selected: b.selected === key, act: () => pickMove(key) };
+      if (d.kind === "part") { c.color = RARITY[d.part.rarity].color; c.mark = d.part.type; }
+      else if (d.kind === "unique") c.mark = "unique";
+      cmds.push(c);
     }
     cmds.push(back);
   } else if (b.menu === "item") {
@@ -1392,13 +1640,42 @@ function battleCommands() {
   return cmds;
 }
 
+// 選んだわざの説明・命中率・予測ダメージ
+function renderMoveInfo() {
+  const box = $("moveInfo");
+  const b = battle;
+  // 選んでいる間は、メッセージ欄の場所に説明を出す（スマホでも1画面に収まるように）
+  const show = !!(b && b.menu === "moves" && b.selected && !b.busy && b.actor >= 0);
+  box.hidden = !show;
+  $("battleLog").hidden = show;
+  if (!show) return;
+  const u = team[b.actor], info = moveInfo(u, b.selected);
+  box.hidden = false;
+  box.textContent = "";
+  box.append(el("div", "miName", info.name + (info.lv ? `  Lv${info.lv}` : "")));
+  box.append(el("div", "miDesc", info.desc));
+  const line = [];
+  if (info.acc != null) line.push(`命中 ${info.acc}%`);
+  if (info.damaging) line.push(`予測ダメージ 約${info.power}${info.hits > 1 ? `×${info.hits}` : ""}（敵HP ${b.enemy.hp}）`);
+  else line.push(`効果：${info.short}`);
+  line.push(`EN ${info.en}（残り${u.en - info.en}）`);
+  box.append(el("div", "miLine", line.join("　")));
+  const go = el("button", "miGo", "決定");
+  go.id = "btnDecide";
+  go.addEventListener("click", () => runCommand("move", b.selected));
+  box.append(go);
+}
+
 let currentCmds = [];
 function renderBattle() {
   const e = battle.enemy;
   $("eName").textContent = (e.boss ? "BOSS " : "") + e.name;
-  $("eHpText").textContent = `HP ${e.hp}/${e.maxHp}`;
+  const st = [];
+  if (battle.roarTurns > 0) st.push(`攻撃−${battle.roarRate}%（残り${battle.roarTurns}）`);
+  if (battle.stunned) st.push("ひるみ");
+  $("eHpText").textContent = `${st.length ? st.join(" ") + "　" : ""}HP ${e.hp}/${e.maxHp}`;
   $("eHpBar").firstElementChild.style.width = (100 * e.hp / e.maxHp) + "%";
-  $("charge").textContent = "⚡ 力を溜めている！ 次のターンに強攻撃";
+  $("charge").textContent = "⚡ 力を溜めている！ 次のターンに強攻撃（必中）";
   $("charge").hidden = !battle.heavyReady;
 
   team.forEach((u, i) => {
@@ -1412,22 +1689,29 @@ function renderBattle() {
   team.forEach((u, i) => {
     const r = document.createElement("div");
     r.className = "prow" + (i === battle.actor ? " active" : "") + (u.hp <= 0 ? " down" : "");
-    r.innerHTML = `<span class="nm"></span><span class="bar hp"><i></i></span><span class="num hpn"></span><span class="num enn"></span>`;
+    r.innerHTML = `<span class="nm"></span><span class="bars"><span class="bar hp"><i></i></span><span class="bar en"><i></i></span></span><span class="num hpn"></span><span class="num enn"></span>`;
     r.querySelector(".nm").textContent = u.name;
     const small = document.createElement("small"); small.textContent = ` Lv${u.lv}`;
     r.querySelector(".nm").append(small);
-    r.querySelector("i").style.width = (100 * u.hp / u.maxHp) + "%";
+    r.querySelector(".bar.hp i").style.width = (100 * u.hp / u.maxHp) + "%";
+    r.querySelector(".bar.en i").style.width = (100 * u.en / u.maxEn) + "%";
     r.querySelector(".hpn").textContent = u.hp > 0 ? `${u.hp}/${u.maxHp}` : "停止";
     r.querySelector(".hpn").classList.toggle("low", u.hp > 0 && u.hp <= u.maxHp * 0.3);
-    r.querySelector(".enn").textContent = `EN${u.en}`;
-    const st = [];
-    if (u.guard) st.push(`防御中 ${Math.round(u.guard * 100)}%`);
-    if (u.focus) st.push(`集中 命中+${u.focus}%`);
-    if (st.length) { const d = document.createElement("span"); d.className = "st"; d.textContent = st.join("　"); r.append(d); }
+    r.querySelector(".enn").textContent = `EN${u.en}/${u.maxEn}`;
+    const s = [];
+    if (u.bs.guard) s.push("防御中");
+    if (u.bs.critUp) s.push(`会心+${u.bs.critUp}%`);
+    if (u.bs.barrage) s.push(`集中砲火×${u.bs.barrage}`);
+    if (u.bs.blind) s.push(`目くらまし${u.bs.blind}`);
+    if (u.bs.curl) s.push("まるまる");
+    if (u.bs.cover) s.push("かばう");
+    if (u.bs.accUp) s.push(`命中+${u.bs.accUp}%`);
+    if (u.bs.missStreak) s.push(`次の命中+${Math.min(MISS_STREAK_CAP, u.bs.missStreak * MISS_STREAK_BONUS)}%`);
+    if (s.length) { const d = document.createElement("span"); d.className = "st"; d.textContent = s.join("　"); r.append(d); }
     party.append(r);
   });
 
-  const titles = { main: "の行動", weapon: "：パーツを選ぶ", skill: "：スキルを選ぶ", item: "：アイテムを選ぶ", itemTarget: "：使う相手を選ぶ" };
+  const titles = { main: "の行動", moves: "：わざを選ぶ", item: "：アイテムを選ぶ", itemTarget: "：使う相手を選ぶ" };
   const title = $("cmdTitle");
   title.textContent = "";
   if (battle.menu === "result") title.textContent = "勝利！";
@@ -1439,19 +1723,27 @@ function renderBattle() {
   currentCmds = battle.busy ? [] : battleCommands();
   const box = $("cmds");
   box.textContent = "";
+  box.classList.toggle("moveList", battle.menu === "moves");
   currentCmds.forEach((c, i) => {
     const btn = document.createElement("button");
     const k = document.createElement("span"); k.className = "k"; k.textContent = c.back ? "0" : String(i + 1);
     const lab = document.createElement("span"); lab.textContent = c.label;
     if (c.color) lab.style.color = c.color;
-    const line = document.createElement("span"); line.append(k, lab);
+    const line = document.createElement("span");
+    line.append(k);
+    if (c.mark) line.append(el("span", "mk mk-" + c.mark, c.mark === "unique" ? "固" : PART_TYPE_LABEL[c.mark][0]));
+    line.append(lab);
     btn.append(line);
     if (c.sub) { const sm = document.createElement("small"); sm.textContent = c.sub; btn.append(sm); }
     if (c.back) btn.classList.add("back");
+    if (c.noen) btn.classList.add("noen");
+    if (c.selected) btn.classList.add("sel");
+    if (c.key) btn.dataset.key = c.key;
     btn.disabled = !!c.disabled;
     btn.addEventListener("click", () => { if (!btn.disabled && c.act) c.act(); });
     box.append(btn);
   });
+  renderMoveInfo();
 }
 
 function battleKey(key) {
@@ -1462,7 +1754,11 @@ function battleKey(key) {
     if (back) { back.act(); return true; }
     return false;
   }
-  if (key === "Enter" && battle.menu === "result") { endBattle(); return true; }
+  if (key === "Enter") {
+    if (battle.menu === "result") { endBattle(); return true; }
+    if (battle.menu === "moves" && battle.selected) { runCommand("move", battle.selected); return true; }
+    return false;
+  }
   const n = parseInt(key, 10);
   if (n >= 1 && n <= currentCmds.length) {
     const c = currentCmds[n - 1];
@@ -1599,14 +1895,28 @@ function renderMenu() {
     body.append(row);
   }
 
-  body.append(el("h3", "", "スキル（使うたびにレベルアップ）"));
-  for (const s of SKILLS) {
-    const lv = u.skills[s.id], row = el("div", "mrow");
-    const info = el("div", "info", `${s.name}　Lv${lv}${lv >= SKILL_MAX_LEVEL ? "（最大）" : ""}`);
-    info.append(el("small", "", s.desc(lv, u)));
+  body.append(el("h3", "", "わざ（防御と固有技は、使うたびにレベルアップ）"));
+  for (const key of moveKeys(u)) {
+    const mi = moveInfo(u, key), row = el("div", "mrow");
+    const head = (mi.kind === "part" ? `パーツ：${partText(mi.def.part)}` : mi.kind === "unique" ? `固有技：${mi.name}` : mi.name) +
+      (mi.lv ? `　Lv${mi.lv}${mi.lv >= SKILL_MAX_LEVEL ? "（最大）" : ""}` : "");
+    const info = el("div", "info", head);
+    info.append(el("small", "", `EN${mi.en}　${mi.short}${mi.acc != null ? `　命中${mi.acc}%` : ""}　${mi.desc}`));
     row.append(info);
     body.append(row);
   }
+
+  body.append(el("h3", "", "設定"));
+  const toggle = (label, keyName, note) => {
+    const row = el("div", "mrow");
+    const info = el("div", "info", label); info.append(el("small", "", note));
+    const btns = el("div", "btns");
+    const b = rowButton(settings[keyName] ? "オン" : "オフ", () => { settings[keyName] = !settings[keyName]; saveGame(); renderMenu(); });
+    b.id = "set-" + keyName;
+    btns.append(b); row.append(info, btns); body.append(row);
+  };
+  toggle("演出", "fx", "技名の表示、揺れ、閃光（ダメージの数字とメッセージは常に出る）");
+  toggle("確認なしで即実行", "instant", "わざを選んだ瞬間に実行する");
 
   if (!u.isLeader) {
     body.append(el("h3", "", "チーム"));
@@ -1731,10 +2041,13 @@ function updateStatus() {
   for (const u of team) {
     const r = el("div", "trow");
     const nm = el("span", "nm", u.name); nm.append(el("small", "", ` Lv${u.lv}`));
+    const bars = el("span", "bars");
     const bar = el("span", "bar hp"); const i = el("i"); i.style.width = (100 * u.hp / u.maxHp) + "%"; bar.append(i);
+    const ebar = el("span", "bar en"); const j = el("i"); j.style.width = (100 * u.en / u.maxEn) + "%"; ebar.append(j);
+    bars.append(bar, ebar);
     const hp = el("span", "num", `${u.hp}/${u.maxHp}`);
     hp.classList.toggle("low", u.hp <= u.maxHp * 0.3);
-    r.append(nm, bar, hp, el("span", "num", `EN${u.en}`));
+    r.append(nm, bars, hp, el("span", "num", `EN${u.en}/${u.maxEn}`));
     rows.append(r);
   }
 }
@@ -1751,12 +2064,16 @@ function showSelect() {
   START_TYPES.forEach((t, i) => {
     const b = el("button", "typeCard");
     b.append(spriteEl(t.sprite, 3, false));
-    const nm = el("div", "tname"); nm.append(el("span", "k", String(i + 1)), t.label, el("small", "", t.name));
+    const nm = el("div", "tname"); nm.append(el("span", "k", String(i + 1)), t.label, el("span", "role", t.role), el("small", "", t.name));
     const st = el("div", "stats");
     const add = (k, v) => { const s = el("span", "", k + " "); s.append(el("b", "", v)); st.append(s); };
-    add("HP", String(t.hp)); add("EN", String(t.en)); add("たいあたり", `威力${t.tackle}`);
+    add("HP", String(t.hp)); add("EN", String(t.en)); add("固有技", MOVES[t.unique].name);
     add("初期", partById(t.part).name);
-    b.append(nm, el("div", "desc", t.desc), st);
+    const sw = el("div", "sw");
+    const s1 = el("div"); s1.append(el("b", "", "強み "), t.strong);
+    const s2 = el("div"); s2.append(el("i", "", "弱み "), t.weak);
+    sw.append(s1, s2);
+    b.append(nm, sw, st);
     b.addEventListener("click", () => startGame(t.key));
     list.append(b);
   });
@@ -1779,7 +2096,7 @@ function startGame(key) {
   inv = { parts: [], items: { ...STARTING_ITEMS } };
   progress = { maxFloor: 0, bossDefeated: { 5: false, 10: false }, cleared: false };
   team.push(createUnit({ name: t.name, sprite: t.sprite, isLeader: true, kind: t.key,
-    hp: t.hp, en: t.en, tackle: t.tackle, accBonus: t.accBonus, evade: t.evade }));
+    hp: t.hp, en: t.en, tackle: t.tackle, accBonus: t.accBonus, evade: t.evade, enGrowth: t.enGrowth, unique: t.unique }));
   addPart(t.part, team[0]);
   bestLevel = 1;
   goVillage([`${t.label}「${t.name}」で冒険を始める。`]);
@@ -1792,7 +2109,7 @@ function goVillage(msgs = []) {
   mode = "village";
   hideAllScreens();
   $("village").hidden = false;
-  for (const u of team) { u.hp = u.maxHp; u.en = u.maxEn; u.guard = 0; u.focus = 0; }
+  for (const u of team) { u.hp = u.maxHp; u.en = u.maxEn; u.bs = freshBattleState(); }
   for (const m of msgs) typeof m === "string" ? log(m) : log(m.t, m.c);
   log("村に着いた。みんな回復した。");
   saveGame();
@@ -1853,7 +2170,7 @@ function depart(floor) {
   mode = "map";
   floorNo = floor;
   progress.maxFloor = Math.max(progress.maxFloor, floorNo);
-  for (const u of team) { u.guard = 0; u.focus = 0; }
+  for (const u of team) u.bs = freshBattleState();
   newFloor();
   log(isBossFloor(floorNo) ? `${floorNo}F ボスフロアの準備部屋から出発した。` : `${floorNo}Fから出発した。階段を探せ。`);
   resize();
@@ -1931,13 +2248,13 @@ function askNewGame() {
 function saveData() {
   const idx = new Map(inv.parts.map((it, i) => [it, i]));
   return {
-    version: SAVE_VERSION, typeKey, progress, partUid, bestLevel,
+    version: SAVE_VERSION, typeKey, progress, partUid, bestLevel, settings: { ...settings },
     items: { ...inv.items },
     parts: inv.parts.map(it => it.id),
     team: team.map(u => ({
       name: u.name, sprite: u.sprite, isLeader: u.isLeader, kind: u.kind,
       baseHp: u.baseHp, baseEn: u.baseEn, baseTackle: u.baseTackle, accBonus: u.accBonus, evade: u.evade,
-      lv: u.lv, exp: u.exp, hp: u.hp, en: u.en, skills: { ...u.skills }, manual: u.manual,
+      lv: u.lv, exp: u.exp, hp: u.hp, en: u.en, skills: { guard: u.skills.guard, unique: u.skills.unique }, unique: u.unique, manual: u.manual,
       equip: u.equip.map(it => it ? idx.get(it) : null),
     })),
   };
@@ -1961,7 +2278,7 @@ function readSave() {
   try {
     const d = JSON.parse(raw);
     const okNum = v => typeof v === "number" && isFinite(v);
-    if (!d || d.version !== SAVE_VERSION) throw 0;
+    if (!d || (d.version !== SAVE_VERSION && d.version !== 1)) throw 0;   // 1 は移行して読む
     if (!START_TYPES.some(t => t.key === d.typeKey)) throw 0;
     if (!Array.isArray(d.parts) || !d.parts.every(id => partById(id))) throw 0;
     if (!d.items || !okNum(d.items.repair) || !okNum(d.items.cell)) throw 0;
@@ -1971,29 +2288,54 @@ function readSave() {
       if (!SPR[u.sprite] || !okNum(u.lv) || !okNum(u.exp) || !okNum(u.baseHp) || !okNum(u.baseEn) || !okNum(u.baseTackle)) throw 0;
       if (!Array.isArray(u.equip) || u.equip.length !== SLOT_COUNT) throw 0;
       if (!u.equip.every(i => i === null || (Number.isInteger(i) && i >= 0 && i < d.parts.length))) throw 0;
-      if (!u.skills || !SKILLS.every(s => okNum(u.skills[s.id]))) throw 0;
+      if (!u.skills || typeof u.skills !== "object") throw 0;
+      if (d.version === SAVE_VERSION && !(okNum(u.skills.guard) && okNum(u.skills.unique))) throw 0;
+      if (!u.isLeader && !baseOfAlly(u)) throw 0;
     }
     return { status: "ok", data: d };
   } catch (e) {
     return { status: "broken" };
   }
 }
+// 仲間の基本値（大きさ）を、保存された大きさか動物から決める
+function baseOfAlly(s) {
+  return ENEMY_TYPES.find(t => t.key === s.kind) || ENEMY_TYPES.find(t => t.animals.some(a => a.sprite === s.sprite));
+}
+// 読み込み。基本値はいまの定義から作り直す（版1→2：たいあたり+2の廃止、ENの伸び、スキルはLv1から）
 function applySave(d) {
+  const migrated = d.version !== SAVE_VERSION;
   typeKey = d.typeKey;
+  if (d.settings) settings = { fx: d.settings.fx !== false, instant: !!d.settings.instant };
   partUid = d.partUid || 0;
   logLines = [];
   progress = { maxFloor: d.progress.maxFloor, bossDefeated: { 5: !!d.progress.bossDefeated[5], 10: !!d.progress.bossDefeated[10] }, cleared: !!d.progress.cleared };
   inv = { parts: d.parts.map(id => ({ id, uid: ++partUid })), items: { repair: d.items.repair, cell: d.items.cell } };
   team = d.team.map(s => {
-    const u = createUnit({ name: s.name, sprite: s.sprite, isLeader: s.isLeader, kind: s.kind,
-      hp: s.baseHp, en: s.baseEn, tackle: s.baseTackle, accBonus: s.accBonus, evade: s.evade, lv: s.lv });
+    let u;
+    if (s.isLeader) {
+      const t = START_TYPES.find(x => x.key === d.typeKey);
+      u = createUnit({ name: s.name, sprite: t.sprite, isLeader: true, kind: t.key, hp: t.hp, en: t.en, tackle: t.tackle,
+        accBonus: t.accBonus, evade: t.evade, enGrowth: t.enGrowth, unique: t.unique, lv: s.lv });
+    } else {
+      const def = baseOfAlly(s);
+      u = createUnit({ name: s.name, sprite: s.sprite, kind: def.key, hp: def.ally.hp, en: def.ally.en, tackle: def.ally.tackle,
+        unique: ANIMAL_UNIQUE[s.sprite], lv: s.lv });
+    }
     u.exp = s.exp; u.manual = !!s.manual;
-    for (const sk of SKILLS) u.skills[sk.id] = Math.min(SKILL_MAX_LEVEL, Math.max(1, s.skills[sk.id]));
+    if (!migrated) {
+      u.skills.guard = Math.min(SKILL_MAX_LEVEL, Math.max(1, s.skills.guard));
+      u.skills.unique = Math.min(SKILL_MAX_LEVEL, Math.max(1, s.skills.unique));
+    }
+    // 最大値は式で作り直し、いまのHPとENは最大値を超えないようにする
+    if (okNum(s.hp)) u.hp = Math.max(0, Math.min(u.maxHp, s.hp));
+    if (okNum(s.en)) u.en = Math.max(0, Math.min(u.maxEn, s.en));
     u.equip = s.equip.map(i => i === null ? null : inv.parts[i]);
     return u;
   });
   bestLevel = Math.max(d.bestLevel || 1, ...team.map(u => u.lv));
+  return migrated;
 }
+const okNum = v => typeof v === "number" && isFinite(v);
 
 // 起動：セーブがあればタイトル（つづきから／はじめから）、なければタイプ選択
 function boot() {
@@ -2004,7 +2346,10 @@ function boot() {
   $("title").hidden = false;
   $("btnContinue").hidden = r.status !== "ok";
   $("titleNote").textContent = r.status === "ok" ? "セーブデータがあります。" : "セーブデータを読めませんでした。はじめから遊べます。";
-  $("btnContinue").onclick = () => { applySave(r.data); goVillage(["つづきから再開した。"]); };
+  $("btnContinue").onclick = () => {
+    const migrated = applySave(r.data);
+    goVillage(migrated ? ["つづきから再開した。", "古いセーブデータを新しい形式に移しました（防御と固有技はLv1から）。"] : ["つづきから再開した。"]);
+  };
 }
 
 // テスト用：直近のバトル結果
