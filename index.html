@@ -199,6 +199,15 @@
   }
   .mhead h2 { margin: 0; }
   #menuClose { padding: 8px 18px; font-size: 15px; background: var(--ok); color: #fff; border: none; border-radius: 8px; }
+  /* メニューの固定ヘッダー（タイトル・タブ・選んでいる機体のHPとEN）。スマホで画面の1/3以内 */
+  .mstick { position: sticky; top: -14px; z-index: 2; margin: -14px -16px 8px; padding: 0 16px 4px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .mstick .mhead { position: static; margin: 0 -16px; padding: 10px 16px 6px; border-bottom: none; }
+  #menu .tabs { flex-wrap: nowrap; overflow-x: auto; }
+  #menu .tabs button { padding: 4px 10px; font-size: 13px; white-space: nowrap; }
+  .bulk { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 4px; }
+  .bulk button { padding: 8px 4px; font-size: 13px; background: #1f3328; border: 1px solid #3fae6a; border-radius: 8px; }
+  .mnote { font-size: 12px; color: var(--dim); margin-top: 4px; }
+  .mresult { font-size: 13px; margin-top: 6px; padding: 6px 8px; border: 1px solid #3fae6a; border-radius: 6px; background: #17251c; font-variant-numeric: tabular-nums; }
   .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
   .tabs button { padding: 7px 12px; background: #24252b; border: 1px solid #50525c; border-radius: 6px; font-size: 14px; }
   .tabs button.on { border-color: var(--accent); color: var(--accent); background: #2a2618; }
@@ -360,8 +369,11 @@
 <!-- メニュー -->
 <div class="overlay" id="menu" hidden>
   <div class="dialog">
-    <div class="mhead"><h2>メニュー</h2><span class="mheadBtns"><button id="btnBackVillage" hidden>村に戻る</button><button id="menuClose">とじる</button></span></div>
-    <div class="tabs" id="menuTabs"></div>
+    <div class="mstick">
+      <div class="mhead"><h2>メニュー</h2><span class="mheadBtns"><button id="btnBackVillage" hidden>村に戻る</button><button id="menuClose">とじる</button></span></div>
+      <div class="tabs" id="menuTabs"></div>
+      <div id="menuUnitHead"></div>
+    </div>
     <div id="menuBody"></div>
   </div>
 </div>
@@ -1965,7 +1977,7 @@ function openMenu() {
   if (mode !== "map" && mode !== "village") return;
   menuFrom = mode;
   mode = "menu";
-  menuState = { unit: 0, pending: null, confirmRelease: false };
+  menuState = { unit: 0, pending: null, confirmRelease: false, preview: null, result: null, note: null };
   renderMenu();
   $("menu").hidden = false;
 }
@@ -2025,9 +2037,27 @@ function renderMenu() {
   team.forEach((t, i) => {
     tabs.append(rowButton(`${t.name} Lv${t.lv}`, () => { menuState = { unit: i, pending: null, confirmRelease: false }; renderMenu(); }, false, i === ms.unit ? "on" : ""));
   });
+  // 固定ヘッダー：選んでいる機体のHPとEN（アイテムを使った直後は「25 → 40」）
+  const uh = $("menuUnitHead");
+  uh.textContent = "";
+  uh.append(unitHeadRow(u, ms.preview && ms.preview.unit === u ? ms.preview : null));
 
   const body = $("menuBody");
   body.textContent = "";
+
+  // 一括回復
+  const bulk = el("div", "bulk");
+  const inVillage = menuFrom === "village";
+  for (const [label, kind] of [["HP回復", "hp"], ["EN回復", "en"], ["まとめて回復", "both"]]) {
+    const b = rowButton(label, () => askBulkHeal(kind), inVillage);
+    b.id = "bulk-" + kind;
+    bulk.append(b);
+  }
+  body.append(bulk);
+  if (inVillage) body.append(el("div", "mnote", "村では自動で全回復します"));
+  else if (inPrepRoom()) body.append(el("div", "mnote", "回復ポイントで無料で全回復できます"));
+  if (ms.note) body.append(el("div", "mnote", ms.note));
+  if (ms.result) { const r = el("div", "mresult"); for (const line of ms.result) r.append(el("div", "", line)); body.append(r); }
 
   // 機体の絵とステータス
   const head = el("div", "unitHead");
@@ -2095,7 +2125,7 @@ function renderMenu() {
     info.append(el("small", "", key === "repair" ? `HP+${it.value}` : `EN+${it.value}`));
     const full = key === "repair" ? u.hp >= u.maxHp : u.en >= u.maxEn;
     const btns = el("div", "btns");
-    btns.append(rowButton("使う", () => { useItem(key, u); renderMenu(); }, inv.items[key] <= 0 || full));
+    btns.append(rowButton("使う", () => { menuUseItem(key, u); }, inv.items[key] <= 0 || full));
     row.append(info, btns);
     body.append(row);
   }
@@ -2121,7 +2151,11 @@ function renderMenu() {
     btns.append(b); row.append(info, btns); body.append(row);
   };
   toggle("演出", "fx", "技名の表示、揺れ、閃光（ダメージの数字とメッセージは常に出る）");
-  toggle("確認なしで即実行", "instant", "わざを選んだ瞬間に実行する");
+  toggle("確認なしで即実行", "instant", "わざの行をタップした瞬間に実行する");
+  toggle("仲間のおまかせ", "allyAuto", "主人公機以外の仲間は、自動で行動する");
+  toggle("ひとうち", "oneHit", "たいあたり1回で倒せる弱い敵は、バトルに入らず倒す");
+  toggle("ミニマップの常時表示", "miniMap", "広い画面で、右上に小さく出す");
+  toggle("一括回復の確認なし", "bulkNoConfirm", "一括回復ボタンで、確認せずに使う");
 
   if (!u.isLeader) {
     body.append(el("h3", "", "チーム"));
@@ -2141,6 +2175,68 @@ function renderMenu() {
 
   // 「村に戻る」はマップから開いたときだけ（見出しに常に表示）
   $("btnBackVillage").hidden = menuFrom !== "map";
+}
+
+// ---- メニュー：アイテムの変化の表示、一括回復 ----
+const CHANGE_SHOW_MS = 1000;
+let previewTimer = null;
+function showPreview(preview, result) {
+  menuState.preview = preview;
+  menuState.result = result || null;
+  if (preview) menuState.unit = team.indexOf(preview.unit);   // 使った機体に切り替える
+  renderMenu();
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => { if (mode !== "menu") return; menuState.preview = null; menuState.result = null; renderMenu(); }, CHANGE_SHOW_MS);
+}
+function menuUseItem(key, u) {
+  const kind = key === "repair" ? "hp" : "en", from = u[kind];
+  useItem(key, u);
+  showPreview({ unit: u, kind, from, to: u[kind] });
+}
+function inPrepRoom() {
+  return mode === "menu" && menuFrom === "map" && isBossFloor(floorNo) && pos && pos.x < BOSS_LAYOUT.corridorX[0];
+}
+// 一括回復の計画：割合の低い順に、満タンになる最小限の個数だけ使う（HP0は対象外）
+function planBulk(kind) {
+  const plan = [];
+  let left = { repair: inv.items.repair, cell: inv.items.cell }, short = false;
+  const kinds = kind === "both" ? ["hp", "en"] : [kind];
+  for (const k of kinds) {
+    const key = k === "hp" ? "repair" : "cell", val = ITEMS[key].value, max = k === "hp" ? "maxHp" : "maxEn";
+    const list = team.filter(u => u.hp > 0 && u[k] < u[max]).sort((a, b) => a[k] / a[max] - b[k] / b[max]);
+    for (const u of list) {
+      const need = Math.ceil((u[max] - u[k]) / val);
+      const use = Math.min(need, left[key]);
+      if (use < need) short = true;
+      if (use > 0) { left[key] -= use; plan.push({ u, k, key, use, from: u[k], to: Math.min(u[max], u[k] + use * val) }); }
+    }
+  }
+  const used = { repair: inv.items.repair - left.repair, cell: inv.items.cell - left.cell };
+  return { plan, used, short };
+}
+function askBulkHeal(kind) {
+  if (menuFrom === "village") return;
+  const p = planBulk(kind);
+  if (!p.used.repair && !p.used.cell) {
+    menuState.note = p.short ? "回復アイテムが足りません" : "回復の必要はありません";
+    renderMenu(); return;
+  }
+  const go = () => doBulkHeal(kind);
+  if (settings.bulkNoConfirm) { go(); return; }
+  showDialog("一括回復", `修理キットを${p.used.repair}個、エネルギーセルを${p.used.cell}個、使います。よろしいですか？`, [
+    { label: "使う", primary: true, act: go }, { label: "やめる", act: () => {} }]);
+}
+function doBulkHeal(kind) {
+  const p = planBulk(kind);
+  const lines = [];
+  for (const s of p.plan) {
+    for (let i = 0; i < s.use; i++) { inv.items[s.key]--; s.u[s.k] = Math.min(s.k === "hp" ? s.u.maxHp : s.u.maxEn, s.u[s.k] + ITEMS[s.key].value); }
+    lines.push(`${s.u.name} ${s.k.toUpperCase()} ${s.from} → ${s.u[s.k]}`);
+  }
+  menuState.note = p.short ? "回復しきれませんでした" : `修理キット${p.used.repair}個・エネルギーセル${p.used.cell}個を使った`;
+  const first = p.plan[0];
+  showPreview(first ? { unit: first.u, kind: first.k, from: first.from, to: first.u[first.k] } : null, lines);
+  return p;
 }
 
 // マップのメニューから村に戻る（確認つき）
