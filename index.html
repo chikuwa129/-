@@ -353,7 +353,11 @@
     #mapScreen .log { height: calc(3 * 1.45em + 8px); }
     #title h1 { margin-top: 8px; }
     #select h1 { font-size: 20px; margin: 0; }
-    .typeCard { padding: 7px 10px; gap: 2px 10px; }
+    .typeCard { padding: 6px 10px; gap: 1px 10px; }
+    .typeCard .tname { font-size: 16px; }
+    .typeCard .sw, .typeCard .stats { font-size: 11px; line-height: 1.35; }
+    .typeCard .stats { gap: 0 10px; }
+    #select p.lead { font-size: 12px; }
     .overlay { padding: calc(var(--safe-top) + 6px) 12px var(--safe-bottom); }
   }
 </style>
@@ -504,7 +508,6 @@ const REVIVE_HP_RATE = 0.25;       // バトル後、HP0の機体が復活する
 const DAMAGE_VARIANCE = 1;         // ダメージのぶれ（±）
 const BATTLE_WAIT = 300;           // バトル中のメッセージ待ち時間(ms)。タップで飛ばせる
 
-const TACKLE_BASE = 3;             // たいあたりの基本威力（主人公機）
 const TACKLE_ACC = 95;
 const ESCAPE_RATE = 50;            // にげる成功率(%)
 const ESCAPE_STUN_TURNS = 3;       // 逃げた後、敵が追ってこないターン数
@@ -547,21 +550,35 @@ const DEPARTURES = [
   { floor: 10, label: "10階の準備部屋から",  ok: pr => pr.maxFloor >= 10 },
 ];
 
-// 最初のタイプ（Lv1の値）。sprite=バトル用の絵、unique=固有技。並び順がタイプ選択画面の順
-const START_TYPES = [
-  { key: "mobile",    label: "高機動型", name: "スプリンター", sprite: "wolf", hp: 40, en: 100, tackle: TACKLE_BASE, accBonus: 5, evade: 10,
-    part: "l0", unique: "blind", role: "初心者向け",
-    strong: "攻撃の命中+5%、敵の攻撃を10%で回避。被弾しにくく、安定して進める", weak: "一撃の重さは控えめ" },
-  { key: "assault",   label: "突撃型",   name: "ブレイカー",   sprite: "lion", hp: 50, en: 80,  tackle: TACKLE_BASE, accBonus: 0, evade: 0,
-    part: "g0", unique: "crit", role: "爽快感重視", critRate: 15,
-    strong: "HPが高く、攻撃が15%で会心（ダメージ×1.7）。会心が出ると大ダメージ", weak: "ENが少なく、重い武器は撃ち続けにくい" },
-  { key: "artillery", label: "砲撃型",   name: "キャノニア",   sprite: "rex",  hp: 36, en: 130, tackle: TACKLE_BASE, accBonus: 0, evade: 0,
-    part: "m0", unique: "barrage", role: "上級者向け", enGrowth: 5, partEnRate: 0.7, heavyAccBonus: 8,
-    strong: "パーツの消費EN×0.7、ミサイルとレーザーの命中+8%。重い武器を連発できる", weak: "HPが低く、打たれ弱い" },
-];
-// タイプの強み
+// タイプの強み（共通の値）
 const CRIT_MULT = 1.7;             // 会心のダメージ倍率（突撃型）
 const CRIT_CHARGE_BONUS = 10;      // ボスが力を溜めている間の会心率の上乗せ
+// 最初のタイプ（Lv1の値）。体の大きさに合わせて、恐竜＞ライオン＞狼の順にHPとたいあたりが大きい
+// sprite=バトル用の絵、unique=固有技、enGrowth=最大ENの伸び（Lv1つごと）。並び順がタイプ選択画面の順
+// traits=タイプの個性（強み）。処理はタイプ名ではなく、ここの項目を見る。新しい個性（カウンターなど）は項目を足す
+//   accBonus=攻撃の命中+%、evade=回避%、crit={rate, mult, chargeBonus}=会心、partEnRate=パーツの消費EN倍率、
+//   heavyAcc={bonus, types}=指定の系統のパーツの命中+%
+// traitText=「特性」欄の短い説明、role=タイプ選択の位置づけ
+const START_TYPES = [
+  { key: "mobile",    label: "高機動型", name: "スプリンター", sprite: "wolf", hp: 40, en: 100, tackle: 3,
+    part: "l0", unique: "blind", role: "初心者向け。避けやすく安定",
+    traits: { accBonus: 5, evade: 10 },
+    traitText: "回避10%。命中+5%",
+    strong: "攻撃の命中+5%、敵の攻撃を10%で回避。被弾しにくく、安定して進める", weak: "体が小さく、HPとたいあたりは控えめ" },
+  { key: "assault",   label: "突撃型",   name: "ブレイカー",   sprite: "lion", hp: 50, en: 80,  tackle: 4,
+    part: "g0", unique: "crit", role: "運が良いと大ダメージ",
+    traits: { crit: { rate: 15, mult: CRIT_MULT, chargeBonus: CRIT_CHARGE_BONUS } },
+    traitText: "会心15%。溜め中は+10%",
+    strong: "攻撃が15%で会心（ダメージ×1.7）。ボスが力を溜めている間は会心+10%", weak: "ENが少なく、重い武器は撃ち続けにくい" },
+  { key: "artillery", label: "砲撃型",   name: "キャノニア",   sprite: "rex",  hp: 60, en: 130, tackle: 5, enGrowth: 5,
+    part: "m0", unique: "barrage", role: "力押しで強い",
+    traits: { partEnRate: 0.7, heavyAcc: { bonus: 8, types: ["missile", "laser"] } },
+    traitText: "重装甲。パーツのENが3割引き",
+    strong: "HPとたいあたりが大きい重装甲。パーツの消費EN×0.7、ミサイルとレーザーの命中+8%", weak: "回避も会心もなく、正面から受け止める" },
+];
+const traitsOf = u => { const t = typeOf(u); return (t && t.traits) || {}; };
+// 「特性」欄の文。タイプの機体はタイプの説明、強みのない仲間は「—」
+const traitTextOf = u => { const t = typeOf(u); return (t && t.traitText) || "—"; };
 // 命中と回避
 const PLAYER_ACC_MIN = 50;         // 味方の命中率の下限
 const MISS_STREAK_BONUS = 10;      // 攻撃を外すたびに、その機体の次の命中+10%
@@ -1617,7 +1634,8 @@ function moveDef(u, key) {
 function partEnCost(u, p) {
   const t = typeOf(u);
   let c = p.en;
-  if (t && t.partEnRate) c = Math.max(1, Math.ceil(c * t.partEnRate));   // 砲撃型の割引
+  const tr = traitsOf(u);
+  if (tr.partEnRate) c = Math.max(1, Math.ceil(c * tr.partEnRate));   // パーツの消費ENの割引
   if (u.bs.barrage) c = Math.max(1, Math.ceil(c / 2));                    // 集中砲火
   return c;
 }
@@ -1626,13 +1644,14 @@ function hitChance(u, base, opts = {}) {
   if (opts.sure) return 100;
   const t = typeOf(u);
   let a = base + u.accBonus + (opts.mod || 0) + u.bs.accUp + Math.min(MISS_STREAK_CAP, u.bs.missStreak * MISS_STREAK_BONUS);
-  if (opts.part && t && t.heavyAccBonus && opts.part.type !== "gun") a += t.heavyAccBonus;
+  const ha = traitsOf(u).heavyAcc;
+  if (opts.part && ha && ha.types.includes(opts.part.type)) a += ha.bonus;
   return Math.max(PLAYER_ACC_MIN, Math.min(100, a));
 }
 function critRateOf(u) {
-  const t = typeOf(u);
-  let r = (t && t.critRate) || 0;
-  if (r && battle && battle.enemy.boss && battle.heavyReady) r += CRIT_CHARGE_BONUS;
+  const c = traitsOf(u).crit;
+  let r = (c && c.rate) || 0;
+  if (r && battle && battle.enemy.boss && battle.heavyReady) r += c.chargeBonus || 0;
   return r + u.bs.critUp;
 }
 // わざの中身（一覧の表示、予測、実行、ボットで共通に使う）
@@ -1695,7 +1714,7 @@ function doDamage(u, info) {
     u.bs.missStreak = 0;
     let dmg = varied(info.power);
     const crit = roll(critRateOf(u));
-    if (crit) dmg = Math.floor(dmg * CRIT_MULT);
+    if (crit) dmg = Math.floor(dmg * ((traitsOf(u).crit || {}).mult || CRIT_MULT));
     e.hp = Math.max(0, e.hp - dmg);
     hitAny = true;
     log(`${u.name}の${label}！ ${crit ? "会心！ " : ""}${dmg}ダメージ。`, crit ? "#ffd447" : "");
@@ -2083,6 +2102,7 @@ function unitLine(u, opts = {}) {
   if (opts.hp !== false) l1.append(`　HP${u.maxHp}`);
   if (opts.unique) l1.append(`　${MOVES[u.unique].name}`);
   if (u.isLeader) l1.append(el("span", "junk", "　主人公機"));
+  if (opts.trait) l1.append(el("span", "junk", `　特性：${traitTextOf(u)}`));
   const l2 = el("div", "rcuL");
   const it = u.equip.filter(Boolean);
   if (!it.length) l2.append("パーツなし");
@@ -2116,6 +2136,7 @@ function renderRecruit() {
   const g = el("div", "rcStats");
   const stat = (k, v) => { const d = el("div", "", k + " "); d.append(el("b", "", v)); g.append(d); };
   stat("HP", String(u.maxHp)); stat("EN", String(u.maxEn)); stat("たいあたり", String(Math.max(1, Math.round(tackleOf(u) * levelMult(u)))));
+  stat("特性", traitTextOf(u));
   nm.append(g);
   top.append(nm);
   body.append(top);
@@ -2131,7 +2152,7 @@ function renderRecruit() {
   body.append(sp);
   body.append(el("div", "rcLabel", "今のチーム"));
   const tl = el("div", "rcTeam");
-  for (const x of team) tl.append(unitLine(x));
+  for (const x of team) tl.append(unitLine(x, { trait: true }));
   body.append(tl);
   if (st.view === "full") {
     body.append(el("div", "rcNote", `ストックが満員です（${stock.length}/${STOCK_MAX}体）`));
@@ -2547,7 +2568,7 @@ function renderMenu() {
   stat("HP", `${u.hp}/${u.maxHp}`);
   stat("EN", `${u.en}/${u.maxEn}`);
   stat("たいあたり", `威力${tackleOf(u)}`);
-  stat("特性", [u.accBonus ? `命中+${u.accBonus}%` : "", u.evade ? `回避${u.evade}%` : ""].filter(Boolean).join(" ") || "—");
+  stat("特性", traitTextOf(u));
   head.append(g);
   body.append(head);
 
@@ -3088,8 +3109,8 @@ function showSelect() {
     const nm = el("div", "tname"); nm.append(el("span", "k", String(i + 1)), t.label, el("span", "role", t.role), el("small", "", t.name));
     const st = el("div", "stats");
     const add = (k, v) => { const s = el("span", "", k + " "); s.append(el("b", "", v)); st.append(s); };
-    add("HP", String(t.hp)); add("EN", String(t.en)); add("固有技", MOVES[t.unique].name);
-    add("初期", partById(t.part).name);
+    add("HP", String(t.hp)); add("EN", String(t.en)); add("たいあたり", String(t.tackle)); add("固有技", MOVES[t.unique].name);
+    add("初期", partById(t.part).name); add("特性", t.traitText);
     const sw = el("div", "sw");
     const s1 = el("div"); s1.append(el("b", "", "強み "), t.strong);
     const s2 = el("div"); s2.append(el("i", "", "弱み "), t.weak);
@@ -3120,7 +3141,7 @@ function startGame(key) {
   stock = [];
   progress = { maxFloor: 0, bossDefeated: { 5: false, 10: false }, cleared: false };
   team.push(createUnit({ name: t.name, sprite: t.sprite, isLeader: true, kind: t.key,
-    hp: t.hp, en: t.en, tackle: t.tackle, accBonus: t.accBonus, evade: t.evade, enGrowth: t.enGrowth, unique: t.unique }));
+    hp: t.hp, en: t.en, tackle: t.tackle, accBonus: t.traits.accBonus, evade: t.traits.evade, enGrowth: t.enGrowth, unique: t.unique }));
   gainPart(t.part, { noMerge: true });
   bestLevel = 1;
   goVillage([`${t.label}「${t.name}」で冒険を始める。`]);
@@ -3366,7 +3387,7 @@ function applySave(d) {
     if (s.isLeader) {
       const t = START_TYPES.find(x => x.key === d.typeKey);
       u = createUnit({ name: s.name, sprite: t.sprite, isLeader: true, kind: t.key, hp: t.hp, en: t.en, tackle: t.tackle,
-        accBonus: t.accBonus, evade: t.evade, enGrowth: t.enGrowth, unique: t.unique, lv: s.lv });
+        accBonus: t.traits.accBonus, evade: t.traits.evade, enGrowth: t.enGrowth, unique: t.unique, lv: s.lv });
       u.equip = s.equip.map(i => i === null ? null : all[i]);
     } else {
       const def = baseOfAlly(s);
