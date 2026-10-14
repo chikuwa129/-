@@ -165,16 +165,18 @@
   #cmds button.back { background: #1c1d22; }
   #cmds button.noen { opacity: .4; filter: grayscale(1); }
   /* わざの一覧は1行に収めて、スマホでも決定ボタンまで1画面に入るようにする */
-  #cmds.moveList button { min-height: 42px; padding: 4px 8px; font-size: 14px; }
+  #cmds.moveList { gap: 4px; }
+  #cmds.moveList button { min-height: 40px; padding: 3px 8px; font-size: 14px; }
   #cmds.moveList button > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; display: block; }
   #cmds.moveList button small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #cmds button.sel { border-color: var(--accent); background: #2e2a1a; }
   .mk { display: inline-block; font-size: 10px; padding: 0 4px; border-radius: 3px; margin-right: 4px; color: #111; vertical-align: 2px; }
   .mk-gun { background: #e8c25a; } .mk-missile { background: #e98a5a; } .mk-laser { background: #6fd6f2; } .mk-unique { background: #b8e986; }
-  #moveInfo { width: 100%; min-height: calc(4 * 1.45em + 10px); background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 6px 10px; font-size: 13px;
+  #moveInfo { width: 100%; background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 4px 10px; font-size: 12px;
     display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; }
-  #moveInfo .miName { font-weight: bold; grid-column: 1; }
-  #moveInfo .miDesc, #moveInfo .miLine { grid-column: 1; }
+  #moveInfo .miName { font-weight: bold; grid-column: 1 / -1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #moveInfo .miDesc { font-weight: normal; color: #c4c5cc; }
+  #moveInfo .miLine { grid-column: 1 / -1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #moveInfo .miLine { color: var(--accent); font-variant-numeric: tabular-nums; }
   #moveInfo .miGo { grid-column: 2; grid-row: 1 / 4; min-width: 76px; min-height: 52px; font-size: 16px; background: var(--ok); color: #fff; border: none; border-radius: 8px; }
 
@@ -213,6 +215,33 @@
   .mrow .btns { display: flex; gap: 4px; flex-shrink: 0; }
   .mrow button { padding: 6px 10px; background: #2c2d34; border: 1px solid #50525c; border-radius: 6px; font-size: 13px; }
   .mrow button.danger { border-color: #8a3a3a; color: #ff9a9a; }
+  /* バトル：決定とその他、「その他」のボタン、固定ヘッダー */
+  /* バトル画面はスマホ1画面に収める */
+  #battle.screen { gap: 6px; }
+  #battleLog { height: calc(3 * 1.45em + 8px); }
+  #battle #cmdTitle { display: none; }
+  #battle .arena { padding: 2px 8px; }
+  #battle .ally { padding: 0; }
+  #battle #allies { gap: 2px; }
+  #battle .prow { padding: 1px 6px; }
+  #battle #party { gap: 1px; }
+  #cmdBar { width: 100%; display: grid; grid-template-columns: 1fr 2fr; gap: 8px; }
+  #cmdBar button { min-height: 46px; border-radius: 8px; font-size: 16px; border: 1px solid #50525c; background: #26272d; }
+  #cmdBar small { color: var(--dim); font-size: 11px; }
+  #btnGo { background: var(--ok) !important; color: #fff; border: none !important; font-weight: bold; }
+  #btnGo:disabled { background: #2c2d33 !important; color: var(--dim); }
+  .otherBtn { width: 100%; min-height: 50px; margin-top: 8px; font-size: 15px; border-radius: 8px; background: #26272d; border: 1px solid #50525c; }
+  .uhead { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1.3fr); gap: 4px 8px; align-items: center; font-size: 12px; padding: 4px 0; font-variant-numeric: tabular-nums; }
+  .uhName { font-weight: bold; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .uhStat { display: grid; gap: 2px; }
+  .uhStat .bar { width: 100%; height: 7px; }
+  .uhNum { white-space: nowrap; }
+  .chg { font-weight: bold; }
+  .chg-hp.glow { animation: glowHp .6s ease-out; color: #5fe07a; }
+  .chg-en.glow { animation: glowEn .6s ease-out; color: #6fd6f2; }
+  @keyframes glowHp { 0% { text-shadow: 0 0 10px #5fe07a; } 100% { text-shadow: none; } }
+  @keyframes glowEn { 0% { text-shadow: 0 0 10px #6fd6f2; } 100% { text-shadow: none; } }
+  #eName.rareName { color: #ffd23a; text-shadow: 0 0 6px rgba(255, 210, 58, .6); }
   .omakase { width: 100%; margin-top: 8px; padding: 9px; background: #23324a; border: 1px solid #3d8fd9; border-radius: 8px; font-size: 14px; }
   .tag { display: inline-block; font-size: 10px; padding: 1px 5px; border-radius: 3px; margin-right: 4px; vertical-align: 1px; color: #111; }
   .tag.gun { background: #e8c25a; }
@@ -313,10 +342,20 @@
     <div id="moveInfo" hidden></div>
     <div id="cmdTitle">コマンド</div>
     <div id="cmds"></div>
+    <div id="cmdBar"><button id="btnOther">その他 <small>6</small></button><button id="btnGo">決定</button></div>
   </section>
 </div>
 
 <div id="flash"></div>
+
+<!-- バトルの「その他」 -->
+<div class="overlay" id="other" hidden>
+  <div class="dialog">
+    <div class="mhead"><h2>その他</h2><span class="mheadBtns"><button id="otherClose">もどる</button></span></div>
+    <div id="otherHead"></div>
+    <div id="otherBody"></div>
+  </div>
+</div>
 
 <!-- メニュー -->
 <div class="overlay" id="menu" hidden>
@@ -703,7 +742,9 @@ function spriteEl(key, s, flip) {
 //  状態
 // ================================================================
 const WALL = 0, FLOOR = 1, STAIRS = 2, HEAL = 3, BOSSFLOOR = 4, GATE = 5;
-let map, seen, visible, enemies, groundItems, floorNo, logLines;
+let map, seen, visible, enemies, groundItems, floorNo;
+let logLines = [];         // 直近の全メッセージ（テストと記録用）
+let mapLines = [], battleLines = [];   // マップ（と村）のメッセージ欄、バトルのメッセージ欄
 let team, inv, pos, bestLevel, partUid = 0;
 let typeKey = null;
 let progress = null;     // { maxFloor, bossDefeated: {5, 10}, cleared }
@@ -1049,16 +1090,24 @@ function lineOfSight(x0, y0, x1, y1) {
 // ================================================================
 //  ログ（color を付けるとその色で表示）
 // ================================================================
-function log(msg, color) {
-  logLines.push({ t: msg, c: color || "" });
-  while (logLines.length > 3) logLines.shift();
+// バトル中はバトルの欄、それ以外はマップ（村）の欄に出す
+function log(msg, color, target) {
+  const l = { t: msg, c: color || "" };
+  const arr = (target || (mode === "battle" ? "battle" : "map")) === "battle" ? battleLines : mapLines;
+  arr.push(l);
+  while (arr.length > 3) arr.shift();
+  logLines.push(l);
+  while (logLines.length > 40) logLines.shift();
   renderLog();
 }
+const mapLog = (msg, color) => log(msg, color, "map");
+function resetLogs() { logLines = []; mapLines = []; battleLines = []; renderLog(); }
 function renderLog() {
   for (const id of ["mapLog", "battleLog", "villageLog"]) {
-    const divs = $(id).children, pad = 3 - logLines.length;
+    const lines = id === "battleLog" ? battleLines : mapLines;
+    const divs = $(id).children, pad = 3 - lines.length;
     for (let i = 0; i < 3; i++) {
-      const l = i < pad ? null : logLines[i - pad];
+      const l = i < pad ? null : lines[i - pad];
       divs[i].textContent = l ? l.t : "";
       divs[i].style.color = l && l.c ? l.c : (i === 2 ? "#fff" : "");
     }
@@ -1179,10 +1228,13 @@ function startBattle(e) {
   e.awake = true;
   chooseAnimal(e);
   for (const u of team) u.bs = freshBattleState();
-  battle = { enemy: e, menu: "main", busy: false, actor: team.findIndex(u => u.hp > 0),
+  battle = { enemy: e, menu: "moves", busy: false, actor: team.findIndex(u => u.hp > 0),
              round: 1, bossTurn: 0, heavyReady: false, itemKey: null, downs: 0, selected: null,
-             roarTurns: 0, roarRate: 0, stunned: false, stats: { moves: {} } };
-  log(e.boss ? `ボス「${e.name}」との戦闘！` : `${e.name}が現れた！`);
+             roarTurns: 0, roarRate: 0, stunned: false, stats: { moves: {} }, results: [] };
+  for (const u of team) u.hawkRound = null;
+  // 前のバトルやマップのメッセージは持ち込まない
+  battleLines = []; renderLog();
+  log(e.boss ? `ボス「${e.name}」との戦闘！` : e.rare ? `金色に輝く${e.name.replace(/^レア/, "")}が現れた！` : `${e.name}が現れた！`, e.rare ? "#ffd23a" : "", "battle");
   $("mapScreen").hidden = true;
   $("battle").hidden = false;
   $("eName").className = e.boss ? "boss" : "";
@@ -1203,7 +1255,7 @@ function startBattle(e) {
     d.append(spriteEl(u.sprite, sc.ally, false));
     allies.append(d);
   });
-  renderBattle();
+  beginTurn();
 }
 
 // バトル終了後の後片付け（勝ち・逃げ共通）
@@ -1216,10 +1268,14 @@ function afterBattle() {
 }
 
 function endBattle() {
+  const results = battle ? battle.results || [] : [];
+  if (DEBUG && battle && battle.stats.byUnit) console.log("[バトルの記録]", battle.enemy.name, JSON.stringify(battle.stats.byUnit));
   battle = null;
   mode = "map";
   $("battle").hidden = true;
+  $("other").hidden = true;
   $("mapScreen").hidden = false;
+  for (const r of results) mapLog(r.t, r.c);
   afterBattle();
   updateFov();
   resize();
@@ -1384,6 +1440,8 @@ function executeMove(u, key) {
   st.moves[d.kind] = (st.moves[d.kind] || 0) + 1;
   if (info.damaging) (st.attacks ||= {})[d.kind] = (st.attacks[d.kind] || 0) + 1;
   if (d.kind === "unique") (st.uniques ||= {})[d.id] = (st.uniques[d.id] || 0) + 1;
+  const bu = ((st.byUnit ||= {})[u.name] ||= {}); bu[info.name] = (bu[info.name] || 0) + 1;
+  u.lastMove = key;   // 次の番のカーソル（セーブしない）
   showBanner(info.name);
   if (d.kind === "unique") flashScreen(d.flash);
   if (key === "guard") {
@@ -1429,9 +1487,8 @@ function nextActor(from) {
 }
 
 async function runCommand(action, arg) {
-  if (!battle || battle.busy) return;
+  if (!battle || battle.busy || battle.actor < 0) return;
   battle.busy = true;
-  battle.menu = "main";
   battle.selected = null;
   const u = team[battle.actor];
   const result = ACTIONS[action](u, arg);
@@ -1447,7 +1504,7 @@ async function runCommand(action, arg) {
   if (next >= 0) {
     battle.actor = next;
     battle.busy = false;
-    renderBattle();
+    await beginTurn();
     return;
   }
   // 味方全員が行動したら、敵の番
@@ -1462,7 +1519,7 @@ async function runCommand(action, arg) {
   battle.round++;
   battle.actor = nextActor(-1);
   battle.busy = false;
-  renderBattle();
+  await beginTurn();
 }
 
 function randomAlive() { const a = alive(); return a.length ? a[rnd(a.length)] : null; }
@@ -1585,7 +1642,10 @@ function winBattle() {
   enemies = enemies.filter(o => o !== e);
   const living = alive();
   for (const u of living) { u.en = Math.min(u.maxEn, u.en + WIN_ENERGY_BONUS); addExp(u, e.exp); }
-  log(`${e.name}を破壊した！${e.exp ? ` EXP+${e.exp}` : ""}`);
+  log(`${e.name}を破壊した！`);
+  // 結果（経験値、パーツ、仲間）はマップに戻ってから出す
+  const res = (t, c) => battle.results.push({ t, c: c || "" });
+  battle.results.push({ t: `${e.name}を倒した！${e.exp ? ` 経験値 +${e.exp}` : ""}` });
   $("eSprite").style.opacity = "0.2";
 
   if (e.boss) {
@@ -1602,18 +1662,18 @@ function winBattle() {
   }
 
   if (e.boss) {
-    // ボスのパーツは、倒した瞬間に自動で手に入る
-    logPartGain(gainPart(rollBossDrop(floorNo)), "手に入れた");
-    log("奥の階段が使える。");
+    // ボスのパーツは、倒した瞬間に自動で手に入る（メッセージはマップに戻ってから）
+    logPartGain(gainPart(rollBossDrop(floorNo)), "手に入れた", res);
+    res("奥の階段が使える。");
   } else {
     const id = rollNormalDrop(e);
-    if (id) logPartGain(gainPart(id), "手に入れた");
+    if (id) logPartGain(gainPart(id), "手に入れた", res);
     if (Math.random() < ITEM_DROP_RATE) {
       const key = Math.random() < 0.5 ? "repair" : "cell";
       inv.items[key]++;
-      log(`${ITEMS[key].name}を手に入れた。`);
+      res(`${ITEMS[key].name}を手に入れた。`);
     }
-    if (team.length < TEAM_MAX && Math.random() < e.def.recruit) recruit(e);
+    if (team.length < TEAM_MAX && Math.random() < e.def.recruit) recruit(e, res);
   }
   battle.menu = "result";
   battle.actor = -1;
@@ -1622,96 +1682,131 @@ function winBattle() {
 }
 
 // 仲間は、最初の機体と同じレベルで加わる。名前と絵と固有技は元の動物
-function recruit(e) {
+function recruit(e, out = log) {
   const def = e.def;
   const u = createUnit({ name: uniqueName(e.name), sprite: e.sprite, kind: def.key,
     hp: def.ally.hp, en: def.ally.en, tackle: def.ally.tackle, lv: leader().lv, unique: ANIMAL_UNIQUE[e.sprite] });
   team.push(u);
   gainPart(def.ally.part, { noMerge: true, prefer: u });
-  log(`${u.name}が仲間になった！（Lv${u.lv}・固有技「${MOVES[u.unique].name}」）`);
+  out(`${u.name}が仲間になった！（Lv${u.lv}・固有技「${MOVES[u.unique].name}」）`);
 }
 
-// ---- コマンドの一覧 ----
+// ---- わざの一覧（常に表示）と「その他」 ----
+// 自分の番の最初のカーソル：前回使ったわざ（使えなければ、たいあたり）
+function defaultMove(u) {
+  const k = u.lastMove;
+  if (k && moveKeys(u).includes(k) && moveInfo(u, k).en <= u.en) return k;
+  return "tackle";
+}
 function pickMove(key) {
+  if (!battle || battle.busy || battle.actor < 0) return;
   const u = team[battle.actor], info = moveInfo(u, key);
   if (info.en > u.en) { log("ENが足りない！"); return; }
   if (settings.instant || battle.selected === key) { runCommand("move", key); return; }
   battle.selected = key;
   renderBattle();
 }
+function decide() {
+  if (!battle || battle.busy) return;
+  if (battle.menu === "result") { endBattle(); return; }
+  if (battle.actor < 0 || !battle.selected) return;
+  const u = team[battle.actor];
+  if (moveInfo(u, battle.selected).en > u.en) { log("ENが足りない！"); return; }
+  runCommand("move", battle.selected);
+}
+
+// 仲間のおまかせ（主人公機は常に手動）
+const AUTO_LOW_EN = 0.3, AUTO_WAIT = 300;
+const isAutoUnit = u => !!(u && !u.isLeader && settings.allyAuto);
+function autoChoose(u) {
+  const e = battle.enemy, a = alive();
+  const opts = moveKeys(u).map(k => moveInfo(u, k));
+  const tk = opts.find(i => i.key === "tackle");
+  const tackleMin = Math.max(1, tk.power - DAMAGE_VARIANCE);
+  // 2. たいあたりで倒せるなら、たいあたり
+  if (e.hp <= tackleMin) return "tackle";
+  // 3. ボスの強攻撃の前で、受けると危ないなら防御
+  if (e.boss && battle.heavyReady && u.hp <= enemyPower(e, BOSS_HEAVY_MULT) + DAMAGE_VARIANCE) return "guard";
+  // 4. 固有技
+  const uq = opts.find(i => i.kind === "unique");
+  if (uq && uq.en <= u.en) {
+    const id = uq.def.id;
+    if (id === "curl" && !u.bs.curl && u.hp <= u.maxHp * 0.5) return "unique";
+    if (id === "cover" && !u.bs.cover && a.some(x => x !== u && x.hp <= x.maxHp * 0.4)) return "unique";
+    if (id === "roar" && battle.roarTurns === 0 && (e.boss || e.hp > tackleMin)) return "unique";
+    if (id === "hawkeye" && a.length > 1 && (battle.round === 1 && !u.hawkRound || u.hawkRound != null && battle.round - u.hawkRound >= 3)) { u.hawkRound = battle.round; return "unique"; }
+  }
+  // 5. 使える攻撃のわざ（パーツ、攻撃系の固有技）で、期待ダメージが一番高いもの
+  const atk = opts.filter(i => i.damaging && i.key !== "tackle" && i.en <= u.en)
+    .map(i => ({ i, v: i.power * i.hits * (i.sure ? 100 : i.acc) / 100 }))
+    .sort((x, y) => y.v - x.v);
+  if (atk.length) return atk[0].i.key;
+  // 6. ENが少なければ防御で補給、そうでなければたいあたり
+  return u.en <= u.maxEn * AUTO_LOW_EN ? "guard" : "tackle";
+}
+
+// 番が回ってきたときの準備（カーソル、おまかせ）
+async function beginTurn() {
+  const u = team[battle.actor];
+  battle.menu = "moves";
+  battle.selected = defaultMove(u);
+  renderBattle();
+  if (isAutoUnit(u)) {
+    battle.busy = true;
+    renderBattle();
+    await pause(AUTO_WAIT);
+    if (!battle) return;
+    battle.busy = false;
+    await runCommand("move", autoChoose(u));
+  }
+}
+
 function battleCommands() {
   const b = battle, cmds = [];
   if (b.menu === "result") return [{ label: "つづける", sub: "マップにもどる", act: endBattle }];
   if (b.actor < 0) return [];
   const u = team[b.actor];
-  const back = { label: "もどる", back: true, act: () => { b.menu = "main"; b.selected = null; renderBattle(); } };
-  if (b.menu === "main") {
-    cmds.push({ label: "わざ", sub: "攻撃・防御・固有技・パーツ", act: () => { b.menu = "moves"; b.selected = null; renderBattle(); } });
-    cmds.push({ label: "アイテム", sub: `修理${inv.items.repair} セル${inv.items.cell}`, act: () => { b.menu = "item"; renderBattle(); } });
-    cmds.push({ label: "にげる", sub: b.enemy.boss ? "ボスからは逃げられない" : `成功率${ESCAPE_RATE}%`,
-                disabled: b.enemy.boss, act: () => runCommand("escape") });
-  } else if (b.menu === "moves") {
-    for (const key of moveKeys(u)) {
-      const info = moveInfo(u, key), d = info.def;
-      const lvTxt = info.lv ? ` Lv${info.lv}` : "";
-      // パーツの★は2行目の頭に出す（名前が長くても★が切れないように）
-      const stars = d.kind === "part" && d.part.rarity ? RARITY[d.part.rarity].stars + " " : "";
-      const c = { key, label: info.name + lvTxt,
-        sub: `${stars}EN${info.en}　${info.short}${info.acc != null ? `　命中${info.acc}%` : ""}`,
-        noen: info.en > u.en, selected: b.selected === key, act: () => pickMove(key) };
-      if (d.kind === "part") { c.color = RARITY[d.part.rarity].color; c.mark = d.part.type; }
-      else if (d.kind === "unique") c.mark = "unique";
-      cmds.push(c);
-    }
-    cmds.push(back);
-  } else if (b.menu === "item") {
-    for (const key of ["repair", "cell"]) {
-      cmds.push({ label: `${ITEMS[key].name} ×${inv.items[key]}`, sub: key === "repair" ? `HP+${ITEMS[key].value}` : `EN+${ITEMS[key].value}`,
-                  disabled: inv.items[key] <= 0, act: () => { b.itemKey = key; b.menu = "itemTarget"; renderBattle(); } });
-    }
-    cmds.push(back);
-  } else if (b.menu === "itemTarget") {
-    const key = b.itemKey;
-    for (const t of alive()) {
-      const full = key === "repair" ? t.hp >= t.maxHp : t.en >= t.maxEn;
-      cmds.push({ label: t.name, sub: key === "repair" ? `HP ${t.hp}/${t.maxHp}` : `EN ${t.en}/${t.maxEn}`,
-                  disabled: full, act: () => runCommand("item", { key, target: t }) });
-    }
-    cmds.push({ label: "もどる", back: true, act: () => { b.menu = "item"; renderBattle(); } });
+  for (const key of moveKeys(u)) {
+    const info = moveInfo(u, key), d = info.def;
+    const lvTxt = info.lv ? ` Lv${info.lv}` : "";
+    // パーツの★は2行目の頭に出す（名前が長くても★が切れないように）
+    const stars = d.kind === "part" && d.part.rarity ? RARITY[d.part.rarity].stars + " " : "";
+    const c = { key, label: info.name + lvTxt,
+      sub: `${stars}EN${info.en}　${info.short}${info.acc != null ? `　命中${info.acc}%` : ""}`,
+      noen: info.en > u.en, selected: b.selected === key, act: () => pickMove(key) };
+    if (d.kind === "part") { c.color = RARITY[d.part.rarity].color; c.mark = d.part.type; }
+    else if (d.kind === "unique") c.mark = "unique";
+    cmds.push(c);
   }
   return cmds;
 }
 
-// 選んだわざの説明・命中率・予測ダメージ
+// 選んでいるわざの説明・命中率・予測ダメージ
 function renderMoveInfo() {
   const box = $("moveInfo");
   const b = battle;
-  // 選んでいる間は、メッセージ欄の場所に説明を出す（スマホでも1画面に収まるように）
-  const show = !!(b && b.menu === "moves" && b.selected && !b.busy && b.actor >= 0);
+  const show = !!(b && b.menu === "moves" && b.selected && b.actor >= 0);
   box.hidden = !show;
-  $("battleLog").hidden = show;
   if (!show) return;
   const u = team[b.actor], info = moveInfo(u, b.selected);
-  box.hidden = false;
   box.textContent = "";
-  box.append(el("div", "miName", info.name + (info.lv ? `  Lv${info.lv}` : "")));
-  box.append(el("div", "miDesc", info.desc));
+  const top = el("div", "miName", `${u.name}：${info.name}${info.lv ? ` Lv${info.lv}` : ""}`);
+  top.append(el("span", "miDesc", "　" + info.desc));
+  box.append(top);
   const line = [];
-  if (info.acc != null) line.push(`命中 ${info.acc}%`);
-  if (info.damaging) line.push(`予測ダメージ 約${info.power}${info.hits > 1 ? `×${info.hits}` : ""}（敵HP ${b.enemy.hp}）`);
+  if (info.acc != null) line.push(`命中${info.acc}%`);
+  if (info.damaging) line.push(`予測ダメージ 約${info.power}${info.hits > 1 ? `×${info.hits}` : ""}`);
   else line.push(`効果：${info.short}`);
-  line.push(`EN ${info.en}（残り${u.en - info.en}）`);
+  line.push(`EN${info.en}（残り${u.en - info.en}）`);
   box.append(el("div", "miLine", line.join("　")));
-  const go = el("button", "miGo", "決定");
-  go.id = "btnDecide";
-  go.addEventListener("click", () => runCommand("move", b.selected));
-  box.append(go);
 }
 
 let currentCmds = [];
 function renderBattle() {
+  if (!battle) return;
   const e = battle.enemy;
   $("eName").textContent = (e.boss ? "BOSS " : "") + e.name;
+  $("eName").classList.toggle("rareName", !!e.rare);
   const st = [];
   if (battle.roarTurns > 0) st.push(`攻撃−${battle.roarRate}%（残り${battle.roarTurns}）`);
   if (battle.stunned) st.push("ひるみ");
@@ -1733,7 +1828,7 @@ function renderBattle() {
     r.className = "prow" + (i === battle.actor ? " active" : "") + (u.hp <= 0 ? " down" : "");
     r.innerHTML = `<span class="nm"></span><span class="bars"><span class="bar hp"><i></i></span><span class="bar en"><i></i></span></span><span class="num hpn"></span><span class="num enn"></span>`;
     r.querySelector(".nm").textContent = u.name;
-    const small = document.createElement("small"); small.textContent = ` Lv${u.lv}`;
+    const small = document.createElement("small"); small.textContent = ` Lv${u.lv}${isAutoUnit(u) ? " 自動" : ""}`;
     r.querySelector(".nm").append(small);
     r.querySelector(".bar.hp i").style.width = (100 * u.hp / u.maxHp) + "%";
     r.querySelector(".bar.en i").style.width = (100 * u.en / u.maxEn) + "%";
@@ -1753,22 +1848,22 @@ function renderBattle() {
     party.append(r);
   });
 
-  const titles = { main: "の行動", moves: "：わざを選ぶ", item: "：アイテムを選ぶ", itemTarget: "：使う相手を選ぶ" };
   const title = $("cmdTitle");
   title.textContent = "";
   if (battle.menu === "result") title.textContent = "勝利！";
   else if (battle.actor >= 0 && !battle.busy) {
     const b = document.createElement("b"); b.textContent = team[battle.actor].name;
-    title.append(b, titles[battle.menu]);
-  } else title.textContent = battle.actor < 0 ? `${e.name}の行動…` : "…";
+    title.append(b, "：わざを選ぶ（もう一度押すか「決定」で実行）");
+  } else if (battle.actor >= 0 && isAutoUnit(team[battle.actor])) title.textContent = `${team[battle.actor].name}（おまかせ）の行動…`;
+  else title.textContent = battle.actor < 0 ? `${e.name}の行動…` : "…";
 
-  currentCmds = battle.busy ? [] : battleCommands();
+  currentCmds = battle.busy && battle.menu !== "result" ? [] : battleCommands();
   const box = $("cmds");
   box.textContent = "";
   box.classList.toggle("moveList", battle.menu === "moves");
   currentCmds.forEach((c, i) => {
     const btn = document.createElement("button");
-    const k = document.createElement("span"); k.className = "k"; k.textContent = c.back ? "0" : String(i + 1);
+    const k = document.createElement("span"); k.className = "k"; k.textContent = String(i + 1);
     const lab = document.createElement("span"); lab.textContent = c.label;
     if (c.color) lab.style.color = c.color;
     const line = document.createElement("span");
@@ -1777,7 +1872,6 @@ function renderBattle() {
     line.append(lab);
     btn.append(line);
     if (c.sub) { const sm = document.createElement("small"); sm.textContent = c.sub; btn.append(sm); }
-    if (c.back) btn.classList.add("back");
     if (c.noen) btn.classList.add("noen");
     if (c.selected) btn.classList.add("sel");
     if (c.key) btn.dataset.key = c.key;
@@ -1785,26 +1879,79 @@ function renderBattle() {
     btn.addEventListener("click", () => { if (!btn.disabled && c.act) c.act(); });
     box.append(btn);
   });
+  const myTurn = battle.menu === "moves" && battle.actor >= 0 && !battle.busy;
+  $("btnGo").disabled = !(myTurn || battle.menu === "result");
+  $("btnGo").textContent = battle.menu === "result" ? "つづける" : "決定";
+  $("btnOther").disabled = !myTurn;
   renderMoveInfo();
+}
+
+// ---- 「その他」（アイテム、にげる、仲間のおまかせ切り替え） ----
+let otherState = null;   // { view: "main" | "items" | "target", key, preview }
+function openOther() {
+  if (!battle || battle.busy || battle.actor < 0 || battle.menu !== "moves") return;
+  otherState = { view: "main", unit: team[battle.actor] };
+  renderOther();
+  $("other").hidden = false;
+}
+function closeOther() { $("other").hidden = true; otherState = null; }
+function renderOtherHead(u, preview) {
+  const h = $("otherHead");
+  h.textContent = "";
+  h.append(unitHeadRow(u, preview));
+}
+function renderOther() {
+  const o = otherState, u = o.unit;
+  renderOtherHead(o.headUnit || u, o.preview);
+  const body = $("otherBody");
+  body.textContent = "";
+  const big = (label, fn, disabled, id) => { const b = rowButton(label, fn, disabled, "otherBtn"); if (id) b.id = id; body.append(b); return b; };
+  if (o.view === "main") {
+    big(`アイテム（修理${inv.items.repair}・セル${inv.items.cell}）`, () => { o.view = "items"; renderOther(); }, false, "oItems");
+    big(battle.enemy.boss ? "にげる（ボスからは逃げられない）" : `にげる（成功率${ESCAPE_RATE}%）`, () => {
+      showDialog("にげる", "逃げますか？ 失敗すると、この機体の行動は終わります。", [
+        { label: "にげる", primary: true, act: () => { closeOther(); runCommand("escape"); } },
+        { label: "やめる", act: () => {} }]);
+    }, battle.enemy.boss, "oEscape");
+    big(`仲間：${settings.allyAuto ? "おまかせ" : "手動"}（押して切り替え）`, () => { settings.allyAuto = !settings.allyAuto; saveGame(); renderOther(); renderBattle(); }, false, "oAuto");
+    big("もどる", closeOther, false, "oBack");
+  } else if (o.view === "items") {
+    for (const key of ["repair", "cell"]) {
+      big(`${ITEMS[key].name} ×${inv.items[key]}（${key === "repair" ? "HP" : "EN"}+${ITEMS[key].value}）`, () => { o.key = key; o.view = "target"; renderOther(); }, inv.items[key] <= 0, "oi-" + key);
+    }
+    big("もどる", () => { o.view = "main"; renderOther(); }, false, "oBack");
+  } else if (o.view === "target") {
+    const key = o.key;
+    for (const t of alive()) {
+      const full = key === "repair" ? t.hp >= t.maxHp : t.en >= t.maxEn;
+      big(`${t.name}（${key === "repair" ? `HP ${t.hp}/${t.maxHp}` : `EN ${t.en}/${t.maxEn}`}）`, async () => {
+        // ヘッダーに変化を見せてから使う（使うと、今の機体の行動は終わる）
+        const before = key === "repair" ? t.hp : t.en, max = key === "repair" ? t.maxHp : t.maxEn;
+        o.headUnit = t; o.preview = { kind: key === "repair" ? "hp" : "en", from: before, to: Math.min(max, before + ITEMS[key].value) };
+        renderOther();
+        await pause(600);
+        closeOther();
+        runCommand("item", { key, target: t });
+      }, full, "ot-" + team.indexOf(t));
+    }
+    big("もどる", () => { o.view = "items"; renderOther(); }, false, "oBack");
+  }
 }
 
 function battleKey(key) {
   if (!battle) return false;
+  if (!$("other").hidden) {
+    if (key === "0" || key === "Escape") { closeOther(); return true; }
+    return true;
+  }
   if (battle.busy) { if (skipWait) skipWait(); return true; }
-  if (key === "0" || key === "Escape" || key === "Backspace") {
-    const back = currentCmds.find(c => c.back);
-    if (back) { back.act(); return true; }
-    return false;
-  }
-  if (key === "Enter") {
-    if (battle.menu === "result") { endBattle(); return true; }
-    if (battle.menu === "moves" && battle.selected) { runCommand("move", battle.selected); return true; }
-    return false;
-  }
+  if (key === "Enter" || key === " ") { decide(); return true; }
+  if (key === "6") { openOther(); return true; }
   const n = parseInt(key, 10);
-  if (n >= 1 && n <= currentCmds.length) {
+  if (battle.menu === "moves" && n >= 1 && n <= currentCmds.length) {
     const c = currentCmds[n - 1];
-    if (!c.disabled && !c.back && c.act) c.act();
+    if (c.key === battle.selected) decide();
+    else { const u = team[battle.actor]; if (moveInfo(u, c.key).en > u.en) log("ENが足りない！"); else { battle.selected = c.key; renderBattle(); } }
     return true;
   }
   return false;
@@ -1844,6 +1991,22 @@ function partInfo(item, extra) {
   if (extra) name.append(el("span", "eq", extra));
   info.append(name, el("small", "", `威力${Math.round(itemPower(item))}　命中${p.acc}%　EN${p.en}　期待${itemExpected(item).toFixed(1)}`));
   return info;
+}
+// 機体の名前・HPバー・ENバー（メニューと「その他」の固定ヘッダー）。preview={kind:"hp"|"en", from, to} で変化を見せる
+function unitHeadRow(u, preview) {
+  const row = el("div", "uhead");
+  row.append(el("div", "uhName", `${u.name} Lv${u.lv}`));
+  const mk = (kind, cur, max) => {
+    const box = el("div", "uhStat");
+    const bar = el("span", `bar ${kind}`); const i = el("i"); i.style.width = (100 * cur / max) + "%"; bar.append(i);
+    const pv = preview && preview.kind === kind ? preview : null;
+    const num = el("span", "uhNum" + (pv ? ` chg chg-${kind}${settings.fx ? " glow" : ""}` : ""), pv ? `${kind.toUpperCase()} ${pv.from} → ${pv.to}` : `${kind.toUpperCase()} ${cur}/${max}`);
+    if (pv) i.style.width = (100 * pv.to / max) + "%";
+    box.append(bar, num);
+    return box;
+  };
+  row.append(mk("hp", u.hp, u.maxHp), mk("en", u.en, u.maxEn));
+  return row;
 }
 function rowButton(label, fn, disabled, cls) {
   const b = el("button", cls || "", label);
@@ -2126,14 +2289,14 @@ function showSelect() {
 // ================================================================
 function hideAllScreens() {
   for (const id of ["title", "village", "select", "mapScreen", "battle"]) $(id).hidden = true;
-  for (const id of ["endScreen", "menu", "dialog"]) $(id).hidden = true;
+  for (const id of ["endScreen", "menu", "dialog", "other"]) $(id).hidden = true;
 }
 
 // タイプを選んで新しく始める → 村へ
 function startGame(key) {
   const t = START_TYPES.find(x => x.key === key);
   typeKey = key;
-  logLines = [];
+  resetLogs();
   team = [];
   inv = { parts: [], items: { ...STARTING_ITEMS } };
   progress = { maxFloor: 0, bossDefeated: { 5: false, 10: false }, cleared: false };
@@ -2355,7 +2518,7 @@ function applySave(d) {
   settings = { ...DEFAULT_SETTINGS };
   if (d.settings) for (const k of Object.keys(DEFAULT_SETTINGS)) if (typeof d.settings[k] === "boolean") settings[k] = d.settings[k];
   partUid = d.partUid || 0;
-  logLines = [];
+  resetLogs();
   progress = { maxFloor: d.progress.maxFloor, bossDefeated: { 5: !!d.progress.bossDefeated[5], 10: !!d.progress.bossDefeated[10] }, cleared: !!d.progress.cleared };
   inv = { parts: d.parts.map((id, i) => ({ id, uid: ++partUid, plus: d.version === SAVE_VERSION ? d.plus[i] : 0 })), items: { repair: d.items.repair, cell: d.items.cell } };
   team = d.team.map(s => {
@@ -2472,6 +2635,9 @@ $("menuBtn").addEventListener("click", openMenu);
 $("menuClose").addEventListener("click", closeMenu);
 $("retry").addEventListener("click", () => goVillage());
 $("btnDepart").addEventListener("click", openDepart);
+$("btnGo").addEventListener("click", decide);
+$("btnOther").addEventListener("click", openOther);
+$("otherClose").addEventListener("click", closeOther);
 $("btnBackVillage").addEventListener("click", askReturnVillage);
 $("btnVillageMenu").addEventListener("click", openMenu);
 $("btnNewFromVillage").addEventListener("click", askNewGame);
