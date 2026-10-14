@@ -9,18 +9,18 @@
     color-scheme: dark;
     --bg: #101114; --panel: #1a1b20; --line: #34363e; --fg: #dcdde2; --dim: #8a8c96;
     --hp: #e5534b; --en: #43b4f0; --accent: #ffd447; --ok: #3fae6a; --boss: #ff5a5a;
-    /* 上端・下端の安全な余白（ここで1回だけ数える）。
-       表示枠（Claudeなど）の浮かぶバーは、iPhoneで画面の上端から約118pt（ステータスバーを含む）。
-       ステータスバーの分は env(safe-area-inset-top)、残りの約62ptは狭い画面だけ足す */
-    --inset-top: env(safe-area-inset-top, 0px);
+    /* 上端・下端の余白（ここで1回だけ数える）。
+       --top-bar-h：表示枠（Claudeなど）の浮かぶバーの高さ。狭い画面だけ（値は JS の TOP_BAR_H から入る）。広い画面は 0
+       --top-gap：バーの下（広い画面は画面の上端）から最初の内容までのすき間 */
     --inset-bottom: env(safe-area-inset-bottom, 0px);
-    --frame-top: 0px;
-    --safe-top: calc(var(--inset-top) + var(--frame-top));
+    --top-bar-h: 0px;
+    --top-gap: 8px;
+    --safe-top: calc(var(--top-bar-h) + var(--top-gap));
     --safe-bottom: calc(var(--inset-bottom) + 12px);
     /* 外側（公開ページの枠）が付ける余白は使わない（二重に数えないように） */
     padding: 0 !important;
   }
-  @media (max-width: 600px) { :root { --frame-top: 62px; } }
+  @media (max-width: 600px) { :root { --top-bar-h: var(--top-bar-narrow, 122px); --top-gap: var(--top-gap-narrow, 6px); } }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   html { scroll-padding-top: 0 !important; }
@@ -38,7 +38,7 @@
   #app {
     max-width: 520px; margin: 0 auto; min-height: 100%;
     display: flex; flex-direction: column; align-items: center;
-    padding: calc(var(--safe-top) + 8px) 12px var(--safe-bottom);
+    padding: var(--safe-top) 12px var(--safe-bottom);
   }
   .screen { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
   [hidden] { display: none !important; }
@@ -105,7 +105,7 @@
   .log div:nth-child(2) { opacity: .75; }
 
   #controls { display: flex; align-items: center; gap: 18px; }
-  #pad { display: grid; grid-template-columns: repeat(3, 64px); grid-template-rows: repeat(3, 52px); gap: 6px; }
+  #pad { display: grid; grid-template-columns: repeat(3, var(--pad-w, 64px)); grid-template-rows: repeat(3, var(--pad-h, 52px)); gap: var(--pad-gap, 6px); }
   #pad button, #menuBtn, #miniBtn { font-size: 20px; background: #26272d; border: 1px solid #50525c; border-radius: 10px; }
   #pad button:active, #menuBtn:active, #miniBtn:active { background: #3a3c44; }
   #sideBtns { display: flex; flex-direction: column; gap: 8px; }
@@ -175,6 +175,14 @@
   .bar.en i { background: var(--en); }
   .prow .num { text-align: right; }
   .prow .st { grid-column: 1 / -1; font-size: 11px; color: #8fd; }
+  /* 状態のタグ（名前の右、同じ行）。種類ごとの色 */
+  .prow .nmw { display: flex; align-items: center; gap: 3px; min-width: 0; }
+  .prow .nmw .nm { min-width: 0; flex: 0 1 auto; }
+  .stag { flex-shrink: 0; font-size: 10px; line-height: 14px; padding: 0 3px; border-radius: 3px; color: #111; background: #8fd; font-weight: bold; }
+  .stag.t-def { background: #6fd6f2; } .stag.t-atk { background: #ffb02e; } .stag.t-acc { background: #b8e986; } .stag.t-more { background: #50525c; color: #fff; }
+  #btnGuardAll { background: #23324a; border-color: #3d8fd9; }
+  #btnGuardAll.blink { border-color: #9fd4ff; box-shadow: 0 0 0 2px #9fd4ff inset; background: #2c4670; }
+  #btnGuardAll.thick { border-width: 4px; border-color: #9fd4ff; }
 
   #cmdTitle { width: 100%; font-size: 12px; color: var(--dim); letter-spacing: .06em; }
   #cmdTitle b { color: var(--accent); font-weight: normal; }
@@ -209,7 +217,7 @@
   /* オーバーレイ */
   .overlay {
     position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,0.82); padding: calc(var(--safe-top) + 16px) 16px calc(var(--safe-bottom) + 4px);
+    background: rgba(0,0,0,0.82); padding: calc(var(--safe-top) + 8px) 16px calc(var(--safe-bottom) + 4px);
   }
   .dialog {
     width: 100%; max-width: 480px; max-height: 100%; overflow-y: auto;
@@ -231,7 +239,7 @@
   .rcLabel { color: var(--dim); font-size: 12px; margin-top: 8px; }
   .rcSec .rcLabel { margin-top: 0; }
   #menuJunk, .junk { font-size: 12px; color: var(--dim); }
-  #menuJunk { margin: -2px 0 4px; }
+  #menuJunk { margin-left: auto; }
   .partyBar { display: grid; gap: 6px; padding: 6px 0 2px; }
   .partyBar .pbSel { font-size: 13px; min-height: 1.4em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .partyBar .pbBtns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
@@ -256,12 +264,17 @@
     display: flex; align-items: center; justify-content: space-between; background: var(--panel); border-bottom: 1px solid var(--line);
   }
   .mhead h2 { margin: 0; }
-  #menuClose { padding: 8px 18px; font-size: 15px; background: var(--ok); color: #fff; border: none; border-radius: 8px; }
+
   /* メニューの固定ヘッダー（タイトル・タブ・選んでいる機体のHPとEN）。スマホで画面の1/3以内 */
   /* メニューの下端の操作バー（上の「とじる」「村に戻る」が押しにくいときの逃げ道） */
   .mfoot { position: sticky; bottom: -14px; z-index: 2; margin: 8px -16px -14px; padding: 8px 16px 10px; display: flex; gap: 8px; justify-content: flex-end; background: var(--panel); border-top: 1px solid var(--line); }
   .mfoot button { min-height: 44px; padding: 8px 18px; font-size: 15px; border-radius: 8px; }
-  .mfoot #menuClose2 { background: var(--ok); color: #fff; border: none; flex: 1; max-width: 200px; }
+  .mfoot #menuClose { background: var(--ok); color: #fff; border: none; flex: 1; max-width: 200px; }
+  .mfoot #menuSave { background: #23324a; border: 1px solid #3d8fd9; }
+  #saveToast { position: fixed; left: 50%; bottom: calc(var(--safe-bottom) + 70px); transform: translateX(-50%); z-index: 40; padding: 10px 18px; border-radius: 8px;
+    background: #17251c; border: 1px solid #3fae6a; color: #fff; font-size: 15px; pointer-events: none; }
+  #saveToast.ng { background: #2a1a1a; border-color: #a85a3a; }
+  #menuBulk .bulk { margin-top: 2px; }
   .mstick { position: sticky; top: -14px; z-index: 2; margin: -14px -16px 8px; padding: 0 16px 4px; background: var(--panel); border-bottom: 1px solid var(--line); }
   .mstick .mhead { position: static; margin: 0 -16px; padding: 10px 16px 6px; border-bottom: none; }
   #menu .tabs { flex-wrap: nowrap; overflow-x: auto; }
@@ -296,7 +309,7 @@
   #battle #allies { gap: 2px; }
   #battle .prow { padding: 1px 6px; }
   #battle #party { gap: 1px; }
-  #cmdBar { width: 100%; display: grid; grid-template-columns: 1fr 2fr; gap: 8px; }
+  #cmdBar { width: 100%; display: grid; grid-template-columns: 1fr 1.3fr 2fr; gap: 8px; }
   #cmdBar button { min-height: 46px; border-radius: 8px; font-size: 16px; border: 1px solid #50525c; background: #26272d; }
   #cmdBar small { color: var(--dim); font-size: 11px; }
   #btnGo { background: var(--ok) !important; color: #fff; border: none !important; font-weight: bold; }
@@ -337,12 +350,22 @@
   .dlgBtns button { min-height: 48px; font-size: 15px; border-radius: 8px; background: #26272d; border: 1px solid #50525c; }
   .dlgBtns button.primary { background: var(--ok); color: #fff; border: none; }
   .mheadBtns { display: flex; gap: 8px; }
-  #btnBackVillage { padding: 8px 12px; font-size: 14px; background: #3a2a1c; border: 1px solid #a8743a; border-radius: 8px; }
+  #btnBackVillage { background: #3a2a1c; border: 1px solid #a8743a; }
   .debug { position: fixed; right: 6px; bottom: calc(var(--safe-bottom) - 6px); font-size: 11px; color: #f5d; }
-  /* 狭い画面：使える高さ（100dvh）にぴったり収める。マップ画面は、ヘッダー・マップ（残り）・メッセージ・操作ボタンの順 */
+  /* ================= 狭い画面（幅600px以下）=================
+     全体の高さ＝使える画面の高さ（100dvh）。上は表示枠のバー＋すき間、下はホームバー＋12px */
   @media (max-width: 600px) {
-    #app { padding-top: calc(var(--safe-top) + 4px); height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; }
+    #app { height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; }
     #app > .screen { flex: 1; min-height: 0; overflow-y: auto; }
+    #title h1 { margin-top: 0; }
+    #select h1 { font-size: 20px; margin: 0; }
+    .typeCard { padding: 6px 10px; gap: 1px 10px; }
+    .typeCard .tname { font-size: 16px; }
+    .typeCard .sw, .typeCard .stats { font-size: 11px; line-height: 1.35; }
+    .typeCard .stats { gap: 0 10px; }
+    #select p.lead { font-size: 12px; }
+
+    /* マップ画面：ヘッダー（約50px）→ マップ（残り）→ メッセージ（3行）→ 操作ボタン（約170px） */
     #mapScreen.screen { overflow: hidden; gap: 6px; }
     #mapScreen > * { flex-shrink: 0; }
     #mapWrap { flex: 1 1 0; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
@@ -351,14 +374,25 @@
     #teamRows { gap: 2px; min-height: calc(3 * 16px + 4px); }
     .trow { grid-template-columns: minmax(0, 1fr) 64px 58px 64px; line-height: 16px; }
     #mapScreen .log { height: calc(3 * 1.45em + 8px); }
-    #title h1 { margin-top: 8px; }
-    #select h1 { font-size: 20px; margin: 0; }
-    .typeCard { padding: 6px 10px; gap: 1px 10px; }
-    .typeCard .tname { font-size: 16px; }
-    .typeCard .sw, .typeCard .stats { font-size: 11px; line-height: 1.35; }
-    .typeCard .stats { gap: 0 10px; }
-    #select p.lead { font-size: 12px; }
-    .overlay { padding: calc(var(--safe-top) + 6px) 12px var(--safe-bottom); }
+
+    /* バトル画面：絵の領域と味方の欄は縮めない。足りない高さは、わざ一覧（中でスクロール）が吸収する */
+    #battle.screen { overflow: hidden; gap: 4px; }
+    #battle > * { flex-shrink: 0; }
+    #battle .arena { height: var(--arena-h, 190px); }
+    #battle #allies { gap: 1px; }
+    #battle .ally { border-width: 1px; }
+    #battle .prow { height: var(--party-row-h, 38px); grid-template-columns: minmax(0, 1fr) 50px 40px 60px; gap: 4px; font-size: 12px; }
+    #battle .prow .nm small { font-size: 10px; }
+    #cmdBar button { min-height: 44px; }
+    #battleLog { height: var(--blog-h, 48px); line-height: 20px; font-size: 12px; }
+    #battle #moveInfo { height: var(--minfo-h, 48px); overflow: hidden; align-content: center; }
+    #battle #moveInfo[hidden] { display: grid !important; visibility: hidden; }
+    #battle #cmds { flex: 1 1 0; min-height: 0; overflow-y: auto; align-content: start; }
+    #battle #cmds.moveList button { min-height: var(--move-h, 52px); }
+
+    /* 重ねて出す画面：中央寄せをやめ、バーのすぐ下から */
+    .overlay { align-items: flex-start; padding: var(--safe-top) 12px var(--safe-bottom); }
+    #miniFull { justify-content: flex-start; padding-top: var(--safe-top); }
   }
 </style>
 </head>
@@ -436,7 +470,7 @@
     <div id="moveInfo" hidden></div>
     <div id="cmdTitle">コマンド</div>
     <div id="cmds"></div>
-    <div id="cmdBar"><button id="btnOther">その他 <small>6</small></button><button id="btnGo">決定</button></div>
+    <div id="cmdBar"><button id="btnOther">その他 <small>6</small></button><button id="btnGuardAll">全員防御 <small>D</small></button><button id="btnGo">決定</button></div>
   </section>
 </div>
 
@@ -455,13 +489,14 @@
 <div class="overlay" id="menu" hidden>
   <div class="dialog">
     <div class="mstick">
-      <div class="mhead"><h2>メニュー</h2><span class="mheadBtns"><button id="btnBackVillage" hidden>村に戻る</button><button id="menuClose">とじる</button></span></div>
-      <div id="menuJunk"></div>
+      <div class="mhead"><h2>メニュー</h2><span id="menuJunk"></span></div>
       <div class="tabs" id="menuTabs"></div>
       <div id="menuUnitHead"></div>
+      <div id="menuBulk"></div>
     </div>
     <div id="menuBody"></div>
-    <div class="mfoot"><button id="btnBackVillage2" hidden>村に戻る</button><button id="menuClose2">とじる</button></div>
+    <div class="mfoot"><button id="menuSave">セーブ</button><button id="btnBackVillage" hidden>村に戻る</button><button id="menuClose">とじる</button></div>
+    <div id="saveToast" hidden></div>
   </div>
 </div>
 
@@ -724,6 +759,18 @@ const MOVES = {
 };
 const ANIMAL_UNIQUE = { dango: "curl", turtle: "cover", lion: "roar", wolf: "claws", ptera: "dive", bird: "hawkeye", rex: "bite" };
 const FLASH_COLORS = { heal: "rgba(80,230,120,.35)", guard: "rgba(90,220,255,.35)", attack: "rgba(255,230,220,.45)" };
+
+// 画面の作り。狭い画面（幅 NARROW_MAX 以下）だけに効く値は、CSS の変数に入れて使う
+const TOP_BAR_H = 122;             // 表示枠（Claudeなど）の浮かぶバーの高さ（狭い画面だけ。CSSのpx）
+const TOP_BAR_GAP = 6;             // バーの下から最初の内容までのすき間
+const PAD_BTN_H = 52, PAD_BTN_W = 64, PAD_GAP = 6;   // 十字ボタン（3段で約170px）
+const ARENA_MIN_H = 190, ARENA_MIN_H_LOW = 160, LOW_SCREEN_H = 700;   // バトルの絵の領域（縮めない）。低い画面は160
+const PARTY_ROW_H = 38;            // バトルの味方の欄（1体1行、状態はタグで同じ行に）
+const BATTLE_LOG_H = 48, MOVE_INFO_H = 48, MOVE_BTN_H = 52;
+const STATUS_TAG_MAX = 2;          // 味方の欄に出す状態のタグの数（残りは「+n」）
+const STATUS_DETAIL_MS = 2000;     // 味方の欄をタップしたとき、状態の説明を出す時間
+const GUARD_ALL_WAIT = 300;        // 全員防御：1体ずつの待ち
+const BATTLE_TAP_GUARD_MS = 400;   // バトルが始まった直後、この間のタップは無視する（前の画面のタップの続きを拾わない）
 
 // マップ
 const MAP_W = 36, MAP_H = 28, FOV_RADIUS = 6;
@@ -1492,14 +1539,34 @@ function pause(ms = BATTLE_WAIT) {
 }
 
 // バトル画面の絵の倍率。ボスは画面の半分の幅に収まる最大の整数倍（上限7）、通常の敵は5倍まで
+// 狭い画面では、絵の領域の高さ（固定）にも収める（味方3体が縦に並んで切れない、敵とレア個体の縁取りも切れない）
 function battleScales() {
   const w = Math.min(window.innerWidth, 520) - 24 - 20;
-  const boss = Math.max(3, Math.min(7, Math.floor(w / 2 / BATTLE_W)));
-  return { boss, enemy: Math.min(5, boss - 1), ally: 2 };
+  let boss = Math.max(3, Math.min(7, Math.floor(w / 2 / BATTLE_W)));
+  let enemy = Math.min(5, boss - 1), ally = 2;
+  if (isNarrow()) {
+    const inner = arenaHeight() - 8;                       // 領域の上下の余白と枠
+    ally = Math.max(1, Math.min(ally, Math.floor((inner - 2 - TEAM_MAX * 2) / (TEAM_MAX * BATTLE_H))));
+    const fit = Math.floor(inner / (BATTLE_H + 2 * RARE_PAD));
+    boss = Math.max(1, Math.min(boss, fit)); enemy = Math.max(1, Math.min(enemy, fit));
+  }
+  return { boss, enemy, ally };
+}
+const isNarrow = () => window.innerWidth <= NARROW_MAX;
+const arenaHeight = () => window.innerHeight < LOW_SCREEN_H ? ARENA_MIN_H_LOW : ARENA_MIN_H;
+// 画面の作りの値を CSS に渡す（起動時と、画面の大きさが変わったとき）
+function applyLayoutVars() {
+  const r = document.documentElement.style;
+  const px = (k, v) => r.setProperty(k, v + "px");
+  px("--top-bar-narrow", TOP_BAR_H); px("--top-gap-narrow", TOP_BAR_GAP);
+  px("--pad-h", PAD_BTN_H); px("--pad-w", PAD_BTN_W); px("--pad-gap", PAD_GAP);
+  px("--arena-h", arenaHeight()); px("--party-row-h", PARTY_ROW_H);
+  px("--blog-h", BATTLE_LOG_H); px("--minfo-h", MOVE_INFO_H); px("--move-h", MOVE_BTN_H);
 }
 
 function startBattle(e) {
   toggleMini(false);
+  battleStartedAt = performance.now();
   mode = "battle";
   e.awake = true;
   chooseAnimal(e);
@@ -2251,6 +2318,16 @@ async function beginTurn() {
   battle.menu = "moves";
   battle.selected = defaultMove(u);
   renderBattle();
+  if (guardAllActive()) {
+    // 全員防御：このターンは、おまかせの仲間も含めて全員が防御
+    battle.busy = true;
+    renderBattle();
+    await pause(GUARD_ALL_WAIT);
+    if (!battle) return;
+    battle.busy = false;
+    await runCommand("move", "guard");
+    return;
+  }
   if (isAutoUnit(u)) {
     battle.busy = true;
     renderBattle();
@@ -2285,6 +2362,11 @@ function battleCommands() {
 function renderMoveInfo() {
   const box = $("moveInfo");
   const b = battle;
+  if (b && b.note) {
+    box.hidden = false; box.textContent = "";
+    box.append(el("div", "miName", b.note.text));
+    return;
+  }
   const show = !!(b && b.menu === "moves" && b.selected && b.actor >= 0);
   box.hidden = !show;
   if (!show) return;
@@ -2326,25 +2408,20 @@ function renderBattle() {
   team.forEach((u, i) => {
     const r = document.createElement("div");
     r.className = "prow" + (i === battle.actor ? " active" : "") + (u.hp <= 0 ? " down" : "");
-    r.innerHTML = `<span class="nm"></span><span class="bars"><span class="bar hp"><i></i></span><span class="bar en"><i></i></span></span><span class="num hpn"></span><span class="num enn"></span>`;
+    r.innerHTML = `<span class="nmw"><span class="nm"></span></span><span class="bars"><span class="bar hp"><i></i></span><span class="bar en"><i></i></span></span><span class="num hpn"></span><span class="num enn"></span>`;
     r.querySelector(".nm").textContent = u.name;
     const small = document.createElement("small"); small.textContent = ` Lv${u.lv}${isAutoUnit(u) ? " 自動" : ""}`;
     r.querySelector(".nm").append(small);
+    // 状態は名前の右にタグで（同じ行。欄の高さは変わらない）
+    const list = statusesOf(u), nmw = r.querySelector(".nmw");
+    list.slice(0, list.length > STATUS_TAG_MAX + 1 ? STATUS_TAG_MAX : STATUS_TAG_MAX + 1).forEach(d => nmw.append(el("span", "stag " + d.cls, d.tag(u))));
+    if (list.length > STATUS_TAG_MAX + 1) nmw.append(el("span", "stag t-more", `+${list.length - STATUS_TAG_MAX}`));
+    r.addEventListener("click", () => showStatusDetail(u));
     r.querySelector(".bar.hp i").style.width = (100 * u.hp / u.maxHp) + "%";
     r.querySelector(".bar.en i").style.width = (100 * u.en / u.maxEn) + "%";
     r.querySelector(".hpn").textContent = u.hp > 0 ? `${u.hp}/${u.maxHp}` : "停止";
     r.querySelector(".hpn").classList.toggle("low", u.hp > 0 && u.hp <= u.maxHp * 0.3);
     r.querySelector(".enn").textContent = `EN${u.en}/${u.maxEn}`;
-    const s = [];
-    if (u.bs.guard) s.push("防御中");
-    if (u.bs.critUp) s.push(`会心+${u.bs.critUp}%`);
-    if (u.bs.barrage) s.push(`集中砲火×${u.bs.barrage}`);
-    if (u.bs.blind) s.push(`目くらまし${u.bs.blind}`);
-    if (u.bs.curl) s.push("まるまる");
-    if (u.bs.cover) s.push("かばう");
-    if (u.bs.accUp) s.push(`命中+${u.bs.accUp}%`);
-    if (u.bs.missStreak) s.push(`次の命中+${Math.min(MISS_STREAK_CAP, u.bs.missStreak * MISS_STREAK_BONUS)}%`);
-    if (s.length) { const d = document.createElement("span"); d.className = "st"; d.textContent = s.join("　"); r.append(d); }
     party.append(r);
   });
 
@@ -2378,12 +2455,55 @@ function renderBattle() {
     btn.disabled = !!c.disabled;
     btn.addEventListener("click", () => { if (!btn.disabled && c.act) c.act(); });
     box.append(btn);
+    // わざ一覧がスクロールするとき（狭い画面）、選んでいるわざが見えるようにする
+    if (c.selected && box.scrollHeight > box.clientHeight) btn.scrollIntoView({ block: "nearest" });
   });
   const myTurn = battle.menu === "moves" && battle.actor >= 0 && !battle.busy;
   $("btnGo").disabled = !(myTurn || battle.menu === "result");
   $("btnGo").textContent = battle.menu === "result" ? "つづける" : "決定";
   $("btnOther").disabled = !myTurn;
+  $("btnGuardAll").disabled = !myTurn;
+  updateGuardAllBtn();
   renderMoveInfo();
+}
+
+// ---- 味方の状態（バトル中）。タグ（短い文字）と説明。項目を足せば新しい状態を出せる ----
+const STATUS_DEFS = [
+  { on: u => u.bs.guard,     cls: "t-def", tag: () => "防",  text: () => "防御中（次の被ダメージ半分）" },
+  { on: u => u.bs.cover,     cls: "t-def", tag: () => "か",  text: u => `かばう（受けるダメージ−${u.bs.cover}%）` },
+  { on: u => u.bs.curl,      cls: "t-def", tag: () => "丸",  text: () => "まるまる（次の被ダメージを減らす）" },
+  { on: u => u.bs.blind,     cls: "t-def", tag: u => `避${u.bs.blind}`, text: u => `目くらまし（あと${u.bs.blind}回かわす）` },
+  { on: u => u.bs.critUp,    cls: "t-atk", tag: u => `会+${u.bs.critUp}`, text: u => `次の攻撃の会心+${u.bs.critUp}%` },
+  { on: u => u.bs.barrage,   cls: "t-atk", tag: u => `砲×${u.bs.barrage}`, text: u => `集中砲火（次のパーツ×${u.bs.barrage}、EN半分）` },
+  { on: u => u.bs.accUp,     cls: "t-acc", tag: u => `命+${u.bs.accUp}`, text: u => `鷹の目（次の攻撃の命中+${u.bs.accUp}%）` },
+  { on: u => u.bs.missStreak, cls: "t-acc", tag: u => `命+${missBonus(u)}`, text: u => `外した分、次の命中+${missBonus(u)}%` },
+];
+const missBonus = u => Math.min(MISS_STREAK_CAP, u.bs.missStreak * MISS_STREAK_BONUS);
+const statusesOf = u => STATUS_DEFS.filter(d => d.on(u));
+// 味方の欄をタップ：その機体の状態を、説明の枠に少しの間だけ出す
+function showStatusDetail(u) {
+  if (!battle) return;
+  const list = statusesOf(u);
+  battle.note = { text: `${u.name}：${list.length ? list.map(d => d.text(u)).join("、") : "特別な状態はありません"}` };
+  renderMoveInfo();
+  const n = battle.note;
+  setTimeout(() => { if (battle && battle.note === n) { battle.note = null; renderMoveInfo(); } }, STATUS_DETAIL_MS);
+}
+
+// ---- 全員防御：まだ行動していない味方全員が、チームの並び順に防御する（おまかせの仲間も、このターンは防御） ----
+function guardAll() {
+  if (!battle || battle.busy || battle.actor < 0 || battle.menu !== "moves" || recruitState) return;
+  battle.guardAllRound = battle.round;
+  runCommand("move", "guard");
+}
+const guardAllActive = () => !!battle && battle.guardAllRound === battle.round;
+// ボスが力を溜めている（次が強攻撃）ときは、ボタンを目立たせる。演出オフなら点滅せず枠を太く
+function updateGuardAllBtn() {
+  const b = $("btnGuardAll");
+  if (!b) return;
+  const warn = !!(battle && battle.enemy.boss && battle.heavyReady);
+  b.classList.toggle("blink", warn && settings.fx && blinkOn);
+  b.classList.toggle("thick", warn && !settings.fx);
 }
 
 // ---- 「その他」（アイテム、にげる、仲間のおまかせ切り替え） ----
@@ -2448,6 +2568,7 @@ function battleKey(key) {
   if (battle.busy) { if (skipWait) skipWait(); return true; }
   if (key === "Enter" || key === " ") { decide(); return true; }
   if (key === "6") { openOther(); return true; }
+  if (key === "d" || key === "D") { guardAll(); return true; }
   const n = parseInt(key, 10);
   if (battle.menu === "moves" && n >= 1 && n <= currentCmds.length) {
     const c = currentCmds[n - 1];
@@ -2535,8 +2656,9 @@ function renderMenu() {
     tabs.append(pt);
   }
   $("menuJunk").textContent = `ジャンク ×${inv.junk || 0}（使い道は今後追加）`;
-  $("btnBackVillage").hidden = $("btnBackVillage2").hidden = menuFrom !== "map";
-  if (ms.tab === "party") { renderParty(); return; }
+  $("btnBackVillage").hidden = menuFrom !== "map";
+  $("menuSave").hidden = !canManualSave();
+  if (ms.tab === "party") { $("menuBulk").textContent = ""; renderParty(); return; }
   // 固定ヘッダー：選んでいる機体のHPとEN（アイテムを使った直後は「25 → 40」）
   const uh = $("menuUnitHead");
   uh.textContent = "";
@@ -2545,14 +2667,16 @@ function renderMenu() {
   const body = $("menuBody");
   body.textContent = "";
 
-  // 一括回復
+  // 一括回復（固定ヘッダーの中）
+  const bulkBox = $("menuBulk");
+  bulkBox.textContent = "";
   const bulk = el("div", "bulk");
   for (const [label, kind] of [["HP回復", "hp"], ["EN回復", "en"], ["まとめて回復", "both"]]) {
     const b = rowButton(label, () => askBulkHeal(kind), inVillage);
     b.id = "bulk-" + kind;
     bulk.append(b);
   }
-  body.append(bulk);
+  bulkBox.append(bulk);
   if (inVillage) body.append(el("div", "mnote", "村では自動で全回復します"));
   else if (inPrepRoom()) body.append(el("div", "mnote", "回復ポイントで無料で全回復できます"));
   if (ms.note) body.append(el("div", "mnote", ms.note));
@@ -2676,7 +2800,8 @@ function renderMenu() {
 
 
   // 「村に戻る」はマップから開いたときだけ（見出しに常に表示）
-  $("btnBackVillage").hidden = $("btnBackVillage2").hidden = menuFrom !== "map";
+  $("btnBackVillage").hidden = menuFrom !== "map";
+  $("menuSave").hidden = !canManualSave();
 }
 
 // ---- メニュー：「仲間」タブ（村だけ）。チーム（最大3体）とストック（最大20体）の入れ替え、解体 ----
@@ -2848,7 +2973,7 @@ function resize() {
   let pick = null;
   for (let s = 4; s >= 1; s--) {
     const cols = Math.min(VIEW_MAX, Math.floor(availW / (MAP_N * s)));
-    const rows = Math.min(VIEW_MAX, Math.floor(availH / (MAP_N * s)));
+    const rows = Math.min(narrow ? MAP_H : VIEW_MAX, Math.floor(availH / (MAP_N * s)));
     if (cols >= VIEW_MIN_COLS && rows >= (narrow ? VIEW_MIN_ROWS_NARROW : VIEW_MIN_ROWS)) { pick = { s, cols, rows }; break; }
   }
   if (!pick) pick = { s: 1, cols: VIEW_MAX, rows: Math.max(1, Math.min(VIEW_MAX, Math.floor(availH / MAP_N))) };
@@ -3069,9 +3194,10 @@ setInterval(() => {
   if (mode === "map" && map && enemies) {
     if (enemies.some(e => e.rare && rareShown(e))) renderMap();
     else updateMini(true);
-  } else if (mode === "battle" && battle && battle.enemy.rare) {
+  } else if (mode === "battle" && battle) {
+    updateGuardAllBtn();
     const c = $("eSprite");
-    if (c && c.dataset.rare) paintRareEl(c);
+    if (battle.enemy.rare && c && c.dataset.rare) paintRareEl(c);
   }
 }, BLINK_MS);
 function updateStatus() {
@@ -3322,6 +3448,22 @@ function saveGame() {
   } catch (e) {
     saveFailed = true;
   }
+  return !saveFailed;
+}
+// 手動セーブ（メニューの「セーブ」）。村に着いたときと同じ形で保存する。ダンジョンの途中の階や敵は保存しない
+// （読み込むと村から再開）。ローグモードでは使わない
+const SAVE_TOAST_MS = 1000;
+const canManualSave = () => GAME_MODE !== "rogue";
+function manualSave() {
+  if (!canManualSave()) return false;
+  const ok = saveGame();
+  const t = $("saveToast");
+  t.textContent = ok ? "保存した" : "保存できませんでした";
+  t.classList.toggle("ng", !ok);
+  t.hidden = false;
+  clearTimeout(manualSave.timer);
+  manualSave.timer = setTimeout(() => { t.hidden = true; }, SAVE_TOAST_MS);
+  return ok;
 }
 function deleteSave() {
   try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* 使えなくても続ける */ }
@@ -3494,9 +3636,16 @@ document.addEventListener("keydown", ev => {
 $("battle").addEventListener("pointerdown", () => { if (battle && battle.busy && skipWait) skipWait(); });
 
 let swallowClickUntil = 0;
+// バトルが始まった直後（BATTLE_TAP_GUARD_MS の間）のタップは、どのボタンにも届けない
+// （敵にぶつかったタップや、続けて押したタップが「その他」「全員防御」「決定」などに当たらないように）
+// 自動テストでは window.__tapGuardMs で短くできる
+let battleStartedAt = -Infinity;
+const tapGuardMs = () => (typeof window.__tapGuardMs === "number" ? window.__tapGuardMs : BATTLE_TAP_GUARD_MS);
+const inTapGuard = () => !!battle && performance.now() - battleStartedAt < tapGuardMs();
 document.addEventListener("click", ev => {
-  if (Date.now() < swallowClickUntil) { swallowClickUntil = 0; ev.stopPropagation(); ev.preventDefault(); }
+  if (Date.now() < swallowClickUntil || inTapGuard()) { swallowClickUntil = 0; ev.stopPropagation(); ev.preventDefault(); }
 }, true);
+document.addEventListener("pointerdown", ev => { if (inTapGuard() && ev.target.closest("#battle, .overlay")) { ev.stopPropagation(); ev.preventDefault(); } }, true);
 let holdTimer = null;
 function stopHold() { clearTimeout(holdTimer); clearInterval(holdTimer); holdTimer = null; }
 document.querySelectorAll("#pad button").forEach(btn => {
@@ -3524,19 +3673,20 @@ document.addEventListener("pointerdown", ev => { if (autoWalking && ev.target !=
 $("mini").addEventListener("click", () => toggleMini(true));
 $("miniFull").addEventListener("click", () => toggleMini(false));
 $("menuClose").addEventListener("click", closeMenu);
-$("menuClose2").addEventListener("click", closeMenu);
+$("menuSave").addEventListener("click", manualSave);
 $("retry").addEventListener("click", () => goVillage());
 $("btnDepart").addEventListener("click", openDepart);
 $("btnGo").addEventListener("click", decide);
 $("btnOther").addEventListener("click", openOther);
+$("btnGuardAll").addEventListener("click", guardAll);
 $("otherClose").addEventListener("click", closeOther);
 $("btnBackVillage").addEventListener("click", askReturnVillage);
-$("btnBackVillage2").addEventListener("click", askReturnVillage);
 $("btnVillageMenu").addEventListener("click", openMenu);
 $("btnNewFromVillage").addEventListener("click", askNewGame);
 $("btnNewFromTitle").addEventListener("click", askNewGame);
-window.addEventListener("resize", () => { resize(); if (miniOpen) paintBigMini(); });
+window.addEventListener("resize", () => { applyLayoutVars(); resize(); if (miniOpen) paintBigMini(); });
 
+applyLayoutVars();
 prepareSprites();
 if (DEBUG) document.body.append(el("div", "debug", "DEBUG MODE"));
 boot();
