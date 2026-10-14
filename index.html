@@ -224,6 +224,19 @@
     background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px;
   }
   .center { text-align: center; }
+  .screen { position: relative; }
+  .gearBtn { position: absolute; top: 0; right: 0; z-index: 3; width: 40px; height: 40px; font-size: 20px; line-height: 1; background: #24252b; border: 1px solid #50525c; border-radius: 8px; }
+  .adjVal { display: inline-block; min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; font-size: 14px; align-self: center; }
+  .tutDialog { max-width: 420px; }
+  .tutPage { font-size: 12px; color: var(--dim); }
+  #tutText { font-size: 15px; line-height: 1.7; }
+  #tutText p { margin: 0 0 6px; }
+  .tutBtns { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 8px; margin-top: 14px; }
+  .tutBtns button { min-height: 46px; font-size: 15px; border-radius: 8px; background: #26272d; border: 1px solid #50525c; }
+  .tutBtns button.primary { background: var(--ok); color: #fff; border: none; }
+  #layoutDiag { position: fixed; right: 4px; bottom: 4px; z-index: 2147483000; max-width: 92vw; margin: 0; padding: 6px 8px; font: 11px/1.4 ui-monospace, monospace;
+    color: #fff; background: rgba(0,0,0,.72); border: 1px solid #888; border-radius: 6px; white-space: pre-wrap; -webkit-user-select: text; user-select: text; }
+  #layoutDiag.min { max-height: 22px; overflow: hidden; }
   /* 仲間にする画面：中身はスクロール、ボタンは下に固定 */
   .rcDialog { display: flex; flex-direction: column; padding: 12px 14px; }
   .rcBody { overflow-y: auto; min-height: 0; flex: 1; }
@@ -391,7 +404,11 @@
     #battle #moveInfo { height: var(--minfo-h, 48px); overflow: hidden; align-content: center; }
     #battle #moveInfo[hidden] { display: grid !important; visibility: hidden; }
     #battle #cmds { flex: 1 1 0; min-height: 0; overflow-y: auto; align-content: start; }
-    #battle #cmds.moveList button { min-height: var(--move-h, 52px); }
+    #battle #cmds.moveList { gap: 4px; }
+    #battle #cmds.moveList button { min-height: var(--move-h, 52px); height: var(--move-h, 52px); }
+    /* わざ一覧がスクロールするとき（低い画面だけ）の印：一覧の下端にかかる影と文字 */
+    #cmdsMore { position: relative; z-index: 2; height: 18px; margin-top: -18px; width: 100%; pointer-events: none; text-align: center;
+      font-size: 11px; line-height: 22px; color: var(--accent); background: linear-gradient(rgba(16,17,20,0), rgba(16,17,20,.95)); }
 
     /* 重ねて出す画面：中央寄せをやめ、バーのすぐ下から */
     .overlay { align-items: flex-start; padding: var(--safe-top) 12px var(--safe-bottom); }
@@ -404,6 +421,7 @@
 
   <!-- タイトル（セーブデータがあるとき） -->
   <section id="title" class="screen" hidden>
+    <button class="gearBtn" id="gearTitle" aria-label="設定">⚙</button>
     <h1>ロボット遺跡探索</h1>
     <p id="titleNote"></p>
     <div class="vbtns">
@@ -430,6 +448,7 @@
 
   <!-- タイプ選択画面 -->
   <section id="select" class="screen">
+    <button class="gearBtn" id="gearSelect" aria-label="設定">⚙</button>
     <h1>ロボット遺跡探索</h1>
     <p class="lead">最初の機体のタイプを選んでください</p>
     <div id="typeList"></div>
@@ -473,11 +492,13 @@
     <div id="moveInfo" hidden></div>
     <div id="cmdTitle">コマンド</div>
     <div id="cmds"></div>
+    <div id="cmdsMore" hidden>▼ わざは下にもあります</div>
     <div id="cmdBar"><button id="btnOther">その他 <small>6</small></button><button id="btnGuardAll">全員防御 <small>D</small></button><button id="btnGo">決定</button></div>
   </section>
 </div>
 
 <div id="flash"></div>
+<pre id="layoutDiag" hidden></pre>
 
 <!-- バトルの「その他」 -->
 <div class="overlay" id="other" hidden>
@@ -508,6 +529,25 @@
   <div class="dialog rcDialog">
     <div class="rcBody" id="rcBody"></div>
     <div class="rcBtns" id="rcBtns"></div>
+  </div>
+</div>
+
+<!-- 歯車（タイトル・タイプ選択の隅）から開く設定：上の余白の調整、あそびかた -->
+<div class="overlay" id="qset" hidden>
+  <div class="dialog">
+    <h2>設定</h2>
+    <div id="qsetBody"></div>
+    <div class="dlgBtns"><button id="qsetHelp">あそびかた</button><button class="primary" id="qsetClose">とじる</button></div>
+  </div>
+</div>
+
+<!-- 最初の説明（あそびかた） -->
+<div class="overlay" id="tutorial" hidden>
+  <div class="dialog tutDialog">
+    <div class="tutPage" id="tutPage"></div>
+    <h2 id="tutTitle"></h2>
+    <div id="tutText"></div>
+    <div class="tutBtns"><button id="tutBack">もどる</button><button id="tutSkip">スキップ</button><button class="primary" id="tutNext">次へ</button></div>
   </div>
 </div>
 
@@ -551,7 +591,9 @@ const ESCAPE_RATE = 50;            // にげる成功率(%)
 const ESCAPE_STUN_TURNS = 3;       // 逃げた後、敵が追ってこないターン数
 const TEAM_MAX = 3;                // チームの最大（主人公機＋仲間2体）
 const STOCK_MAX = 20;              // 村のストックの上限
-const ALLY_SLOT_COUNT = 1;         // 仲間のパーツ枠（仲間になった時点で決まり、付け替えできない）
+// パーツ枠：固定パーツ（仲間だけ。仲間になった時点で決まり、外せない・強化しない）＋自由枠（付け替えできる。持ち物のパーツを付ける）
+const HERO_FREE_SLOTS = 2;         // 主人公機の自由枠
+const ALLY_FREE_SLOTS = 1;         // 仲間の自由枠
 // 解体で手に入るジャンク：大きさの基本量＋パーツのレア度の加算（ノーマル/レア/スーパーレア/レジェンド）
 const JUNK_BASE = { small: 2, mid: 3, large: 5 };
 const JUNK_RARITY = [0, 1, 2, 4];
@@ -578,7 +620,7 @@ const DEFEAT_PENALTY = {
 
 // セーブ（localStorage）
 const SAVE_KEY = "robotRuinsSave";
-const SAVE_VERSION = 4;            // 4：ストック、ジャンク、仲間の固定パーツ。3：パーツの強化値と設定の追加。1〜3 は読み込み時に移行する
+const SAVE_VERSION = 5;            // 5：固定パーツ＋自由枠。4：ストック、ジャンク、仲間の固定パーツ。3：パーツの強化値と設定の追加。1〜4 は読み込み時に移行する
 
 // 村から出発できる階（条件を満たしたものだけ選べる）
 const DEPARTURES = [
@@ -653,7 +695,7 @@ const PARTS = [
   { id: "l3", type: "laser",   rarity: 3, name: "サンダーフレア",     power: 25, acc: 95, en: 20 },
 ];
 const PART_TYPE_LABEL = { gun: "ガン", missile: "ミサイル", laser: "レーザー" };
-const SLOT_COUNT = 2;
+const SLOT_COUNT = HERO_FREE_SLOTS;   // 互換用（古いセーブの主人公機の枠の数）
 // 成長：レベルで与えるダメージが伸びる（倍率 = 1 + 係数×(Lv-1)）。同じパーツを拾うと強化（+1〜+5）
 const LEVEL_DAMAGE_COEF = 0.05;
 const PLUS_COEF = 0.08;            // 強化値1つにつき威力+8%
@@ -764,12 +806,21 @@ const ANIMAL_UNIQUE = { dango: "curl", turtle: "cover", lion: "roar", wolf: "cla
 const FLASH_COLORS = { heal: "rgba(80,230,120,.35)", guard: "rgba(90,220,255,.35)", attack: "rgba(255,230,220,.45)" };
 
 // 画面の作り。狭い画面（幅 NARROW_MAX 以下）だけに効く値は、CSS の変数に入れて使う
-const TOP_BAR_H = 122;             // 表示枠（Claudeなど）の浮かぶバーの高さ（狭い画面だけ。CSSのpx）
+// 表示枠（Claudeなど）の浮かぶバーが、このページの上端から覆う高さ（狭い画面だけ。CSSのpx）。
+// 実機の報告（1Dの122で、バーの下に約70〜80ptの空白）から、ページは状態バーの下から始まっていて、
+// 122（画面の上端からの高さ）では状態バーの分を二重に数えていたと推定。ページの上端からのバーの下端（約48）にした。
+// 合わないときは、設定「上の余白の調整」で、自分で合わせられる（TOP_ADJUST_*）
+const TOP_BAR_H = 48;
 const TOP_BAR_GAP = 6;             // バーの下から最初の内容までのすき間
+const TOP_ADJUST_MIN = -100, TOP_ADJUST_MAX = 40, TOP_ADJUST_STEP = 4;   // 設定「上の余白の調整」（px）。初期値0
+const LAYOUT_KEY = "robotRuinsLayout";      // 調整値の保存先（セーブとは別。セーブを消しても残る）
+const TUTORIAL_KEY = "robotRuinsTutorial";  // 最初の説明を見たか（セーブとは別）
+const LAYOUT_DIAG = /[?&]layout=1(&|$)/.test(location.search);   // ?layout=1：画面の実測値を右下に出す
 const PAD_BTN_H = 52, PAD_BTN_W = 64, PAD_GAP = 6;   // 十字ボタン（3段で約170px）
 const ARENA_MIN_H = 190, ARENA_MIN_H_LOW = 160, LOW_SCREEN_H = 700;   // バトルの絵の領域（縮めない）。低い画面は160
 const PARTY_ROW_H = 38, PARTY_ROW_H_LOW = 36;   // バトルの味方の欄（1体1行、状態はタグで同じ行に）。低い画面は36
-const BATTLE_LOG_H = 48, MOVE_INFO_H = 48, MOVE_BTN_H = 52;
+const BATTLE_LOG_H = 48, MOVE_INFO_H = 48, MOVE_BTN_H = 52, MOVE_BTN_H_MIN = 44;   // わざ一覧：1つの高さ。入らないときは44まで詰める
+const MOVE_LIST_GAP = 4;
 const STATUS_TAG_MAX = 2;          // 味方の欄に出す状態のタグの数（残りは「+n」）
 const STATUS_DETAIL_MS = 2000;     // 味方の欄をタップしたとき、状態の説明を出す時間
 const GUARD_ALL_WAIT = 300;        // 全員防御：1体ずつの待ち
@@ -1072,8 +1123,9 @@ function createUnit(o) {
     baseHp: o.hp, baseEn: o.en, baseTackle: o.tackle, accBonus: o.accBonus || 0, evade: o.evade || 0,
     enGrowth: o.enGrowth || LEVEL_EN_GROWTH, unique: o.unique || ANIMAL_UNIQUE[o.sprite] || "curl",
     lv: o.lv || 1, exp: 0,
-    // 主人公機は持ち物のパーツを2枠に付ける。仲間は1枠の固定パーツ（持ち物には入らない）
-    equip: o.isLeader ? new Array(SLOT_COUNT).fill(null) : [o.part ? fixedPart(o.part, o.plus) : null],
+    // fixed=固定パーツ（仲間だけ。持ち物には入らない）、free=自由枠（持ち物のパーツを付ける）
+    fixed: !o.isLeader && o.part ? fixedPart(o.part, o.plus) : null,
+    free: new Array(o.isLeader ? HERO_FREE_SLOTS : ALLY_FREE_SLOTS).fill(null),
     manual: false,   // 手動で付け替えた機体は、自動の入れ替え対象にしない
     skills: { guard: 1, unique: 1 },   // 防御と固有技のスキルレベル
     bs: freshBattleState(),
@@ -1100,7 +1152,10 @@ function uniqueName(base) {
 
 // ---- パーツ（共有の持ち物）。装備は持ち物の要素そのものを指す ----
 const partOf = item => partById(item.id);
-const isEquipped = item => !!team[0] && team[0].equip.includes(item);   // 持ち物のパーツを付けられるのは主人公機だけ
+const isEquipped = item => team.some(u => u.free.includes(item));   // 持ち物のパーツが、だれかの自由枠に付いているか
+// 機体のパーツの並び：固定パーツ（あれば）→ 自由枠。わざのキー partN の N はこの並びの番号
+const slotItems = u => (u.fixed ? [u.fixed] : []).concat(u.free);
+const holderOf = item => team.find(u => u.free.includes(item)) || null;
 const partText = p => `${p.name}${RARITY[p.rarity].stars}`;
 const plusText = item => item && item.plus ? `+${item.plus}` : "";
 const itemName = item => partOf(item).name + plusText(item);                 // 「ハンドガンK7+2」
@@ -1109,7 +1164,7 @@ const itemPower = item => partOf(item).power * (1 + PLUS_COEF * (item.plus || 0)
 const itemExpected = item => itemPower(item) * partOf(item).acc / 100;            // 自動装備で比べる期待ダメージ
 const levelMult = u => 1 + LEVEL_DAMAGE_COEF * (u.lv - 1);
 
-// パーツを手に入れる。同じ名前のパーツを持っていれば（持ち物＋主人公機の装備。仲間の固定パーツは含めない）、それを+1強化する。
+// パーツを手に入れる。同じ名前のパーツを持っていれば（持ち物＋全員の自由枠。仲間の固定パーツは含めない）、それを+1強化する。
 // noMerge=強化しないで新しく入れる（初期パーツ）
 function gainPart(id, opts = {}) {
   if (!opts.noMerge) {
@@ -1123,29 +1178,40 @@ function gainPart(id, opts = {}) {
   }
   return addPart(id, opts.plus);
 }
-// 持ち物に入れて、主人公機に自動装備する（仲間のパーツは固定なので対象外）
+// 持ち物に入れて、チームの自由枠に自動装備する（固定パーツは対象外）
+// 1. チームの並び順で、最初の空いている自由枠へ
+// 2. 空きがなければ、手動で付け替えていない機体の自由枠のうち一番弱いものより強いとき、入れ替える（外したものは持ち物へ）
 function addPart(id, plus = 0) {
   const item = { id, uid: ++partUid, plus };
   inv.parts.push(item);
   let res = { item, unit: null, swapped: null };
-  const hero = leader();
-  const f = hero.equip.indexOf(null);
-  if (f >= 0) {
-    // 1. 空き枠に装備
-    hero.equip[f] = item;
-    res.unit = hero;
-  } else if (!hero.manual) {
-    // 2. 手動で付け替えていなければ、装備で一番弱いものより強いとき入れ替え
+  const open = team.find(u => u.free.includes(null));
+  if (open) {
+    open.free[open.free.indexOf(null)] = item;
+    res.unit = open;
+  } else {
     let worst = null;
-    hero.equip.forEach((e, slot) => { if (e && (!worst || itemExpected(e) < itemExpected(worst.e))) worst = { slot, e }; });
+    for (const u of team) {
+      if (u.manual) continue;
+      u.free.forEach((e, slot) => { if (e && (!worst || itemExpected(e) < itemExpected(worst.e))) worst = { u, slot, e }; });
+    }
     if (worst && itemExpected(item) > itemExpected(worst.e)) {
-      hero.equip[worst.slot] = item;
-      res.unit = hero; res.swapped = worst.e;
+      worst.u.free[worst.slot] = item;
+      res.unit = worst.u; res.swapped = worst.e;
     }
   }
   res.discarded = trimInventory();
   return res;
 }
+// チームに加えるとき（仲間にした直後、ストックから入れたとき、古いセーブの移行）：
+// 手動の印がなければ、空いている自由枠へ、持ち物の未装備パーツを期待ダメージの高い順に入れる（メッセージなし）
+function fillFreeSlots(u) {
+  if (u.manual) return;
+  const spare = inv.parts.filter(i => !isEquipped(i)).sort((a, b) => itemExpected(b) - itemExpected(a) || partOf(a).en - partOf(b).en);
+  u.free.forEach((e, slot) => { if (!e && spare.length) u.free[slot] = spare.shift(); });
+}
+// チームから外すとき（ストックへ、入れ替え）：自由枠のパーツは持ち物に戻る（持ち物の中にあるので、外すだけ）
+function clearFreeSlots(u) { u.free.fill(null); }
 // 持ち物が上限を超えたら、装備していないパーツで期待ダメージが一番低いものを捨てる
 function trimInventory() {
   const out = [];
@@ -1170,12 +1236,15 @@ function logPartGain(res, verb, out = log) {
   out(`『${p.name}』${rareTag}を${verb}！${tail ? `（${tail}）` : ""}`, r.color);
   for (const d of res.discarded || []) out(`持ち物がいっぱいなので『${itemText(d)}』を捨てた。`);
 }
-// おまかせ装備：期待ダメージの高い順（同じなら消費ENの低い順）に、主人公機へ2つ（仲間のパーツは固定）
+// おまかせ装備：持ち物（自由枠に付いているものも含む）を期待ダメージの高い順（同じなら消費ENの低い順）に、
+// 主人公機の枠 → 仲間1の枠 → 仲間2の枠 の順に配る。固定パーツは動かさない。手動の印は全員クリア
 function autoEquipAll() {
   const sorted = inv.parts.slice().sort((a, b) => itemExpected(b) - itemExpected(a) || partOf(a).en - partOf(b).en);
-  const hero = leader();
-  hero.manual = false;
-  for (let s = 0; s < SLOT_COUNT; s++) hero.equip[s] = sorted[s] || null;
+  let k = 0;
+  for (const u of team) {
+    u.manual = false;
+    for (let s = 0; s < u.free.length; s++) u.free[s] = sorted[k++] || null;
+  }
 }
 
 function addExp(u, amount) {
@@ -1556,12 +1625,36 @@ function battleScales() {
   return { boss, enemy, ally };
 }
 const isNarrow = () => window.innerWidth <= NARROW_MAX;
+// ---- 上の余白の調整（セーブとは別のキーに保存。保存できない環境では、そのときだけ有効） ----
+let topAdjust = 0;
+try { const v = JSON.parse(localStorage.getItem(LAYOUT_KEY) || "{}").topAdjust; if (Number.isInteger(v)) topAdjust = Math.max(TOP_ADJUST_MIN, Math.min(TOP_ADJUST_MAX, v)); } catch (e) {}
+function setTopAdjust(v) {
+  topAdjust = Math.max(TOP_ADJUST_MIN, Math.min(TOP_ADJUST_MAX, v));
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify({ topAdjust })); } catch (e) {}
+  applyLayoutVars();
+  if (mode === "map" || mode === "menu") resize();
+}
+// 設定の行（メニューの設定欄と、タイトルの歯車から開く画面で共通）
+function topAdjustRow(after) {
+  const row = el("div", "mrow");
+  const info = el("div", "info", "上の余白の調整"); info.append(el("small", "", "スマホで、上の端が表示枠のバーに隠れるときは＋、すき間が空くときは−（幅600px以下だけ）"));
+  const btns = el("div", "btns");
+  const redo = fn => () => { fn(); after(); };
+  const minus = rowButton("−", redo(() => setTopAdjust(topAdjust - TOP_ADJUST_STEP)), topAdjust <= TOP_ADJUST_MIN); minus.id = "topAdjMinus";
+  const val = el("span", "adjVal", `${topAdjust > 0 ? "+" : ""}${topAdjust}px`); val.id = "topAdjVal";
+  const plus = rowButton("+", redo(() => setTopAdjust(topAdjust + TOP_ADJUST_STEP)), topAdjust >= TOP_ADJUST_MAX); plus.id = "topAdjPlus";
+  const reset = rowButton("もどす", redo(() => setTopAdjust(0)), topAdjust === 0); reset.id = "topAdjReset";
+  btns.append(minus, val, plus, reset);
+  row.append(info, btns);
+  return row;
+}
 const arenaHeight = () => window.innerHeight < LOW_SCREEN_H ? ARENA_MIN_H_LOW : ARENA_MIN_H;
 // 画面の作りの値を CSS に渡す（起動時と、画面の大きさが変わったとき）
 function applyLayoutVars() {
   const r = document.documentElement.style;
   const px = (k, v) => r.setProperty(k, v + "px");
-  px("--top-bar-narrow", TOP_BAR_H); px("--top-gap-narrow", TOP_BAR_GAP);
+  // 上の余白 = TOP_BAR_H + すき間 + 調整値（0より小さくはしない）
+  px("--top-bar-narrow", Math.max(-TOP_BAR_GAP, TOP_BAR_H + topAdjust)); px("--top-gap-narrow", TOP_BAR_GAP);
   px("--pad-h", PAD_BTN_H); px("--pad-w", PAD_BTN_W); px("--pad-gap", PAD_GAP);
   px("--arena-h", arenaHeight()); px("--party-row-h", window.innerHeight < LOW_SCREEN_H ? PARTY_ROW_H_LOW : PARTY_ROW_H);
   px("--blog-h", BATTLE_LOG_H); px("--minfo-h", MOVE_INFO_H); px("--move-h", MOVE_BTN_H);
@@ -1692,14 +1785,14 @@ const lerpMul = (a, b, lv) => Math.floor(lerp(a, b, lv) * 100 + 1e-9) / 100;
 // その機体が使えるわざ（一覧の順：たいあたり、防御、固有技、自由枠1、自由枠2）
 function moveKeys(u) {
   const keys = ["tackle", "guard", "unique"];
-  u.equip.forEach((it, i) => { if (it) keys.push("part" + i); });
+  slotItems(u).forEach((it, i) => { if (it) keys.push("part" + i); });
   return keys;
 }
 function moveDef(u, key) {
   if (key === "tackle" || key === "guard") return MOVES[key];
   if (key === "unique") return MOVES[u.unique];
-  const item = u.equip[+key.slice(4)], p = partOf(item);
-  return { id: key, name: itemName(item), kind: "part", en: p.en, acc: p.acc, target: "enemy", effect: "damage", element: null, part: p, item };
+  const item = slotItems(u)[+key.slice(4)], p = partOf(item);
+  return { id: key, name: itemName(item), kind: "part", en: p.en, acc: p.acc, target: "enemy", effect: "damage", element: null, part: p, item, fixed: item === u.fixed };
 }
 function partEnCost(u, p) {
   const t = typeOf(u);
@@ -2103,9 +2196,9 @@ function rollRecruit(e) {
 function joinUnit(u, out = log, showPart = false) {
   u.name = uniqueName(u.name);
   u.hp = u.maxHp; u.en = u.maxEn; u.bs = freshBattleState();
-  const tail = showPart && u.equip[0] ? `（パーツ『${itemText(u.equip[0])}』）` : "";
-  const color = u.equip[0] ? RARITY[partOf(u.equip[0]).rarity].color : "";
-  if (team.length < TEAM_MAX) { team.push(u); out(`${u.name}が仲間になった！${tail}`, showPart ? color : ""); return "team"; }
+  const tail = showPart && u.fixed ? `（パーツ『${itemText(u.fixed)}』）` : "";
+  const color = u.fixed ? RARITY[partOf(u.fixed).rarity].color : "";
+  if (team.length < TEAM_MAX) { team.push(u); fillFreeSlots(u); out(`${u.name}が仲間になった！${tail}`, showPart ? color : ""); return "team"; }
   stock.push(u);
   out(`${u.name}が仲間になった！（村のストックに送った）${tail}`, showPart ? color : "");
   return "stock";
@@ -2174,10 +2267,14 @@ function unitLine(u, opts = {}) {
   if (u.isLeader) l1.append(el("span", "junk", "　主人公機"));
   if (opts.trait) l1.append(el("span", "junk", `　特性：${traitTextOf(u)}`));
   const l2 = el("div", "rcuL");
-  const it = u.equip.filter(Boolean);
-  if (!it.length) l2.append("パーツなし");
-  it.forEach((x, i) => { const sp = el("span", "", (i ? "・" : "") + itemText(x)); sp.style.color = RARITY[partOf(x).rarity].color; l2.append(sp); });
-  if (!u.isLeader && it.length) l2.append(el("span", "lock", " 🔒固定"));
+  // 固定パーツ（🔒）→ 自由枠のパーツ（空きは「空き」）
+  const items = slotItems(u);
+  if (!items.some(Boolean) && !u.free.length) l2.append("パーツなし");
+  items.forEach((x, i) => {
+    if (i) l2.append("・");
+    if (!x) { l2.append(el("span", "empty", "空き")); return; }
+    const sp = el("span", "", (x === u.fixed ? "🔒" : "") + itemText(x)); sp.style.color = RARITY[partOf(x).rarity].color; l2.append(sp);
+  });
   t.append(l1, l2);
   row.append(t);
   if (opts.onClick) row.addEventListener("click", opts.onClick);
@@ -2214,11 +2311,12 @@ function renderRecruit() {
   const sq = el("div", "rcSec");
   sq.append(el("div", "rcLabel", "固有技"), el("div", "", `${mi.name}　EN${mi.en}`), el("small", "", mi.desc));
   body.append(sq);
-  const it = u.equip[0], p = partOf(it);
+  const it = u.fixed, p = partOf(it);
   const sp = el("div", "rcSec");
   const pn = el("span", "", itemText(it)); pn.style.color = RARITY[p.rarity].color;
   const pl = el("div"); pl.append(el("span", "tag " + p.type, PART_TYPE_LABEL[p.type]), pn, el("span", "lock", "　🔒固定"));
-  sp.append(el("div", "rcLabel", "パーツ（1枠・付け替えできない）"), pl, el("small", "", `威力${Math.round(itemPower(it))}　命中${p.acc}%　EN${p.en}`));
+  sp.append(el("div", "rcLabel", "固定パーツ（この個体のもの。外せない）"), pl, el("small", "", `威力${Math.round(itemPower(it))}　命中${p.acc}%　EN${p.en}`));
+  sp.append(el("div", "rcLabel", `自由枠 ${u.free.length}つ（付け替えできる。今は空き。仲間にしたあと、持ち物のパーツが入る）`));
   body.append(sp);
   body.append(el("div", "rcLabel", "今のチーム"));
   const tl = el("div", "rcTeam");
@@ -2244,14 +2342,15 @@ function recruitKey(key) {
 // ================================================================
 //  解体（村のストックの機体だけ）：パーツは持ち物へ、ジャンクが手に入る
 // ================================================================
-const junkFor = u => JUNK_BASE[u.kind] + (u.equip[0] ? JUNK_RARITY[partOf(u.equip[0]).rarity] : 0);
+const junkFor = u => JUNK_BASE[u.kind] + (u.fixed ? JUNK_RARITY[partOf(u.fixed).rarity] : 0);
 function dismantleText(u) {
-  const it = u.equip[0];
+  const it = u.fixed;
   return `${u.name}を解体します。${it ? `パーツ『${itemText(it)}』が持ち物に入り、` : ""}ジャンクが${junkFor(u)}個手に入ります。よろしいですか？`;
 }
 function dismantle(u, out = log) {
   if (!u || u.isLeader || !stock.includes(u)) return null;
-  const it = u.equip[0], j = junkFor(u);
+  const it = u.fixed, j = junkFor(u);
+  clearFreeSlots(u);
   stock = stock.filter(x => x !== u);
   inv.junk = Math.min(JUNK_MAX, (inv.junk || 0) + j);
   const res = it ? gainPart(it.id, { plus: it.plus || 0 }) : null;
@@ -2351,7 +2450,7 @@ function battleCommands() {
     const lvTxt = info.lv ? ` Lv${info.lv}` : "";
     // パーツの★は2行目の頭に出す（名前が長くても★が切れないように）
     const stars = d.kind === "part" && d.part.rarity ? RARITY[d.part.rarity].stars + " " : "";
-    const c = { key, label: info.name + lvTxt,
+    const c = { key, label: (d.fixed ? "🔒" : "") + info.name + lvTxt,
       sub: `${stars}EN${info.en}　${info.short}${info.acc != null ? `　命中${info.acc}%` : ""}`,
       noen: info.en > u.en, selected: b.selected === key, act: () => pickMove(key) };
     if (d.kind === "part") { c.color = RARITY[d.part.rarity].color; c.mark = d.part.type; }
@@ -2441,6 +2540,7 @@ function renderBattle() {
   const box = $("cmds");
   box.textContent = "";
   box.classList.toggle("moveList", battle.menu === "moves");
+  delete box.dataset.sel;
   currentCmds.forEach((c, i) => {
     const btn = document.createElement("button");
     const k = document.createElement("span"); k.className = "k"; k.textContent = String(i + 1);
@@ -2460,7 +2560,9 @@ function renderBattle() {
     box.append(btn);
     // わざ一覧がスクロールするとき（狭い画面）、選んでいるわざが見えるようにする
     if (c.selected && box.scrollHeight > box.clientHeight) btn.scrollIntoView({ block: "nearest" });
+    if (c.selected) box.dataset.sel = i;
   });
+  fitMoveList();
   const myTurn = battle.menu === "moves" && battle.actor >= 0 && !battle.busy;
   $("btnGo").disabled = !(myTurn || battle.menu === "result");
   $("btnGo").textContent = battle.menu === "result" ? "つづける" : "決定";
@@ -2468,6 +2570,22 @@ function renderBattle() {
   $("btnGuardAll").disabled = !myTurn;
   updateGuardAllBtn();
   renderMoveInfo();
+}
+
+// わざ一覧の高さ合わせ（狭い画面）：2列。入る行数なら1つの高さを52→44まで詰めてスクロールなしで全部見せる。
+// それでも入らない低い画面だけ、中でスクロールして、下端に「下にもある」の印を出す
+function fitMoveList() {
+  const box = $("cmds"), more = $("cmdsMore");
+  if (!isNarrow() || !box.classList.contains("moveList") || !box.children.length) { more.hidden = true; return; }
+  const rows = Math.ceil(box.children.length / 2), need = h => rows * h + (rows - 1) * MOVE_LIST_GAP;
+  const avail = box.clientHeight;
+  let h = MOVE_BTN_H;
+  if (need(h) > avail) h = Math.max(MOVE_BTN_H_MIN, Math.floor((avail - (rows - 1) * MOVE_LIST_GAP) / rows));
+  box.style.setProperty("--move-h", h + "px");
+  const sel = box.children[+box.dataset.sel];
+  if (sel && box.scrollHeight > box.clientHeight + 1) sel.scrollIntoView({ block: "nearest" });
+  const scrolly = box.scrollHeight > box.clientHeight + 1;
+  more.hidden = !scrolly || box.scrollTop + box.clientHeight >= box.scrollHeight - 2;
 }
 
 // ---- 味方の状態（バトル中）。タグ（短い文字）と説明。項目を足せば新しい状態を出せる ----
@@ -2699,15 +2817,8 @@ function renderMenu() {
   head.append(g);
   body.append(head);
 
-  if (!u.isLeader) {
-    // 仲間のパーツは1枠の固定（付け替えできない）
-    body.append(el("h3", "", `${u.name}のパーツ（1枠・固定）`));
-    const row = el("div", "mrow slotRow");
-    row.append(u.equip[0] ? partInfo(u.equip[0], "🔒固定") : el("div", "info empty", "なし"));
-    body.append(row);
-    body.append(el("div", "mnote", "仲間のパーツは、仲間になったときに決まり、付け替えられません。"));
-  } else {
-  const omakase = rowButton("おまかせ装備（強い順に主人公機へ付ける）", () => {
+  // おまかせ装備（全員の自由枠に配る）
+  const omakase = rowButton("おまかせ装備（強い順に全員の自由枠へ）", () => {
     autoEquipAll();
     menuState.pending = null;
     log("おまかせ装備した。");
@@ -2716,41 +2827,36 @@ function renderMenu() {
   omakase.id = "omakase";
   body.append(omakase);
 
-  body.append(el("h3", "", `${u.name}の装備（${SLOT_COUNT}枠）${u.manual ? "　手動で設定中" : ""}`));
-  u.equip.forEach((item, slot) => {
+  // 固定パーツ（仲間だけ。外せない）
+  if (u.fixed) {
+    body.append(el("h3", "", `${u.name}の固定パーツ（外せない）`));
+    const row = el("div", "mrow slotRow fixedRow");
+    row.append(partInfo(u.fixed, "🔒固定"));
+    body.append(row);
+  }
+  // 自由枠（付け替えできる）
+  body.append(el("h3", "", `${u.name}の自由枠（${u.free.length}枠・付け替えできる）${u.manual ? "　手動で設定中" : ""}`));
+  u.free.forEach((item, slot) => {
     const row = el("div", "mrow slotRow");
-    if (!item) row.append(el("div", "info empty", `枠${slot + 1}：なし`));
+    if (!item) row.append(el("div", "info empty", `枠${slot + 1}：空き`));
     else row.append(partInfo(item, `枠${slot + 1}`));
     const btns = el("div", "btns");
-    if (ms.pending) {
-      btns.append(rowButton("ここに装備", () => { u.equip[slot] = ms.pending; u.manual = true; ms.pending = null; renderMenu(); }));
-    } else if (item) {
-      btns.append(rowButton("はずす", () => { u.equip[slot] = null; u.manual = true; renderMenu(); }));
-    }
+    if (item) btns.append(rowButton("はずす", () => { u.free[slot] = null; u.manual = true; renderMenu(); }));
     row.append(btns);
     body.append(row);
   });
 
-  const free = inv.parts.filter(i => !isEquipped(i))
+  const spare = inv.parts.filter(i => !isEquipped(i))
     .sort((a, b) => itemExpected(b) - itemExpected(a));
-  body.append(el("h3", "", `持ち物のパーツ（装備していないもの ${free.length}個 ／ 全${inv.parts.length}個・上限${INVENTORY_MAX}）`));
-  if (free.length === 0) body.append(el("div", "mrow empty", "ありません。他の機体から外すとここに入ります"));
-  for (const item of free) {
+  body.append(el("h3", "", `持ち物のパーツ（装備していないもの ${spare.length}個 ／ 全${inv.parts.length}個・上限${INVENTORY_MAX}）`));
+  if (spare.length === 0) body.append(el("div", "mrow empty", "ありません。だれかの枠から外すとここに入ります"));
+  for (const item of spare) {
     const row = el("div", "mrow invRow");
-    row.append(partInfo(item, ms.pending === item ? "← 付ける枠を選んでください" : ""));
+    row.append(partInfo(item));
     const btns = el("div", "btns");
-    if (ms.pending === item) {
-      btns.append(rowButton("やめる", () => { ms.pending = null; renderMenu(); }));
-    } else {
-      btns.append(rowButton("装備", () => {
-        const f = u.equip.indexOf(null);
-        if (f >= 0) { u.equip[f] = item; u.manual = true; } else ms.pending = item;
-        renderMenu();
-      }));
-    }
+    btns.append(rowButton("装備", () => equipFromMenu(u, item)));
     row.append(btns);
     body.append(row);
-  }
   }
 
   body.append(el("h3", "", `アイテム（${u.name}に使う）`));
@@ -2799,6 +2905,13 @@ function renderMenu() {
     const b = rowButton(RECRUIT_MODES[i].label, () => { settings.recruitConfirm = RECRUIT_MODES[(i + 1) % RECRUIT_MODES.length].key; saveGame(); renderMenu(); });
     b.id = "set-recruitConfirm";
     const btns = el("div", "btns"); btns.append(b); row.append(info, btns); body.append(row);
+  }
+  body.append(topAdjustRow(renderMenu));
+  {
+    const row = el("div", "mrow");
+    row.append(el("div", "info", "あそびかた"));
+    const btns = el("div", "btns"); const hb = rowButton("見る", () => showTutorial()); hb.id = "menuHelp"; btns.append(hb);
+    row.append(btns); body.append(row);
   }
 
 
@@ -2863,12 +2976,14 @@ function partyToTeam(u) {
   stock = stock.filter(x => x !== u);
   u.hp = u.maxHp; u.en = u.maxEn; u.bs = freshBattleState();
   team.push(u);
+  fillFreeSlots(u);
   log(`${u.name}をチームに入れた。`);
   menuState = { unit: 0, pending: null, tab: "party", sel: u };
   saveGame(); renderMenu(); renderVillage();
 }
 function partyToStock(u) {
   if (menuFrom !== "village" || !u || u.isLeader || !team.includes(u) || stock.length >= STOCK_MAX) return;
+  clearFreeSlots(u);
   team = team.filter(x => x !== u);
   u.hp = u.maxHp; u.en = u.maxEn;
   stock.push(u);
@@ -2881,10 +2996,22 @@ function partySwap(inU, outU) {
   const i = team.indexOf(outU), j = stock.indexOf(inU);
   inU.hp = inU.maxHp; inU.en = inU.maxEn; inU.bs = freshBattleState();
   outU.hp = outU.maxHp; outU.en = outU.maxEn;
+  clearFreeSlots(outU);
   team[i] = inU; stock[j] = outU;
+  fillFreeSlots(inU);
   log(`${inU.name}と${outU.name}を入れ替えた。`);
   menuState = { unit: 0, pending: null, tab: "party", sel: inU };
   saveGame(); renderMenu(); renderVillage();
+}
+
+// 持ち物のパーツを、選んでいる機体の自由枠に付ける。空きがなければ、入れ替える枠を選ぶ小さな画面を出す
+function equipFromMenu(u, item) {
+  const f = u.free.indexOf(null);
+  if (f >= 0) { u.free[f] = item; u.manual = true; renderMenu(); return; }
+  const btns = u.free.map((cur, slot) => ({ label: `枠${slot + 1}：『${itemText(cur)}』と入れ替える`, primary: slot === 0,
+    act: () => { u.free[slot] = item; u.manual = true; renderMenu(); } }));
+  btns.push({ label: "やめる", act: () => {} });
+  showDialog("どの枠と入れ替える？", `『${itemText(item)}』を${u.name}に付けます。`, btns);
 }
 
 // ---- メニュー：アイテムの変化の表示、一括回復 ----
@@ -2970,7 +3097,7 @@ function resize() {
   // 広い画面は今までどおり、画面の高さからほかの要素の分を引く
   const as = getComputedStyle($("app"));
   const narrow = window.innerWidth <= NARROW_MAX;
-  const availH = narrow ? $("mapWrap").clientHeight
+  const availH = narrow ? $("mapWrap").clientHeight - 2
     : window.innerHeight - others - parseFloat(as.paddingTop) - parseFloat(as.paddingBottom) - 8;
   // 画面に収まる最大の整数倍。列数は幅で決め（13〜15列）、行数は高さに収まるだけ（足りなければ減らす）
   let pick = null;
@@ -3257,7 +3384,7 @@ function hideAllScreens() {
   miniOpen = false;
   recruitState = null; recruitQueue = []; recruitAfter = null;
   for (const id of ["title", "village", "select", "mapScreen", "battle"]) $(id).hidden = true;
-  for (const id of ["endScreen", "menu", "dialog", "other", "recruit"]) $(id).hidden = true;
+  for (const id of ["endScreen", "menu", "dialog", "other", "recruit", "qset"]) $(id).hidden = true;
 }
 
 // タイプを選んで新しく始める → 村へ
@@ -3365,10 +3492,10 @@ function onDefeat() {
   inv.items.repair = Math.floor(inv.items.repair * DEFEAT_PENALTY.itemKeep);
   inv.items.cell = Math.floor(inv.items.cell * DEFEAT_PENALTY.itemKeep);
   const hero = leader();
-  const slots = hero.equip.map((it, i) => it ? i : -1).filter(i => i >= 0);
+  const slots = hero.free.map((it, i) => it ? i : -1).filter(i => i >= 0);
   if (slots.length && Math.random() < DEFEAT_PENALTY.breakRate) {
-    const slot = slots[rnd(slots.length)], item = hero.equip[slot];
-    hero.equip[slot] = null;
+    const slot = slots[rnd(slots.length)], item = hero.free[slot];
+    hero.free[slot] = null;
     inv.parts = inv.parts.filter(i => i !== item);
     const p = partOf(item);
     msgs.push({ t: `『${itemName(item)}』が壊れた…`, c: RARITY[p.rarity].color });
@@ -3440,8 +3567,9 @@ function unitToSave(u, idx) {
     baseHp: u.baseHp, baseEn: u.baseEn, baseTackle: u.baseTackle, accBonus: u.accBonus, evade: u.evade,
     lv: u.lv, exp: u.exp, hp: u.hp, en: u.en, skills: { guard: u.skills.guard, unique: u.skills.unique }, unique: u.unique, manual: u.manual,
   };
-  if (u.isLeader) o.equip = u.equip.map(it => it ? idx.get(it) : null);
-  else o.part = u.equip[0] ? { id: u.equip[0].id, plus: u.equip[0].plus || 0 } : null;
+  // 版5：固定パーツ（仲間）はパーツそのもの、自由枠は持ち物の番号
+  o.fixed = u.fixed ? { id: u.fixed.id, plus: u.fixed.plus || 0 } : null;
+  o.free = u.free.map(it => it ? idx.get(it) : null);
   return o;
 }
 function saveGame() {
@@ -3479,7 +3607,7 @@ function readSave() {
   try {
     const d = JSON.parse(raw);
     const okNum = v => typeof v === "number" && isFinite(v);
-    if (!d || ![1, 2, 3, SAVE_VERSION].includes(d.version)) throw 0;   // 1〜3 は移行して読む
+    if (!d || ![1, 2, 3, 4, SAVE_VERSION].includes(d.version)) throw 0;   // 1〜4 は移行して読む
     if (d.version >= 3 && (!Array.isArray(d.plus) || d.plus.length !== d.parts.length || !d.plus.every(v => Number.isInteger(v) && v >= 0 && v <= PLUS_MAX))) throw 0;
     if (!START_TYPES.some(t => t.key === d.typeKey)) throw 0;
     if (!Array.isArray(d.parts) || !d.parts.every(id => partById(id))) throw 0;
@@ -3491,11 +3619,17 @@ function readSave() {
       if (d.stock.some(u => u.isLeader)) throw 0;
     }
     const okIdx = i => i === null || (Number.isInteger(i) && i >= 0 && i < d.parts.length);
+    const okPart = q => q === null || !!(q && partById(q.id) && Number.isInteger(q.plus) && q.plus >= 0 && q.plus <= PLUS_MAX);
+    const usedIdx = new Set();
     for (const u of d.team.concat(d.version >= 4 ? d.stock : [])) {
       if (!SPR[u.sprite] || !okNum(u.lv) || !okNum(u.exp) || !okNum(u.baseHp) || !okNum(u.baseEn) || !okNum(u.baseTackle)) throw 0;
-      if (u.isLeader || d.version < 4) {
+      if (d.version >= 5) {
+        const n = u.isLeader ? HERO_FREE_SLOTS : ALLY_FREE_SLOTS;
+        if (!Array.isArray(u.free) || u.free.length !== n || !u.free.every(okIdx) || !okPart(u.fixed) || (u.isLeader && u.fixed)) throw 0;
+        for (const i of u.free) if (i !== null) { if (usedIdx.has(i)) throw 0; usedIdx.add(i); }   // 同じパーツを2か所に付けない
+      } else if (u.isLeader || d.version < 4) {
         if (!Array.isArray(u.equip) || u.equip.length !== SLOT_COUNT || !u.equip.every(okIdx)) throw 0;
-      } else if (u.part !== null && !(u.part && partById(u.part.id) && Number.isInteger(u.part.plus) && u.part.plus >= 0 && u.part.plus <= PLUS_MAX)) throw 0;
+      } else if (!okPart(u.part)) throw 0;
       if (!u.skills || typeof u.skills !== "object") throw 0;
       if (d.version >= 2 && !(okNum(u.skills.guard) && okNum(u.skills.unique))) throw 0;
       if (!u.isLeader && !baseOfAlly(u)) throw 0;
@@ -3512,6 +3646,7 @@ function baseOfAlly(s) {
 // 読み込み。基本値はいまの定義から作り直す
 // 版1→：たいあたり+2の廃止、ENの伸び、スキルはLv1から。版2→3：パーツの強化値は0、足した設定は初期値
 // 版3→4：ストックは空、ジャンクは0。仲間の装備は先頭の1つを固定パーツに残し、2つ目は持ち物へ（なければ大きさの初期パーツ）
+// 版4→5：仲間の1つのパーツは固定パーツに、自由枠は空き（読み込んだあと、持ち物の未装備パーツから自動で入る）。主人公機の2枠は自由枠に
 function applySave(d) {
   const migrated = d.version !== SAVE_VERSION;
   const skillsReset = d.version < 2;
@@ -3533,16 +3668,19 @@ function applySave(d) {
       const t = START_TYPES.find(x => x.key === d.typeKey);
       u = createUnit({ name: s.name, sprite: t.sprite, isLeader: true, kind: t.key, hp: t.hp, en: t.en, tackle: t.tackle,
         accBonus: t.traits.accBonus, evade: t.traits.evade, enGrowth: t.enGrowth, unique: t.unique, lv: s.lv });
-      u.equip = s.equip.map(i => i === null ? null : all[i]);
+      u.free = (d.version >= 5 ? s.free : s.equip).map(i => i === null ? null : all[i]);
     } else {
       const def = baseOfAlly(s);
       u = createAlly(def, s.sprite, { name: s.name, lv: s.lv });
-      if (d.version >= 4) {
-        u.equip = [s.part ? fixedPart(s.part.id, s.part.plus) : fixedPart(def.ally.part)];
+      if (d.version >= 5) {
+        u.fixed = s.fixed ? fixedPart(s.fixed.id, s.fixed.plus) : fixedPart(def.ally.part);
+        u.free = s.free.map(i => i === null ? null : all[i]);
+      } else if (d.version >= 4) {
+        u.fixed = s.part ? fixedPart(s.part.id, s.part.plus) : fixedPart(def.ally.part);
       } else {
         const first = s.equip.find(i => i !== null);
-        if (first != null) { moved.add(all[first]); u.equip = [all[first]]; }
-        else u.equip = [fixedPart(def.ally.part)];
+        if (first != null) { moved.add(all[first]); u.fixed = all[first]; }
+        else u.fixed = fixedPart(def.ally.part);
       }
     }
     u.exp = s.exp; u.manual = !!s.manual;
@@ -3558,15 +3696,101 @@ function applySave(d) {
   team = d.team.map(load);
   stock = d.version >= 4 ? d.stock.map(load) : [];
   if (moved.size) { inv.parts = all.filter(i => !moved.has(i)); trimInventory(); }
+  // 古い形式：仲間の自由枠は空きなので、チームに加えるときの規則で、持ち物から入れる
+  if (d.version < 5) for (const u of team) if (!u.isLeader) { u.manual = false; fillFreeSlots(u); }
   bestLevel = Math.max(d.bestLevel || 1, ...team.map(u => u.lv));
   return migrated;
 }
 const okNum = v => typeof v === "number" && isFinite(v);
 
-// 起動：セーブがあればタイトル（つづきから／はじめから）、なければタイプ選択
+// ================================================================
+//  最初の説明（あそびかた）。項目を足せば枚数が増える
+// ================================================================
+const TUTORIAL_PAGES = [
+  { title: "めざすもの", lines: ["遺跡の奥まで潜って、10階のボスを倒そう。", "敵に触れると、バトルになる。"] },
+  { title: "歩く", lines: ["十字ボタン（または矢印キー）で動く。", "「メニュー」で装備や回復。", "「地図」で、まだ行っていない場所がわかる。"] },
+  { title: "戦う", lines: ["わざを選んで「決定」。", "「防御」でダメージを減らし、ENも回復する。", "ENが足りないと、パーツのわざは使えない。", "ボスが力を溜めたら「全員防御」。"] },
+  { title: "パーツと仲間", lines: ["敵がパーツを落とす。同じパーツを拾うと強くなる。", "敵がまれに仲間になる。中身を見てから選べる。"] },
+  { title: "村", lines: ["全滅しても、村に戻るだけ。強さはそのまま。", "準備が足りないときは、村に戻って整えよう。", "メニューの「セーブ」で、成長を残せる。"] },
+];
+const tutorialSeen = () => { try { return localStorage.getItem(TUTORIAL_KEY) === "1"; } catch (e) { return false; } };
+let tutState = null;   // { page, done }
+function showTutorial(done = () => {}) {
+  tutState = { page: 0, done };
+  renderTutorial();
+  $("tutorial").hidden = false;
+}
+function renderTutorial() {
+  const t = TUTORIAL_PAGES[tutState.page], last = tutState.page === TUTORIAL_PAGES.length - 1;
+  $("tutPage").textContent = `${tutState.page + 1} / ${TUTORIAL_PAGES.length}`;
+  $("tutTitle").textContent = t.title;
+  const box = $("tutText"); box.textContent = "";
+  for (const l of t.lines) box.append(el("p", "", l));
+  $("tutBack").disabled = tutState.page === 0;
+  $("tutSkip").hidden = last;
+  $("tutNext").textContent = last ? "はじめる" : "次へ";
+}
+function tutorialStep(d) {
+  if (!tutState) return;
+  const next = tutState.page + d;
+  if (next >= TUTORIAL_PAGES.length) { closeTutorial(); return; }
+  tutState.page = Math.max(0, next);
+  renderTutorial();
+}
+function closeTutorial() {
+  if (!tutState) return;
+  try { localStorage.setItem(TUTORIAL_KEY, "1"); } catch (e) {}
+  const done = tutState.done;
+  tutState = null;
+  $("tutorial").hidden = true;
+  done();
+}
+// 歯車から開く設定（タイトル・タイプ選択）
+function openQuickSettings() {
+  const body = $("qsetBody"); body.textContent = "";
+  body.append(topAdjustRow(openQuickSettings));
+  $("qset").hidden = false;
+}
+
+// ================================================================
+//  ?layout=1：画面の実測値（上の余白の原因を調べるため）。タップで開閉、文字はコピーできる
+// ================================================================
+let diagMin = false;
+function updateLayoutDiag() {
+  const d = $("layoutDiag");
+  if (!LAYOUT_DIAG) return;
+  d.hidden = false;
+  if (diagMin) { d.textContent = "layout（タップで開く）"; return; }
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)";
+  document.body.append(probe);
+  const cs = getComputedStyle(probe), sat = cs.paddingTop, sab = cs.paddingBottom;
+  probe.remove();
+  const vv = window.visualViewport;
+  const screenEl = [...document.querySelectorAll(".overlay:not([hidden]) .dialog")].pop() || [...document.querySelectorAll("#app > .screen")].find(e => !e.hidden);
+  const firstEl = screenEl && [...screenEl.querySelectorAll("*")].find(e => e.getClientRects().length && e.id !== "layoutDiag");
+  const btns = screenEl ? [...screenEl.querySelectorAll("button")].filter(b => b.getClientRects().length) : [];
+  const lastBtn = btns.sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom)[0];
+  const bs = getComputedStyle(document.body), hs = getComputedStyle(document.documentElement);
+  let parent = "なし";
+  try { parent = window.parent !== window ? (window.parent.document ? "あり（同じ）" : "あり") : "なし"; } catch (e) { parent = "あり（別の場所。iframeの中）"; }
+  const r = n => Math.round(n * 10) / 10;
+  d.textContent = [
+    `innerHeight ${innerHeight}  innerWidth ${innerWidth}`,
+    `visualViewport h ${vv ? r(vv.height) : "-"} offsetTop ${vv ? r(vv.offsetTop) : "-"}`,
+    `safe-area top ${sat} bottom ${sab}`,
+    `TOP_BAR_H ${TOP_BAR_H} 調整 ${topAdjust} すき間 ${TOP_BAR_GAP} → 上の余白 ${isNarrow() ? Math.max(0, TOP_BAR_H + topAdjust + TOP_BAR_GAP) : 8}px`,
+    `画面 ${screenEl ? (screenEl.id || screenEl.parentElement.id) : "-"} 最初の要素 ${firstEl ? r(firstEl.getBoundingClientRect().top) : "-"}  最後のボタン下端 ${lastBtn ? r(lastBtn.getBoundingClientRect().bottom) : "-"}`,
+    `html 高さ ${document.documentElement.clientHeight}/${document.documentElement.scrollHeight} padding-top ${hs.paddingTop}`,
+    `body padding-top ${bs.paddingTop} margin-top ${bs.marginTop}`,
+    `親 ${parent}`,
+  ].join("\n");
+}
+
+// 起動：初めてなら説明（5枚）→ タイプ選択。セーブがあればタイトル（つづきから／はじめから）
 function boot() {
   const r = readSave();
-  if (r.status === "none") { showSelect(); return; }
+  if (r.status === "none") { showSelect(); if (!tutorialSeen()) showTutorial(); return; }
   hideAllScreens();
   mode = "title";
   $("title").hidden = false;
@@ -3592,6 +3816,13 @@ const KEYMAP = {
   " ": "wait", ".": "wait",
 };
 document.addEventListener("keydown", ev => {
+  if (tutState) {
+    if (ev.key === "Enter" || ev.key === "ArrowRight" || ev.key === " ") { ev.preventDefault(); tutorialStep(1); }
+    else if (ev.key === "ArrowLeft") { ev.preventDefault(); tutorialStep(-1); }
+    else if (ev.key === "Escape") { ev.preventDefault(); closeTutorial(); }
+    return;
+  }
+  if (!$("qset").hidden) { if (ev.key === "Escape") $("qset").hidden = true; return; }
   if (mode === "select") {
     const n = parseInt(ev.key, 10);
     if (n >= 1 && n <= START_TYPES.length) { ev.preventDefault(); startGame(START_TYPES[n - 1].key); }
@@ -3677,11 +3908,21 @@ $("mini").addEventListener("click", () => toggleMini(true));
 $("miniFull").addEventListener("click", () => toggleMini(false));
 $("menuClose").addEventListener("click", closeMenu);
 $("menuSave").addEventListener("click", manualSave);
+$("tutBack").addEventListener("click", () => tutorialStep(-1));
+$("tutNext").addEventListener("click", () => tutorialStep(1));
+$("tutSkip").addEventListener("click", closeTutorial);
+$("gearTitle").addEventListener("click", openQuickSettings);
+$("gearSelect").addEventListener("click", openQuickSettings);
+$("qsetClose").addEventListener("click", () => { $("qset").hidden = true; });
+$("qsetHelp").addEventListener("click", () => { $("qset").hidden = true; showTutorial(); });
+$("layoutDiag").addEventListener("click", () => { diagMin = !diagMin; $("layoutDiag").classList.toggle("min", diagMin); updateLayoutDiag(); });
+if (LAYOUT_DIAG) setInterval(updateLayoutDiag, 1000);
 $("retry").addEventListener("click", () => goVillage());
 $("btnDepart").addEventListener("click", openDepart);
 $("btnGo").addEventListener("click", decide);
 $("btnOther").addEventListener("click", openOther);
 $("btnGuardAll").addEventListener("click", guardAll);
+$("cmds").addEventListener("scroll", () => { const b = $("cmds"); $("cmdsMore").hidden = b.scrollHeight <= b.clientHeight + 1 || b.scrollTop + b.clientHeight >= b.scrollHeight - 2; });
 $("otherClose").addEventListener("click", closeOther);
 $("btnBackVillage").addEventListener("click", askReturnVillage);
 $("btnVillageMenu").addEventListener("click", openMenu);
@@ -3690,6 +3931,7 @@ $("btnNewFromTitle").addEventListener("click", askNewGame);
 window.addEventListener("resize", () => { applyLayoutVars(); resize(); if (miniOpen) paintBigMini(); });
 
 applyLayoutVars();
+updateLayoutDiag();
 prepareSprites();
 if (DEBUG) document.body.append(el("div", "debug", "DEBUG MODE"));
 boot();
