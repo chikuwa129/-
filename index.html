@@ -376,7 +376,10 @@
     #mapScreen .log { height: calc(3 * 1.45em + 8px); }
 
     /* バトル画面：絵の領域と味方の欄は縮めない。足りない高さは、わざ一覧（中でスクロール）が吸収する */
-    #battle.screen { overflow: hidden; gap: 4px; }
+    #battle.screen { overflow: hidden; gap: 3px; }
+    /* 「力を溜めている」の表示は、絵の領域の上に重ねる（行を増やさない） */
+    #battle .ehead { position: relative; }
+    #battle #charge { position: absolute; right: 6px; top: calc(100% + 3px + var(--arena-h, 190px) - 26px); z-index: 4; font-size: 11px; }
     #battle > * { flex-shrink: 0; }
     #battle .arena { height: var(--arena-h, 190px); }
     #battle #allies { gap: 1px; }
@@ -765,7 +768,7 @@ const TOP_BAR_H = 122;             // 表示枠（Claudeなど）の浮かぶバ
 const TOP_BAR_GAP = 6;             // バーの下から最初の内容までのすき間
 const PAD_BTN_H = 52, PAD_BTN_W = 64, PAD_GAP = 6;   // 十字ボタン（3段で約170px）
 const ARENA_MIN_H = 190, ARENA_MIN_H_LOW = 160, LOW_SCREEN_H = 700;   // バトルの絵の領域（縮めない）。低い画面は160
-const PARTY_ROW_H = 38;            // バトルの味方の欄（1体1行、状態はタグで同じ行に）
+const PARTY_ROW_H = 38, PARTY_ROW_H_LOW = 36;   // バトルの味方の欄（1体1行、状態はタグで同じ行に）。低い画面は36
 const BATTLE_LOG_H = 48, MOVE_INFO_H = 48, MOVE_BTN_H = 52;
 const STATUS_TAG_MAX = 2;          // 味方の欄に出す状態のタグの数（残りは「+n」）
 const STATUS_DETAIL_MS = 2000;     // 味方の欄をタップしたとき、状態の説明を出す時間
@@ -1560,7 +1563,7 @@ function applyLayoutVars() {
   const px = (k, v) => r.setProperty(k, v + "px");
   px("--top-bar-narrow", TOP_BAR_H); px("--top-gap-narrow", TOP_BAR_GAP);
   px("--pad-h", PAD_BTN_H); px("--pad-w", PAD_BTN_W); px("--pad-gap", PAD_GAP);
-  px("--arena-h", arenaHeight()); px("--party-row-h", PARTY_ROW_H);
+  px("--arena-h", arenaHeight()); px("--party-row-h", window.innerHeight < LOW_SCREEN_H ? PARTY_ROW_H_LOW : PARTY_ROW_H);
   px("--blog-h", BATTLE_LOG_H); px("--minfo-h", MOVE_INFO_H); px("--move-h", MOVE_BTN_H);
 }
 
@@ -3231,7 +3234,7 @@ function showSelect() {
   list.textContent = "";
   START_TYPES.forEach((t, i) => {
     const b = el("button", "typeCard");
-    b.append(spriteEl(t.sprite, 3, false));
+    b.append(spriteEl(t.sprite, isNarrow() ? 2 : 3, false));
     const nm = el("div", "tname"); nm.append(el("span", "k", String(i + 1)), t.label, el("span", "role", t.role), el("small", "", t.name));
     const st = el("div", "stats");
     const add = (k, v) => { const s = el("span", "", k + " "); s.append(el("b", "", v)); st.append(s); };
