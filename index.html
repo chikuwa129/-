@@ -73,6 +73,10 @@
   #mapWrap { position: relative; }
   #mini { position: absolute; top: 4px; right: 4px; border: 1px solid #50525c; cursor: pointer; }
   #mini[hidden] { display: none; }
+  #stairsBtn { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); padding: 10px 18px; font-size: 15px; font-weight: bold;
+    background: var(--ok); color: #fff; border: 2px solid #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.6); white-space: nowrap; }
+  #stairsBtn.walking { background: #26272d; }
+  #stairsBtn[hidden] { display: none; }
   #miniFull { position: fixed; inset: 0; z-index: 30; background: rgba(0,0,0,.88); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
   #miniFull[hidden] { display: none; }
   #miniFull .hint { font-size: 12px; color: #aaa; }
@@ -362,7 +366,7 @@
       <div id="floorLabel">1F</div>
       <div id="teamRows"></div>
     </div>
-    <div id="mapWrap"><canvas id="cv"></canvas><canvas id="mini" class="px" hidden></canvas></div>
+    <div id="mapWrap"><canvas id="cv"></canvas><canvas id="mini" class="px" hidden></canvas><button id="stairsBtn" hidden>階段へ向かう（T）</button></div>
     <div class="log" id="mapLog"><div></div><div></div><div></div></div>
     <div id="controls">
       <div id="pad">
@@ -623,6 +627,11 @@ const BOSSES = {
 };
 const BOSS_PALETTE = { b: "#8a2f2f", d: "#5c1f1f" };
 const FINAL_FLOOR = 10;
+// ダンジョンのデータ（1か所にまとめる）。今は1つ目の遺跡だけ。将来はここに足す（仕掛け、前庭、出る動物の系統など）
+const DUNGEONS = [
+  { key: "ruins", name: "ロボット遺跡", floors: FINAL_FLOOR, bosses: BOSSES, enemyTypes: ENEMY_TYPES,
+    hpScale: ENEMY_HP_SCALE, atkScale: ENEMY_ATK_SCALE, gimmick: null, frontYard: null },
+];
 const BOSS_CHARGE_EVERY = 3;       // 3ターンに1回「力を溜める」→ 次のターンに強攻撃
 const BOSS_HEAVY_MULT = 2;
 const BOSS_HEAVY_ACC_DOWN = 10;
@@ -918,6 +927,8 @@ let settings = { ...DEFAULT_SETTINGS };
 let blinkOn = true;        // 0.5秒ごとに反転（キラキラ、ミニマップの点）
 let fightStats = {};       // ひとうちの記録（階ごと。セーブしない）{ 階: { oneHit, battle } }
 let dropMiss = 0;          // 救済の数え（出発ごとに0。セーブしない）
+let floorDone = false;     // この階を取りきった（メッセージは1回だけ。セーブしない）
+let autoWalking = false;   // 「階段へ向かう」で歩いている
 let mode = "select";    // select | map | battle | menu | over
 let battle = null;
 let menuState = { unit: 0, pending: null };
@@ -1195,6 +1206,7 @@ function pickEnemyType() {
 
 function newFloor() {
   enemies = []; groundItems = [];
+  floorDone = false; autoWalking = false;
   if (isBossFloor(floorNo)) { bossFloor(); return; }
 
   let rooms = generateMap();
@@ -2846,6 +2858,66 @@ function renderMap() {
   }
   updateStatus();
   updateMini();
+  checkFloorDone();
+}
+
+// ================================================================
+//  階段へのスキップ：通常階で、敵（レア個体を含む）とアイテム・パーツを取りきり、階段を見つけているとき
+// ================================================================
+function floorEmpty() {
+  if (!map || isBossFloor(floorNo) || enemies.length || groundItems.length) return false;
+  for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) if (map[y][x] === STAIRS && seen[y][x]) return true;
+  return false;
+}
+function checkFloorDone() {
+  if (!floorDone && mode === "map" && floorEmpty()) {
+    floorDone = true;
+    mapLog("この階には、もう何もないようだ");
+  }
+  const b = $("stairsBtn");
+  b.hidden = !(floorDone && mode === "map" && !isBossFloor(floorNo));
+  b.classList.toggle("walking", autoWalking);
+  b.textContent = autoWalking ? "止める（キー・タップ）" : "階段へ向かう（T）";
+}
+// 階段までの最短の道の最初の一歩（階の地図の歩ける床で探す。未探索のマスも通る）
+function stepToStairs() {
+  const key = (x, y) => y * MAP_W + x, prev = new Map([[key(pos.x, pos.y), null]]), q = [[pos.x, pos.y]];
+  while (q.length) {
+    const [x, y] = q.shift();
+    if (map[y][x] === STAIRS) {
+      let k = key(x, y), d = null;
+      while (prev.get(k)) { d = prev.get(k)[2]; k = prev.get(k)[0]; }
+      return d;
+    }
+    for (const [dd, [dx, dy]] of Object.entries(DIRS)) {
+      if (dd === "wait") continue;
+      const nx = x + dx, ny = y + dy, k = key(nx, ny);
+      if (nx < 0 || ny < 0 || nx >= MAP_W || ny >= MAP_H || map[ny][nx] === WALL || prev.has(k)) continue;
+      prev.set(k, [key(x, y), 0, dd]); q.push([nx, ny]);
+    }
+  }
+  return null;
+}
+function startAutoWalk() {
+  if (!floorDone || mode !== "map" || autoWalking || miniOpen || recruitState) return;
+  autoWalking = true;
+  checkFloorDone();
+  walkStep();
+}
+function stopAutoWalk() {
+  if (!autoWalking) return;
+  autoWalking = false;
+  if (mode === "map") checkFloorDone();
+}
+function walkStep() {
+  if (!autoWalking) return;
+  if (mode !== "map" || miniOpen || recruitState) { stopAutoWalk(); return; }
+  const f = floorNo, d = stepToStairs();
+  if (!d) { stopAutoWalk(); return; }
+  playerMove(d);
+  // 階を移った・バトルに入ったら終わり
+  if (floorNo !== f || mode !== "map") { autoWalking = false; return; }
+  setTimeout(walkStep, AUTO_WALK_MS);
 }
 const rareGlintShown = e => Math.hypot(e.x - pos.x, e.y - pos.y) <= RARE_VISIBLE_DIST;
 // レア個体がマップに見えているか（アイコンか光点）
@@ -3343,6 +3415,8 @@ document.addEventListener("keydown", ev => {
     if (["Escape", "n", "N", "m", "M", "Enter", " "].includes(ev.key)) { ev.preventDefault(); toggleMini(false); }
     return;
   }
+  if (autoWalking) { ev.preventDefault(); stopAutoWalk(); return; }
+  if ((ev.key === "t" || ev.key === "T") && floorDone) { ev.preventDefault(); startAutoWalk(); return; }
   if (ev.key === "n" || ev.key === "N") { ev.preventDefault(); toggleMini(true); return; }
   if (ev.key === "m" || ev.key === "M") { ev.preventDefault(); openMenu(); return; }
   const dir = KEYMAP[ev.key];
@@ -3372,6 +3446,9 @@ document.querySelectorAll("#pad button").forEach(btn => {
 });
 $("menuBtn").addEventListener("click", () => { if (!miniOpen) openMenu(); });
 $("miniBtn").addEventListener("click", () => toggleMini());
+$("stairsBtn").addEventListener("click", ev => { ev.stopPropagation(); if (autoWalking) stopAutoWalk(); else startAutoWalk(); });
+// 歩いている間に画面をタップすると止まる（ボタン自体は上で処理する）
+document.addEventListener("pointerdown", ev => { if (autoWalking && ev.target !== $("stairsBtn")) stopAutoWalk(); }, true);
 $("mini").addEventListener("click", () => toggleMini(true));
 $("miniFull").addEventListener("click", () => toggleMini(false));
 $("menuClose").addEventListener("click", closeMenu);
