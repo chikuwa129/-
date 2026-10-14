@@ -9,14 +9,21 @@
     color-scheme: dark;
     --bg: #101114; --panel: #1a1b20; --line: #34363e; --fg: #dcdde2; --dim: #8a8c96;
     --hp: #e5534b; --en: #43b4f0; --accent: #ffd447; --ok: #3fae6a; --boss: #ff5a5a;
-    /* 上端・下端の安全な余白。表示枠（Claudeなど）の浮かぶバーの分は、狭い画面だけ足す */
+    /* 上端・下端の安全な余白（ここで1回だけ数える）。
+       表示枠（Claudeなど）の浮かぶバーは、iPhoneで画面の上端から約118pt（ステータスバーを含む）。
+       ステータスバーの分は env(safe-area-inset-top)、残りの約62ptは狭い画面だけ足す */
+    --inset-top: env(safe-area-inset-top, 0px);
+    --inset-bottom: env(safe-area-inset-bottom, 0px);
     --frame-top: 0px;
-    --safe-top: calc(env(safe-area-inset-top, 0px) + var(--frame-top));
-    --safe-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    --safe-top: calc(var(--inset-top) + var(--frame-top));
+    --safe-bottom: calc(var(--inset-bottom) + 12px);
+    /* 外側（公開ページの枠）が付ける余白は使わない（二重に数えないように） */
+    padding: 0 !important;
   }
-  @media (max-width: 600px) { :root { --frame-top: 56px; } }
+  @media (max-width: 600px) { :root { --frame-top: 62px; } }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
+  html { scroll-padding-top: 0 !important; }
   body {
     margin: 0; background: var(--bg); color: var(--fg);
     font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Meiryo", sans-serif;
@@ -98,18 +105,19 @@
   .log div:nth-child(2) { opacity: .75; }
 
   #controls { display: flex; align-items: center; gap: 18px; }
-  #pad { display: grid; grid-template-columns: repeat(3, 58px); grid-template-rows: repeat(3, 48px); gap: 6px; }
+  #pad { display: grid; grid-template-columns: repeat(3, 64px); grid-template-rows: repeat(3, 52px); gap: 6px; }
   #pad button, #menuBtn, #miniBtn { font-size: 20px; background: #26272d; border: 1px solid #50525c; border-radius: 10px; }
   #pad button:active, #menuBtn:active, #miniBtn:active { background: #3a3c44; }
   #sideBtns { display: flex; flex-direction: column; gap: 8px; }
-  #miniBtn { width: 76px; height: 48px; font-size: 15px; }
+  #miniBtn { width: 76px; height: 76px; font-size: 15px; }
   #pad .wait { font-size: 13px; }
-  #menuBtn { width: 76px; height: 62px; font-size: 15px; }
+  #menuBtn { width: 76px; height: 82px; font-size: 15px; }
   #help { font-size: 12px; color: #666; text-align: center; }
   @media (hover: hover) and (pointer: fine) {
     #pad { grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(3, 40px); }
     #pad button { font-size: 16px; }
     #menuBtn { height: 52px; }
+    #miniBtn { height: 48px; }
   }
   @media (pointer: coarse) { #help { display: none; } }
 
@@ -331,6 +339,23 @@
   .mheadBtns { display: flex; gap: 8px; }
   #btnBackVillage { padding: 8px 12px; font-size: 14px; background: #3a2a1c; border: 1px solid #a8743a; border-radius: 8px; }
   .debug { position: fixed; right: 6px; bottom: calc(var(--safe-bottom) - 6px); font-size: 11px; color: #f5d; }
+  /* 狭い画面：使える高さ（100dvh）にぴったり収める。マップ画面は、ヘッダー・マップ（残り）・メッセージ・操作ボタンの順 */
+  @media (max-width: 600px) {
+    #app { padding-top: calc(var(--safe-top) + 4px); height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; }
+    #app > .screen { flex: 1; min-height: 0; overflow-y: auto; }
+    #mapScreen.screen { overflow: hidden; gap: 6px; }
+    #mapScreen > * { flex-shrink: 0; }
+    #mapWrap { flex: 1 1 0; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    #status { grid-template-columns: auto minmax(0, 1fr); align-items: start; column-gap: 8px; font-size: 12px; }
+    #floorLabel { font-size: 14px; line-height: 16px; }
+    #teamRows { gap: 2px; min-height: calc(3 * 16px + 4px); }
+    .trow { grid-template-columns: minmax(0, 1fr) 64px 58px 64px; line-height: 16px; }
+    #mapScreen .log { height: calc(3 * 1.45em + 8px); }
+    #title h1 { margin-top: 8px; }
+    #select h1 { font-size: 20px; margin: 0; }
+    .typeCard { padding: 7px 10px; gap: 2px 10px; }
+    .overlay { padding: calc(var(--safe-top) + 6px) 12px var(--safe-bottom); }
+  }
 </style>
 </head>
 <body>
@@ -685,7 +710,9 @@ const FLASH_COLORS = { heal: "rgba(80,230,120,.35)", guard: "rgba(90,220,255,.35
 
 // マップ
 const MAP_W = 36, MAP_H = 28, FOV_RADIUS = 6;
-const VIEW_MAX = 15, VIEW_MIN_COLS = 13, VIEW_MIN_ROWS = 8;    // 表示するマス数（画面に合わせて決める。縦の短いスマホでは8行まで減らして2倍を保つ）
+const VIEW_MAX = 15, VIEW_MIN_COLS = 13, VIEW_MIN_ROWS = 11;   // 表示するマス数（画面に合わせて決める）
+const VIEW_MIN_ROWS_NARROW = 5;    // 狭い画面：高さが足りないときは行数を減らして、拡大率を保つ（プレイヤーは常に中央付近）
+const NARROW_MAX = 600;            // この幅以下は「狭い画面」（CSSの max-width: 600px と同じ）
 const ROOM_TRIES = 50, ROOM_MAX = 9;
 
 // ================================================================
@@ -2790,17 +2817,20 @@ function resize() {
   if (!team || !map) return;
   const availW = Math.min(window.innerWidth, 520) - 24;
   const others = $("mapScreen").offsetHeight - cv.offsetHeight;
-  // #app の上下の余白（表示枠のバー、ホームバーの分を含む）を引く
+  // 狭い画面は、マップの枠（ヘッダー・メッセージ・操作ボタンの残り）の高さに収める。
+  // 広い画面は今までどおり、画面の高さからほかの要素の分を引く
   const as = getComputedStyle($("app"));
-  const availH = window.innerHeight - others - parseFloat(as.paddingTop) - parseFloat(as.paddingBottom) - 8;
-  // 画面に収まる最大の整数倍。マス数は 13〜15 列、11〜15 行の範囲で合わせる
+  const narrow = window.innerWidth <= NARROW_MAX;
+  const availH = narrow ? $("mapWrap").clientHeight
+    : window.innerHeight - others - parseFloat(as.paddingTop) - parseFloat(as.paddingBottom) - 8;
+  // 画面に収まる最大の整数倍。列数は幅で決め（13〜15列）、行数は高さに収まるだけ（足りなければ減らす）
   let pick = null;
   for (let s = 4; s >= 1; s--) {
     const cols = Math.min(VIEW_MAX, Math.floor(availW / (MAP_N * s)));
     const rows = Math.min(VIEW_MAX, Math.floor(availH / (MAP_N * s)));
-    if (cols >= VIEW_MIN_COLS && rows >= VIEW_MIN_ROWS) { pick = { s, cols, rows }; break; }
+    if (cols >= VIEW_MIN_COLS && rows >= (narrow ? VIEW_MIN_ROWS_NARROW : VIEW_MIN_ROWS)) { pick = { s, cols, rows }; break; }
   }
-  if (!pick) pick = { s: 1, cols: VIEW_MAX, rows: VIEW_MAX };
+  if (!pick) pick = { s: 1, cols: VIEW_MAX, rows: Math.max(1, Math.min(VIEW_MAX, Math.floor(availH / MAP_N))) };
   mapScale = pick.s; viewCols = pick.cols; viewRows = pick.rows;
   pxRatio = Math.max(1, Math.round(window.devicePixelRatio || 1));
   const T = MAP_N * mapScale;
