@@ -9,7 +9,12 @@
     color-scheme: dark;
     --bg: #101114; --panel: #1a1b20; --line: #34363e; --fg: #dcdde2; --dim: #8a8c96;
     --hp: #e5534b; --en: #43b4f0; --accent: #ffd447; --ok: #3fae6a; --boss: #ff5a5a;
+    /* 上端・下端の安全な余白。表示枠（Claudeなど）の浮かぶバーの分は、狭い画面だけ足す */
+    --frame-top: 0px;
+    --safe-top: calc(env(safe-area-inset-top, 0px) + var(--frame-top));
+    --safe-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
   }
+  @media (max-width: 600px) { :root { --frame-top: 56px; } }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body {
@@ -26,7 +31,7 @@
   #app {
     max-width: 520px; margin: 0 auto; min-height: 100%;
     display: flex; flex-direction: column; align-items: center;
-    padding: 8px 12px;
+    padding: calc(var(--safe-top) + 8px) 12px var(--safe-bottom);
   }
   .screen { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
   [hidden] { display: none !important; }
@@ -39,9 +44,9 @@
   .low { color: var(--hp) !important; }
 
   /* タイプ選択 */
-  #select h1 { font-size: 22px; margin: 12px 0 0; letter-spacing: .04em; }
+  #select h1 { font-size: 22px; margin: 4px 0 0; letter-spacing: .04em; }
   #select p.lead { margin: 0; color: var(--dim); font-size: 13px; text-align: center; }
-  #typeList { width: 100%; display: grid; gap: 10px; }
+  #typeList { width: 100%; display: grid; gap: 8px; }
   .typeCard {
     width: 100%; text-align: left; padding: 10px 12px; border-radius: 10px;
     background: var(--panel); border: 1px solid #50525c;
@@ -77,7 +82,7 @@
     background: var(--ok); color: #fff; border: 2px solid #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.6); white-space: nowrap; }
   #stairsBtn.walking { background: #26272d; }
   #stairsBtn[hidden] { display: none; }
-  #miniFull { position: fixed; inset: 0; z-index: 30; background: rgba(0,0,0,.88); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+  #miniFull { position: fixed; inset: 0; z-index: 30; padding: var(--safe-top) 12px var(--safe-bottom); background: rgba(0,0,0,.88); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
   #miniFull[hidden] { display: none; }
   #miniFull .hint { font-size: 12px; color: #aaa; }
   #miniBig { border: 1px solid #50525c; }
@@ -196,7 +201,7 @@
   /* オーバーレイ */
   .overlay {
     position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,0.82); padding: 16px;
+    background: rgba(0,0,0,0.82); padding: calc(var(--safe-top) + 16px) 16px calc(var(--safe-bottom) + 4px);
   }
   .dialog {
     width: 100%; max-width: 480px; max-height: 100%; overflow-y: auto;
@@ -245,6 +250,10 @@
   .mhead h2 { margin: 0; }
   #menuClose { padding: 8px 18px; font-size: 15px; background: var(--ok); color: #fff; border: none; border-radius: 8px; }
   /* メニューの固定ヘッダー（タイトル・タブ・選んでいる機体のHPとEN）。スマホで画面の1/3以内 */
+  /* メニューの下端の操作バー（上の「とじる」「村に戻る」が押しにくいときの逃げ道） */
+  .mfoot { position: sticky; bottom: -14px; z-index: 2; margin: 8px -16px -14px; padding: 8px 16px 10px; display: flex; gap: 8px; justify-content: flex-end; background: var(--panel); border-top: 1px solid var(--line); }
+  .mfoot button { min-height: 44px; padding: 8px 18px; font-size: 15px; border-radius: 8px; }
+  .mfoot #menuClose2 { background: var(--ok); color: #fff; border: none; flex: 1; max-width: 200px; }
   .mstick { position: sticky; top: -14px; z-index: 2; margin: -14px -16px 8px; padding: 0 16px 4px; background: var(--panel); border-bottom: 1px solid var(--line); }
   .mstick .mhead { position: static; margin: 0 -16px; padding: 10px 16px 6px; border-bottom: none; }
   #menu .tabs { flex-wrap: nowrap; overflow-x: auto; }
@@ -321,7 +330,7 @@
   .dlgBtns button.primary { background: var(--ok); color: #fff; border: none; }
   .mheadBtns { display: flex; gap: 8px; }
   #btnBackVillage { padding: 8px 12px; font-size: 14px; background: #3a2a1c; border: 1px solid #a8743a; border-radius: 8px; }
-  .debug { position: fixed; right: 6px; bottom: 6px; font-size: 11px; color: #f5d; }
+  .debug { position: fixed; right: 6px; bottom: calc(var(--safe-bottom) - 6px); font-size: 11px; color: #f5d; }
 </style>
 </head>
 <body>
@@ -423,6 +432,7 @@
       <div id="menuUnitHead"></div>
     </div>
     <div id="menuBody"></div>
+    <div class="mfoot"><button id="btnBackVillage2" hidden>村に戻る</button><button id="menuClose2">とじる</button></div>
   </div>
 </div>
 
@@ -675,7 +685,7 @@ const FLASH_COLORS = { heal: "rgba(80,230,120,.35)", guard: "rgba(90,220,255,.35
 
 // マップ
 const MAP_W = 36, MAP_H = 28, FOV_RADIUS = 6;
-const VIEW_MAX = 15, VIEW_MIN_COLS = 13, VIEW_MIN_ROWS = 11;   // 表示するマス数（画面に合わせて決める）
+const VIEW_MAX = 15, VIEW_MIN_COLS = 13, VIEW_MIN_ROWS = 8;    // 表示するマス数（画面に合わせて決める。縦の短いスマホでは8行まで減らして2倍を保つ）
 const ROOM_TRIES = 50, ROOM_MAX = 9;
 
 // ================================================================
@@ -2477,7 +2487,7 @@ function renderMenu() {
     tabs.append(pt);
   }
   $("menuJunk").textContent = `ジャンク ×${inv.junk || 0}（使い道は今後追加）`;
-  $("btnBackVillage").hidden = menuFrom !== "map";
+  $("btnBackVillage").hidden = $("btnBackVillage2").hidden = menuFrom !== "map";
   if (ms.tab === "party") { renderParty(); return; }
   // 固定ヘッダー：選んでいる機体のHPとEN（アイテムを使った直後は「25 → 40」）
   const uh = $("menuUnitHead");
@@ -2618,7 +2628,7 @@ function renderMenu() {
 
 
   // 「村に戻る」はマップから開いたときだけ（見出しに常に表示）
-  $("btnBackVillage").hidden = menuFrom !== "map";
+  $("btnBackVillage").hidden = $("btnBackVillage2").hidden = menuFrom !== "map";
 }
 
 // ---- メニュー：「仲間」タブ（村だけ）。チーム（最大3体）とストック（最大20体）の入れ替え、解体 ----
@@ -2780,7 +2790,9 @@ function resize() {
   if (!team || !map) return;
   const availW = Math.min(window.innerWidth, 520) - 24;
   const others = $("mapScreen").offsetHeight - cv.offsetHeight;
-  const availH = window.innerHeight - others - 16;
+  // #app の上下の余白（表示枠のバー、ホームバーの分を含む）を引く
+  const as = getComputedStyle($("app"));
+  const availH = window.innerHeight - others - parseFloat(as.paddingTop) - parseFloat(as.paddingBottom) - 8;
   // 画面に収まる最大の整数倍。マス数は 13〜15 列、11〜15 行の範囲で合わせる
   let pick = null;
   for (let s = 4; s >= 1; s--) {
@@ -2986,7 +2998,9 @@ function updateMini(blinkOnly) {
 // 画面いっぱいの地図（狭い画面はボタンかNキーで開く。広い画面でも拡大して見られる）
 function paintBigMini() {
   const big = $("miniBig");
-  const s = Math.max(1, Math.floor(Math.min((window.innerWidth - 24) / MAP_W, (window.innerHeight - 70) / MAP_H)));
+  const cs = getComputedStyle($("miniFull"));
+  const availH = window.innerHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 30;
+  const s = Math.max(1, Math.floor(Math.min((window.innerWidth - 24) / MAP_W, availH / MAP_H)));
   const w = MAP_W * s * pxRatio, h = MAP_H * s * pxRatio;
   if (big.width !== w || big.height !== h) { big.width = w; big.height = h; }
   big.style.width = MAP_W * s + "px"; big.style.height = MAP_H * s + "px";
@@ -3459,12 +3473,14 @@ document.addEventListener("pointerdown", ev => { if (autoWalking && ev.target !=
 $("mini").addEventListener("click", () => toggleMini(true));
 $("miniFull").addEventListener("click", () => toggleMini(false));
 $("menuClose").addEventListener("click", closeMenu);
+$("menuClose2").addEventListener("click", closeMenu);
 $("retry").addEventListener("click", () => goVillage());
 $("btnDepart").addEventListener("click", openDepart);
 $("btnGo").addEventListener("click", decide);
 $("btnOther").addEventListener("click", openOther);
 $("otherClose").addEventListener("click", closeOther);
 $("btnBackVillage").addEventListener("click", askReturnVillage);
+$("btnBackVillage2").addEventListener("click", askReturnVillage);
 $("btnVillageMenu").addEventListener("click", openMenu);
 $("btnNewFromVillage").addEventListener("click", askNewGame);
 $("btnNewFromTitle").addEventListener("click", askNewGame);
