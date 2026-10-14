@@ -386,7 +386,7 @@ const DEFEAT_PENALTY = {
 
 // セーブ（localStorage）
 const SAVE_KEY = "robotRuinsSave";
-const SAVE_VERSION = 2;            // 2：わざの統合（防御と固有技のレベル、設定）。1 は読み込み時に移行する
+const SAVE_VERSION = 3;            // 3：パーツの強化値と設定の追加。2・1 は読み込み時に移行する
 
 // 村から出発できる階（条件を満たしたものだけ選べる）
 const DEPARTURES = [
@@ -448,11 +448,17 @@ const PARTS = [
 ];
 const PART_TYPE_LABEL = { gun: "ガン", missile: "ミサイル", laser: "レーザー" };
 const SLOT_COUNT = 2;
+// 成長：レベルで与えるダメージが伸びる（倍率 = 1 + 係数×(Lv-1)）。同じパーツを拾うと強化（+1〜+5）
+const LEVEL_DAMAGE_COEF = 0.05;
+const PLUS_COEF = 0.08;            // 強化値1つにつき威力+8%
+const PLUS_MAX = 5;
 const INVENTORY_MAX = 30;
 const expectedDamage = p => p.power * p.acc / 100;   // 期待ダメージ（自動装備・おまかせ装備で比べる）
 
 // 落とし物
-const PART_DROP_RATE = 0.25;       // 通常の敵がパーツを落とす確率
+const DROP_CHANCE = 0.35;          // 通常の敵がパーツを落とす確率
+const DROP_PITY_AFTER = 4;         // 通常の敵を続けてこの数だけ倒して1個も落ちなかったら、次は必ず落とす
+const FLOOR_PARTS = 1;             // 通常階に置くパーツの数
 const ITEM_DROP_RATE = 0.35;
 // 通常の敵が落とすパーツのレア度の確率 [ノーマル, レア, スーパーレア, レジェンド]
 const DROP_RARITY = [
@@ -702,7 +708,10 @@ let team, inv, pos, bestLevel, partUid = 0;
 let typeKey = null;
 let progress = null;     // { maxFloor, bossDefeated: {5, 10}, cleared }
 let saveFailed = false;
-let settings = { fx: true, instant: false };   // 演出、確認なしで即実行（セーブに含める）
+// 設定（セーブに含める）：演出、確認なしで即実行、仲間のおまかせ、ひとうち、ミニマップの常時表示、一括回復の確認なし
+const DEFAULT_SETTINGS = { fx: true, instant: false, allyAuto: true, oneHit: true, miniMap: true, bulkNoConfirm: false };
+let settings = { ...DEFAULT_SETTINGS };
+let dropMiss = 0;          // 救済の数え（出発ごとに0。セーブしない）
 let mode = "select";    // select | map | battle | menu | over
 let battle = null;
 let menuState = { unit: 0, pending: null, confirmRelease: false };
@@ -762,12 +771,31 @@ function uniqueName(base) {
 const partOf = item => partById(item.id);
 const isEquipped = item => team.some(u => u.equip.includes(item));
 const partText = p => `${p.name}${RARITY[p.rarity].stars}`;
+const plusText = item => item && item.plus ? `+${item.plus}` : "";
+const itemName = item => partOf(item).name + plusText(item);                 // 「ハンドガンK7+2」
+const itemText = item => itemName(item) + RARITY[partOf(item).rarity].stars;  // ★付き
+const itemPower = item => partOf(item).power * (1 + PLUS_COEF * (item.plus || 0));   // 強化値の威力（小数のまま）
+const itemExpected = item => itemPower(item) * partOf(item).acc / 100;            // 自動装備で比べる期待ダメージ
+const levelMult = u => 1 + LEVEL_DAMAGE_COEF * (u.lv - 1);
 
+// パーツを手に入れる。同じ名前のパーツを持っていれば（持ち物＋装備）、それを+1強化する。
+// noMerge=強化しないで新しく入れる（初期パーツ、仲間の初期パーツ）
+function gainPart(id, opts = {}) {
+  if (!opts.noMerge) {
+    const same = inv.parts.filter(i => i.id === id && (i.plus || 0) < PLUS_MAX);
+    if (same.length) {
+      same.sort((a, b) => (b.plus || 0) - (a.plus || 0) || (isEquipped(b) ? 1 : 0) - (isEquipped(a) ? 1 : 0));
+      const t = same[0];
+      t.plus = (t.plus || 0) + 1;
+      return { item: t, upgraded: true, unit: null, swapped: null, discarded: [] };
+    }
+  }
+  return addPart(id, opts.prefer);
+}
 // 持ち物に入れて、自動装備する。prefer=最初に空き枠を探す機体（仲間の初期パーツ用）
 function addPart(id, prefer) {
-  const item = { id, uid: ++partUid };
+  const item = { id, uid: ++partUid, plus: 0 };
   inv.parts.push(item);
-  const p = partById(id);
   let res = { item, unit: null, swapped: null };
   // 1. 空き枠に装備（prefer → チームの並び順）
   const order = prefer ? [prefer, ...team.filter(u => u !== prefer)] : team;
@@ -781,10 +809,10 @@ function addPart(id, prefer) {
     for (const u of team) {
       if (u.manual) continue;
       u.equip.forEach((e, slot) => {
-        if (e && (!worst || expectedDamage(partOf(e)) < expectedDamage(partOf(worst.e)))) worst = { u, slot, e };
+        if (e && (!worst || itemExpected(e) < itemExpected(worst.e))) worst = { u, slot, e };
       });
     }
-    if (worst && expectedDamage(p) > expectedDamage(partOf(worst.e))) {
+    if (worst && itemExpected(item) > itemExpected(worst.e)) {
       worst.u.equip[worst.slot] = item;
       res.unit = worst.u; res.swapped = worst.e;
     }
@@ -798,7 +826,7 @@ function trimInventory() {
   while (inv.parts.length > INVENTORY_MAX) {
     const free = inv.parts.filter(i => !isEquipped(i));
     if (!free.length) break;
-    free.sort((a, b) => expectedDamage(partOf(a)) - expectedDamage(partOf(b)));
+    free.sort((a, b) => itemExpected(a) - itemExpected(b));
     const drop = free[0];
     inv.parts = inv.parts.filter(i => i !== drop);
     out.push(drop);
@@ -806,21 +834,19 @@ function trimInventory() {
   return out;
 }
 // パーツを手に入れたときのメッセージ（レア度の色）
-function logPartGain(res, verb) {
+function logPartGain(res, verb, out = log) {
   const p = partOf(res.item), r = RARITY[p.rarity];
+  if (res.upgraded) { out(`『${p.name}』が強化された！（+${res.item.plus}）`, r.color); return; }
   const rareTag = p.rarity > 0 ? `（${r.name}${r.stars}）` : "";
   let tail = "";
-  if (res.swapped) tail = `${res.unit.name}の『${partOf(res.swapped).name}』と入れ替えた`;
+  if (res.swapped) tail = `${res.unit.name}の『${itemName(res.swapped)}』と入れ替えた`;
   else if (res.unit) tail = `${res.unit.name}に装備`;
-  log(`『${p.name}』${rareTag}を${verb}！${tail ? `（${tail}）` : ""}`, r.color);
-  for (const d of res.discarded || []) log(`持ち物がいっぱいなので『${partText(partOf(d))}』を捨てた。`);
+  out(`『${p.name}』${rareTag}を${verb}！${tail ? `（${tail}）` : ""}`, r.color);
+  for (const d of res.discarded || []) out(`持ち物がいっぱいなので『${itemText(d)}』を捨てた。`);
 }
 // おまかせ装備：期待ダメージの高い順（同じなら消費ENの低い順）に、並び順の機体へ2つずつ
 function autoEquipAll() {
-  const sorted = inv.parts.slice().sort((a, b) => {
-    const pa = partOf(a), pb = partOf(b);
-    return expectedDamage(pb) - expectedDamage(pa) || pa.en - pb.en;
-  });
+  const sorted = inv.parts.slice().sort((a, b) => itemExpected(b) - itemExpected(a) || partOf(a).en - partOf(b).en);
   let k = 0;
   for (const u of team) {
     u.manual = false;
@@ -951,6 +977,14 @@ function newFloor() {
     const p = freeCellIn(rooms[rnd(rooms.length)]);
     if (p) groundItems.push({ x: p.x, y: p.y, key: Math.random() < 0.5 ? "repair" : "cell" });
   }
+  // 階のどこかにパーツを1個（階段のすぐ近くは避ける）。系統はランダム、レア度は階の表
+  for (let i = 0, placed = 0; i < 40 && placed < FLOOR_PARTS; i++) {
+    const p = freeCellIn(rooms[rnd(rooms.length)]);
+    if (!p || Math.abs(p.x - s.x) + Math.abs(p.y - s.y) <= 2) continue;
+    const types = Object.keys(PART_TYPE_LABEL);
+    groundItems.push({ x: p.x, y: p.y, key: "part", part: floorRarityPart(types[rnd(types.length)]) });
+    placed++;
+  }
   updateFov();
 }
 
@@ -1072,7 +1106,7 @@ function pickUpGround() {
   if (!it) return;
   groundItems = groundItems.filter(i => i !== it);
   if (it.key === "part") {
-    logPartGain(addPart(it.part), "拾った");
+    logPartGain(gainPart(it.part), "拾った");
   } else {
     inv.items[it.key]++;
     log(`${ITEMS[it.key].name}を拾った。（所持${inv.items[it.key]}）`);
@@ -1244,8 +1278,8 @@ function moveKeys(u) {
 function moveDef(u, key) {
   if (key === "tackle" || key === "guard") return MOVES[key];
   if (key === "unique") return MOVES[u.unique];
-  const p = partOf(u.equip[+key.slice(4)]);
-  return { id: key, name: p.name, kind: "part", en: p.en, acc: p.acc, target: "enemy", effect: "damage", element: null, part: p };
+  const item = u.equip[+key.slice(4)], p = partOf(item);
+  return { id: key, name: itemName(item), kind: "part", en: p.en, acc: p.acc, target: "enemy", effect: "damage", element: null, part: p, item };
 }
 function partEnCost(u, p) {
   const t = typeOf(u);
@@ -1275,15 +1309,15 @@ function moveInfo(u, key) {
   const info = { key, def: d, name: d.name, kind: d.kind, lv, en: 0, damaging: false, hits: 1, power: 0, acc: null, sure: false, desc: "", short: "" };
   const tk = tackleOf(u), vsBoss = !!(battle && battle.enemy.boss);
   if (key === "tackle") {
-    Object.assign(info, { damaging: true, power: tk, acc: hitChance(u, TACKLE_ACC), short: `威力${tk}`, desc: d.desc });
+    Object.assign(info, { damaging: true, power: tk, acc: hitChance(u, TACKLE_ACC), desc: d.desc });
   } else if (key === "guard") {
     const rec = guardRecover(lv);
     Object.assign(info, { short: `EN+${rec}`, desc: `次に受けるダメージを半分にし、ENを${rec}回復する。攻撃はしない。` });
   } else if (d.kind === "part") {
     const p = d.part;
     info.en = partEnCost(u, p);
-    info.power = u.bs.barrage ? Math.floor(p.power * u.bs.barrage) : p.power;
-    Object.assign(info, { damaging: true, acc: hitChance(u, p.acc, { part: p }), short: `威力${info.power}`,
+    info.power = itemPower(d.item) * (u.bs.barrage || 1);
+    Object.assign(info, { damaging: true, acc: hitChance(u, p.acc, { part: p }),
       desc: `${PART_TYPE_LABEL[p.type]}（${RARITY[p.rarity].name}）。${p.type === "gun" ? "外れにくい堅実な武器。" : p.type === "missile" ? "当たれば大きい一発逆転の武器。" : "強いがENを多く使う武器。"}${u.bs.barrage ? `集中砲火で威力×${u.bs.barrage}、EN半分。` : ""}` });
   } else {
     info.en = d.en;
@@ -1295,14 +1329,19 @@ function moveInfo(u, key) {
       case "cover": { const v = lerpInt(d.lv1, d.lv10, lv); info.value = v; info.short = `かばう−${v}%`; info.desc = `次の敵の攻撃を、狙われた相手に関係なく自分が受ける。受けるダメージ−${v}%。`; break; }
       case "roar": { const v = lerpInt(d.lv1, d.lv10, lv); info.value = vsBoss ? Math.floor(v / 2) : v; info.short = `攻撃−${info.value}%`; info.desc = `敵の攻撃力を${d.turns}ターンの間−${v}%（ボスには半分）。`; break; }
       case "hawkeye": { const v = lerpInt(d.lv1, d.lv10, lv); info.value = v; info.short = `全員命中+${v}%`; info.desc = `味方全員の次の攻撃の命中+${v}%（1人1回ずつ）。`; break; }
-      case "claws": { const m = lerpMul(d.lv1, d.lv10, lv); const per = Math.max(1, Math.round(tk * m / 2));
-        Object.assign(info, { damaging: true, hits: 2, power: per, acc: hitChance(u, TACKLE_ACC, { mod: d.accMod }), short: `威力${per}×2`, desc: `2回攻撃（合計はたいあたりの×${m}）。命中+${d.accMod}%。` }); break; }
+      case "claws": { const m = lerpMul(d.lv1, d.lv10, lv);
+        Object.assign(info, { damaging: true, hits: 2, power: tk * m / 2, acc: hitChance(u, TACKLE_ACC, { mod: d.accMod }), desc: `2回攻撃（合計はたいあたりの×${m}）。命中+${d.accMod}%。` }); break; }
       case "dive": { const m = lerpMul(d.lv1, d.lv10, lv); const pw = Math.max(1, Math.floor(tk * m));
-        Object.assign(info, { damaging: true, power: pw, sure: true, acc: 100, short: `威力${pw}`, desc: `たいあたりの×${m}。必ず当たる。` }); break; }
+        Object.assign(info, { damaging: true, power: pw, sure: true, acc: 100, desc: `たいあたりの×${m}。必ず当たる。` }); break; }
       case "bite": { const m = lerpMul(d.lv1, d.lv10, lv); let pw = Math.max(1, Math.floor(tk * m)); if (vsBoss) pw = Math.floor(pw * d.bossBonus);
-        Object.assign(info, { damaging: true, power: pw, acc: hitChance(u, TACKLE_ACC, { mod: d.accMod }), short: `威力${pw}`,
+        Object.assign(info, { damaging: true, power: pw, acc: hitChance(u, TACKLE_ACC, { mod: d.accMod }),
           desc: `たいあたりの×${m}、命中${d.accMod}%。当たると敵は次のターン動けない（ボスには効かず、代わりにダメージ+20%）。` }); break; }
     }
+  }
+  // レベル倍率（味方のダメージを与えるわざすべて）。四捨五入、最低1
+  if (info.damaging) {
+    info.power = Math.max(1, Math.round(info.power * levelMult(u)));
+    info.short = `威力${info.power}${info.hits > 1 ? `×${info.hits}` : ""}`;
   }
   return info;
 }
@@ -1520,12 +1559,17 @@ async function enemyPhase() {
   endTurn();
 }
 
-// 落とすパーツを決める（系統とレア度）
-function rollNormalDrop(e) {
-  if (Math.random() >= PART_DROP_RATE) return null;
+// 落とすパーツを決める（系統とレア度）。通常の敵は救済つき：続けて DROP_PITY_AFTER 体落とさなかったら、次は必ず落とす
+function floorRarityPart(type) {
   const band = DROP_RARITY.find(b => floorNo <= b.maxFloor) || DROP_RARITY[DROP_RARITY.length - 1];
   const rarity = pickWeighted(band.rates);
-  return PARTS.find(p => p.type === e.def.drop && p.rarity === rarity).id;
+  return PARTS.find(p => p.type === type && p.rarity === rarity).id;
+}
+function rollNormalDrop(e) {
+  const sure = dropMiss >= DROP_PITY_AFTER;
+  if (!sure && Math.random() >= DROP_CHANCE) { dropMiss++; return null; }
+  dropMiss = 0;
+  return floorRarityPart(e.def.drop);
 }
 function rollBossDrop(f) {
   const rarity = pickWeighted(BOSS_DROP_RARITY[f]);
@@ -1558,14 +1602,12 @@ function winBattle() {
   }
 
   if (e.boss) {
-    // 落とし物はボスのいた場所に出る
-    const id = rollBossDrop(floorNo);
-    groundItems.push({ x: e.x, y: e.y, key: "part", part: id });
-    const p = partById(id), r = RARITY[p.rarity];
-    log(`『${p.name}』（${r.name}${r.stars}）が落ちた！ 奥の階段が使える。`, r.color);
+    // ボスのパーツは、倒した瞬間に自動で手に入る
+    logPartGain(gainPart(rollBossDrop(floorNo)), "手に入れた");
+    log("奥の階段が使える。");
   } else {
     const id = rollNormalDrop(e);
-    if (id) logPartGain(addPart(id), "手に入れた");
+    if (id) logPartGain(gainPart(id), "手に入れた");
     if (Math.random() < ITEM_DROP_RATE) {
       const key = Math.random() < 0.5 ? "repair" : "cell";
       inv.items[key]++;
@@ -1585,7 +1627,7 @@ function recruit(e) {
   const u = createUnit({ name: uniqueName(e.name), sprite: e.sprite, kind: def.key,
     hp: def.ally.hp, en: def.ally.en, tackle: def.ally.tackle, lv: leader().lv, unique: ANIMAL_UNIQUE[e.sprite] });
   team.push(u);
-  addPart(def.ally.part, u);
+  gainPart(def.ally.part, { noMerge: true, prefer: u });
   log(`${u.name}が仲間になった！（Lv${u.lv}・固有技「${MOVES[u.unique].name}」）`);
 }
 
@@ -1796,11 +1838,11 @@ function el(tag, cls, text) {
 function partInfo(item, extra) {
   const p = partOf(item), info = el("div", "info");
   const name = el("div");
-  const nm = el("span", "pname", partText(p));
+  const nm = el("span", "pname", itemText(item));
   nm.style.color = RARITY[p.rarity].color;
   name.append(el("span", "tag " + p.type, PART_TYPE_LABEL[p.type]), nm);
   if (extra) name.append(el("span", "eq", extra));
-  info.append(name, el("small", "", `威力${p.power}　命中${p.acc}%　EN${p.en}　期待${expectedDamage(p).toFixed(1)}`));
+  info.append(name, el("small", "", `威力${Math.round(itemPower(item))}　命中${p.acc}%　EN${p.en}　期待${itemExpected(item).toFixed(1)}`));
   return info;
 }
 function rowButton(label, fn, disabled, cls) {
@@ -1863,7 +1905,7 @@ function renderMenu() {
   });
 
   const free = inv.parts.filter(i => !isEquipped(i))
-    .sort((a, b) => expectedDamage(partOf(b)) - expectedDamage(partOf(a)));
+    .sort((a, b) => itemExpected(b) - itemExpected(a));
   body.append(el("h3", "", `持ち物のパーツ（装備していないもの ${free.length}個 ／ 全${inv.parts.length}個・上限${INVENTORY_MAX}）`));
   if (free.length === 0) body.append(el("div", "mrow empty", "ありません。他の機体から外すとここに入ります"));
   for (const item of free) {
@@ -1898,7 +1940,7 @@ function renderMenu() {
   body.append(el("h3", "", "わざ（防御と固有技は、使うたびにレベルアップ）"));
   for (const key of moveKeys(u)) {
     const mi = moveInfo(u, key), row = el("div", "mrow");
-    const head = (mi.kind === "part" ? `パーツ：${partText(mi.def.part)}` : mi.kind === "unique" ? `固有技：${mi.name}` : mi.name) +
+    const head = (mi.kind === "part" ? `パーツ：${itemText(mi.def.item)}` : mi.kind === "unique" ? `固有技：${mi.name}` : mi.name) +
       (mi.lv ? `　Lv${mi.lv}${mi.lv >= SKILL_MAX_LEVEL ? "（最大）" : ""}` : "");
     const info = el("div", "info", head);
     info.append(el("small", "", `EN${mi.en}　${mi.short}${mi.acc != null ? `　命中${mi.acc}%` : ""}　${mi.desc}`));
@@ -2097,7 +2139,7 @@ function startGame(key) {
   progress = { maxFloor: 0, bossDefeated: { 5: false, 10: false }, cleared: false };
   team.push(createUnit({ name: t.name, sprite: t.sprite, isLeader: true, kind: t.key,
     hp: t.hp, en: t.en, tackle: t.tackle, accBonus: t.accBonus, evade: t.evade, enGrowth: t.enGrowth, unique: t.unique }));
-  addPart(t.part, team[0]);
+  gainPart(t.part, { noMerge: true, prefer: team[0] });
   bestLevel = 1;
   goVillage([`${t.label}「${t.name}」で冒険を始める。`]);
 }
@@ -2165,6 +2207,7 @@ function openDepart() {
 }
 
 function depart(floor) {
+  dropMiss = 0;
   hideAllScreens();
   $("mapScreen").hidden = false;
   mode = "map";
@@ -2195,7 +2238,7 @@ function onDefeat() {
     hero.equip[slot] = null;
     inv.parts = inv.parts.filter(i => i !== item);
     const p = partOf(item);
-    msgs.push({ t: `『${p.name}』が壊れた…`, c: RARITY[p.rarity].color });
+    msgs.push({ t: `『${itemName(item)}』が壊れた…`, c: RARITY[p.rarity].color });
   }
   goVillage(msgs);
 }
@@ -2251,6 +2294,7 @@ function saveData() {
     version: SAVE_VERSION, typeKey, progress, partUid, bestLevel, settings: { ...settings },
     items: { ...inv.items },
     parts: inv.parts.map(it => it.id),
+    plus: inv.parts.map(it => it.plus || 0),
     team: team.map(u => ({
       name: u.name, sprite: u.sprite, isLeader: u.isLeader, kind: u.kind,
       baseHp: u.baseHp, baseEn: u.baseEn, baseTackle: u.baseTackle, accBonus: u.accBonus, evade: u.evade,
@@ -2278,7 +2322,8 @@ function readSave() {
   try {
     const d = JSON.parse(raw);
     const okNum = v => typeof v === "number" && isFinite(v);
-    if (!d || (d.version !== SAVE_VERSION && d.version !== 1)) throw 0;   // 1 は移行して読む
+    if (!d || ![1, 2, SAVE_VERSION].includes(d.version)) throw 0;   // 1・2 は移行して読む
+    if (d.version === SAVE_VERSION && (!Array.isArray(d.plus) || d.plus.length !== d.parts.length || !d.plus.every(v => Number.isInteger(v) && v >= 0 && v <= PLUS_MAX))) throw 0;
     if (!START_TYPES.some(t => t.key === d.typeKey)) throw 0;
     if (!Array.isArray(d.parts) || !d.parts.every(id => partById(id))) throw 0;
     if (!d.items || !okNum(d.items.repair) || !okNum(d.items.cell)) throw 0;
@@ -2289,7 +2334,7 @@ function readSave() {
       if (!Array.isArray(u.equip) || u.equip.length !== SLOT_COUNT) throw 0;
       if (!u.equip.every(i => i === null || (Number.isInteger(i) && i >= 0 && i < d.parts.length))) throw 0;
       if (!u.skills || typeof u.skills !== "object") throw 0;
-      if (d.version === SAVE_VERSION && !(okNum(u.skills.guard) && okNum(u.skills.unique))) throw 0;
+      if (d.version >= 2 && !(okNum(u.skills.guard) && okNum(u.skills.unique))) throw 0;
       if (!u.isLeader && !baseOfAlly(u)) throw 0;
     }
     return { status: "ok", data: d };
@@ -2301,15 +2346,18 @@ function readSave() {
 function baseOfAlly(s) {
   return ENEMY_TYPES.find(t => t.key === s.kind) || ENEMY_TYPES.find(t => t.animals.some(a => a.sprite === s.sprite));
 }
-// 読み込み。基本値はいまの定義から作り直す（版1→2：たいあたり+2の廃止、ENの伸び、スキルはLv1から）
+// 読み込み。基本値はいまの定義から作り直す
+// 版1→：たいあたり+2の廃止、ENの伸び、スキルはLv1から。版2→3：パーツの強化値は0、足した設定は初期値
 function applySave(d) {
   const migrated = d.version !== SAVE_VERSION;
+  const skillsReset = d.version < 2;
   typeKey = d.typeKey;
-  if (d.settings) settings = { fx: d.settings.fx !== false, instant: !!d.settings.instant };
+  settings = { ...DEFAULT_SETTINGS };
+  if (d.settings) for (const k of Object.keys(DEFAULT_SETTINGS)) if (typeof d.settings[k] === "boolean") settings[k] = d.settings[k];
   partUid = d.partUid || 0;
   logLines = [];
   progress = { maxFloor: d.progress.maxFloor, bossDefeated: { 5: !!d.progress.bossDefeated[5], 10: !!d.progress.bossDefeated[10] }, cleared: !!d.progress.cleared };
-  inv = { parts: d.parts.map(id => ({ id, uid: ++partUid })), items: { repair: d.items.repair, cell: d.items.cell } };
+  inv = { parts: d.parts.map((id, i) => ({ id, uid: ++partUid, plus: d.version === SAVE_VERSION ? d.plus[i] : 0 })), items: { repair: d.items.repair, cell: d.items.cell } };
   team = d.team.map(s => {
     let u;
     if (s.isLeader) {
@@ -2322,7 +2370,7 @@ function applySave(d) {
         unique: ANIMAL_UNIQUE[s.sprite], lv: s.lv });
     }
     u.exp = s.exp; u.manual = !!s.manual;
-    if (!migrated) {
+    if (!skillsReset) {
       u.skills.guard = Math.min(SKILL_MAX_LEVEL, Math.max(1, s.skills.guard));
       u.skills.unique = Math.min(SKILL_MAX_LEVEL, Math.max(1, s.skills.unique));
     }
@@ -2348,7 +2396,7 @@ function boot() {
   $("titleNote").textContent = r.status === "ok" ? "セーブデータがあります。" : "セーブデータを読めませんでした。はじめから遊べます。";
   $("btnContinue").onclick = () => {
     const migrated = applySave(r.data);
-    goVillage(migrated ? ["つづきから再開した。", "古いセーブデータを新しい形式に移しました（防御と固有技はLv1から）。"] : ["つづきから再開した。"]);
+    goVillage(migrated ? ["つづきから再開した。", r.data.version < 2 ? "古いセーブデータを新しい形式に移しました（防御と固有技はLv1から）。" : "古いセーブデータを新しい形式に移しました。"] : ["つづきから再開した。"]);
   };
 }
 
