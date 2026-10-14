@@ -199,6 +199,38 @@
     background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px;
   }
   .center { text-align: center; }
+  /* 仲間にする画面：中身はスクロール、ボタンは下に固定 */
+  .rcDialog { display: flex; flex-direction: column; padding: 12px 14px; }
+  .rcBody { overflow-y: auto; min-height: 0; flex: 1; }
+  .rcBtns { display: flex; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); margin-top: 8px; }
+  .rcBtns button { flex: 1; min-height: 46px; font-size: 15px; border-radius: 8px; }
+  .rcBtns button.primary { background: var(--ok); color: #fff; border: none; }
+  .rcTop { display: flex; gap: 12px; align-items: center; }
+  .rcTop canvas { flex-shrink: 0; }
+  .rcName { font-size: 19px; font-weight: bold; }
+  .rcStats { display: grid; grid-template-columns: repeat(3, auto); gap: 2px 12px; font-size: 13px; margin-top: 4px; }
+  .rcStats b { font-size: 15px; }
+  .rcSec { margin-top: 8px; padding: 6px 8px; background: #22232a; border-radius: 6px; font-size: 13px; }
+  .rcLabel { color: var(--dim); font-size: 12px; margin-top: 8px; }
+  .rcSec .rcLabel { margin-top: 0; }
+  #menuJunk, .junk { font-size: 12px; color: var(--dim); }
+  #menuJunk { margin: -2px 0 4px; }
+  .partyBar { display: grid; gap: 6px; padding: 6px 0 2px; }
+  .partyBar .pbSel { font-size: 13px; min-height: 1.4em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .partyBar .pbBtns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .partyBar .pbBtns button { min-height: 40px; font-size: 12px; padding: 4px; white-space: nowrap; }
+  .stockList { max-height: 46vh; overflow-y: auto; display: grid; gap: 4px; }
+  .rcSec small { display: block; color: var(--dim); }
+  .rcNote { margin-top: 8px; font-size: 13px; color: var(--accent); }
+  .rcTeam { margin-top: 8px; display: grid; gap: 4px; }
+  .rcUnit { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 6px; background: #1f2026; border-radius: 6px; }
+  .rcUnit canvas { flex-shrink: 0; }
+  .rcTeam, .stockList { grid-template-columns: minmax(0, 1fr); }
+  .rcUnit .rcuText { min-width: 0; flex: 1; }
+  .rcUnit .rcuL { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rcUnit .rcuL + .rcuL { font-size: 11px; }
+  .rcUnit.pick { cursor: pointer; border: 1px solid var(--line); }
+  .rcUnit.pick.on { border-color: var(--accent); }
   .dialog h2 { margin: 0 0 8px; font-size: 21px; }
   .dialog h3 { margin: 14px 0 4px; font-size: 13px; color: var(--dim); letter-spacing: .06em; font-weight: normal; }
   .big { font-size: 17px; padding: 10px 28px; background: var(--ok); color: #fff; border: none; border-radius: 8px; margin-top: 12px; }
@@ -307,6 +339,7 @@
     <div id="villageScene"></div>
     <div class="vstats" id="villageTeam"></div>
     <div class="vinv" id="villageInv"></div>
+    <div class="junk" id="villageJunk"></div>
     <div class="log" id="villageLog"><div></div><div></div><div></div></div>
     <div class="vbtns">
       <button id="btnDepart" class="primary">出発</button>
@@ -381,10 +414,19 @@
   <div class="dialog">
     <div class="mstick">
       <div class="mhead"><h2>メニュー</h2><span class="mheadBtns"><button id="btnBackVillage" hidden>村に戻る</button><button id="menuClose">とじる</button></span></div>
+      <div id="menuJunk"></div>
       <div class="tabs" id="menuTabs"></div>
       <div id="menuUnitHead"></div>
     </div>
     <div id="menuBody"></div>
+  </div>
+</div>
+
+<!-- 仲間にする画面（ストックが満員のときは、解体する機体を選ぶ一覧にもなる） -->
+<div class="overlay" id="recruit" hidden>
+  <div class="dialog rcDialog">
+    <div class="rcBody" id="rcBody"></div>
+    <div class="rcBtns" id="rcBtns"></div>
   </div>
 </div>
 
@@ -427,7 +469,16 @@ const TACKLE_BASE = 3;             // たいあたりの基本威力（主人公
 const TACKLE_ACC = 95;
 const ESCAPE_RATE = 50;            // にげる成功率(%)
 const ESCAPE_STUN_TURNS = 3;       // 逃げた後、敵が追ってこないターン数
-const TEAM_MAX = 3;
+const TEAM_MAX = 3;                // チームの最大（主人公機＋仲間2体）
+const STOCK_MAX = 20;              // 村のストックの上限
+const ALLY_SLOT_COUNT = 1;         // 仲間のパーツ枠（仲間になった時点で決まり、付け替えできない）
+// 解体で手に入るジャンク：大きさの基本量＋パーツのレア度の加算（ノーマル/レア/スーパーレア/レジェンド）
+const JUNK_BASE = { small: 2, mid: 3, large: 5 };
+const JUNK_RARITY = [0, 1, 2, 4];
+const JUNK_MAX = 99;
+const AUTO_WALK_MS = 80;           // 「階段へ向かう」の1マスごとの待ち
+// 設定「仲間にする確認」の選択肢
+const RECRUIT_MODES = [{ key: "ask", label: "毎回聞く" }, { key: "always", label: "いつも仲間にする" }, { key: "never", label: "いつもあきらめる" }];
 
 // 機体レベル
 const LEVEL_MAX = 20;
@@ -447,7 +498,7 @@ const DEFEAT_PENALTY = {
 
 // セーブ（localStorage）
 const SAVE_KEY = "robotRuinsSave";
-const SAVE_VERSION = 3;            // 3：パーツの強化値と設定の追加。2・1 は読み込み時に移行する
+const SAVE_VERSION = 4;            // 4：ストック、ジャンク、仲間の固定パーツ。3：パーツの強化値と設定の追加。1〜3 は読み込み時に移行する
 
 // 村から出発できる階（条件を満たしたものだけ選べる）
 const DEPARTURES = [
@@ -861,14 +912,15 @@ let typeKey = null;
 let progress = null;     // { maxFloor, bossDefeated: {5, 10}, cleared }
 let saveFailed = false;
 // 設定（セーブに含める）：演出、確認なしで即実行、仲間のおまかせ、ひとうち、ミニマップの常時表示、一括回復の確認なし
-const DEFAULT_SETTINGS = { fx: true, instant: false, allyAuto: true, oneHit: true, miniMap: true, bulkNoConfirm: false };
+const DEFAULT_SETTINGS = { fx: true, instant: false, allyAuto: true, oneHit: true, miniMap: true, bulkNoConfirm: false, recruitConfirm: "ask" };
+let stock = [];          // 村のストック（仲間と同じ形の機体データ。主人公機は入らない）
 let settings = { ...DEFAULT_SETTINGS };
 let blinkOn = true;        // 0.5秒ごとに反転（キラキラ、ミニマップの点）
 let fightStats = {};       // ひとうちの記録（階ごと。セーブしない）{ 階: { oneHit, battle } }
 let dropMiss = 0;          // 救済の数え（出発ごとに0。セーブしない）
 let mode = "select";    // select | map | battle | menu | over
 let battle = null;
-let menuState = { unit: 0, pending: null, confirmRelease: false };
+let menuState = { unit: 0, pending: null };
 
 const $ = id => document.getElementById(id);
 const cv = $("cv"), ctx = cv.getContext("2d");
@@ -905,7 +957,8 @@ function createUnit(o) {
     baseHp: o.hp, baseEn: o.en, baseTackle: o.tackle, accBonus: o.accBonus || 0, evade: o.evade || 0,
     enGrowth: o.enGrowth || LEVEL_EN_GROWTH, unique: o.unique || ANIMAL_UNIQUE[o.sprite] || "curl",
     lv: o.lv || 1, exp: 0,
-    equip: new Array(SLOT_COUNT).fill(null),
+    // 主人公機は持ち物のパーツを2枠に付ける。仲間は1枠の固定パーツ（持ち物には入らない）
+    equip: o.isLeader ? new Array(SLOT_COUNT).fill(null) : [o.part ? fixedPart(o.part, o.plus) : null],
     manual: false,   // 手動で付け替えた機体は、自動の入れ替え対象にしない
     skills: { guard: 1, unique: 1 },   // 防御と固有技のスキルレベル
     bs: freshBattleState(),
@@ -915,15 +968,24 @@ function createUnit(o) {
   return u;
 }
 
+// 仲間の固定パーツ（持ち物のパーツと同じ形。持ち物の配列には入れない）
+const fixedPart = (id, plus = 0) => ({ id, uid: ++partUid, plus });
+// 仲間の機体を作る（仲間にする画面、読み込み、テスト）。def=大きさ、part=固定パーツのid
+function createAlly(def, sprite, o = {}) {
+  return createUnit({ name: o.name || animalName(sprite), sprite, kind: def.key, hp: def.ally.hp, en: def.ally.en, tackle: def.ally.tackle,
+    lv: o.lv || 1, unique: ANIMAL_UNIQUE[sprite], part: o.part || def.ally.part, plus: o.plus || 0 });
+}
+const allUnits = () => team.concat(stock);
 function uniqueName(base) {
-  if (!team.some(u => u.name === base)) return base;
-  for (const s of ["B", "C", "D"]) if (!team.some(u => u.name === `${base}${s}`)) return `${base}${s}`;
+  const used = new Set(allUnits().map(u => u.name));
+  if (!used.has(base)) return base;
+  for (let i = 0; i < 26; i++) { const n = base + String.fromCharCode(66 + i); if (!used.has(n)) return n; }
   return base;
 }
 
 // ---- パーツ（共有の持ち物）。装備は持ち物の要素そのものを指す ----
 const partOf = item => partById(item.id);
-const isEquipped = item => team.some(u => u.equip.includes(item));
+const isEquipped = item => !!team[0] && team[0].equip.includes(item);   // 持ち物のパーツを付けられるのは主人公機だけ
 const partText = p => `${p.name}${RARITY[p.rarity].stars}`;
 const plusText = item => item && item.plus ? `+${item.plus}` : "";
 const itemName = item => partOf(item).name + plusText(item);                 // 「ハンドガンK7+2」
@@ -932,8 +994,8 @@ const itemPower = item => partOf(item).power * (1 + PLUS_COEF * (item.plus || 0)
 const itemExpected = item => itemPower(item) * partOf(item).acc / 100;            // 自動装備で比べる期待ダメージ
 const levelMult = u => 1 + LEVEL_DAMAGE_COEF * (u.lv - 1);
 
-// パーツを手に入れる。同じ名前のパーツを持っていれば（持ち物＋装備）、それを+1強化する。
-// noMerge=強化しないで新しく入れる（初期パーツ、仲間の初期パーツ）
+// パーツを手に入れる。同じ名前のパーツを持っていれば（持ち物＋主人公機の装備。仲間の固定パーツは含めない）、それを+1強化する。
+// noMerge=強化しないで新しく入れる（初期パーツ）
 function gainPart(id, opts = {}) {
   if (!opts.noMerge) {
     const same = inv.parts.filter(i => i.id === id && (i.plus || 0) < PLUS_MAX);
@@ -944,31 +1006,26 @@ function gainPart(id, opts = {}) {
       return { item: t, upgraded: true, unit: null, swapped: null, discarded: [] };
     }
   }
-  return addPart(id, opts.prefer);
+  return addPart(id, opts.plus);
 }
-// 持ち物に入れて、自動装備する。prefer=最初に空き枠を探す機体（仲間の初期パーツ用）
-function addPart(id, prefer) {
-  const item = { id, uid: ++partUid, plus: 0 };
+// 持ち物に入れて、主人公機に自動装備する（仲間のパーツは固定なので対象外）
+function addPart(id, plus = 0) {
+  const item = { id, uid: ++partUid, plus };
   inv.parts.push(item);
   let res = { item, unit: null, swapped: null };
-  // 1. 空き枠に装備（prefer → チームの並び順）
-  const order = prefer ? [prefer, ...team.filter(u => u !== prefer)] : team;
-  const free = order.find(u => u.equip.includes(null));
-  if (free) {
-    free.equip[free.equip.indexOf(null)] = item;
-    res.unit = free;
-  } else {
-    // 2. 手動で付け替えていない機体の装備で一番弱いものより強ければ入れ替え
+  const hero = leader();
+  const f = hero.equip.indexOf(null);
+  if (f >= 0) {
+    // 1. 空き枠に装備
+    hero.equip[f] = item;
+    res.unit = hero;
+  } else if (!hero.manual) {
+    // 2. 手動で付け替えていなければ、装備で一番弱いものより強いとき入れ替え
     let worst = null;
-    for (const u of team) {
-      if (u.manual) continue;
-      u.equip.forEach((e, slot) => {
-        if (e && (!worst || itemExpected(e) < itemExpected(worst.e))) worst = { u, slot, e };
-      });
-    }
+    hero.equip.forEach((e, slot) => { if (e && (!worst || itemExpected(e) < itemExpected(worst.e))) worst = { slot, e }; });
     if (worst && itemExpected(item) > itemExpected(worst.e)) {
-      worst.u.equip[worst.slot] = item;
-      res.unit = worst.u; res.swapped = worst.e;
+      hero.equip[worst.slot] = item;
+      res.unit = hero; res.swapped = worst.e;
     }
   }
   res.discarded = trimInventory();
@@ -998,14 +1055,12 @@ function logPartGain(res, verb, out = log) {
   out(`『${p.name}』${rareTag}を${verb}！${tail ? `（${tail}）` : ""}`, r.color);
   for (const d of res.discarded || []) out(`持ち物がいっぱいなので『${itemText(d)}』を捨てた。`);
 }
-// おまかせ装備：期待ダメージの高い順（同じなら消費ENの低い順）に、並び順の機体へ2つずつ
+// おまかせ装備：期待ダメージの高い順（同じなら消費ENの低い順）に、主人公機へ2つ（仲間のパーツは固定）
 function autoEquipAll() {
   const sorted = inv.parts.slice().sort((a, b) => itemExpected(b) - itemExpected(a) || partOf(a).en - partOf(b).en);
-  let k = 0;
-  for (const u of team) {
-    u.manual = false;
-    for (let s = 0; s < SLOT_COUNT; s++) u.equip[s] = sorted[k++] || null;
-  }
+  const hero = leader();
+  hero.manual = false;
+  for (let s = 0; s < SLOT_COUNT; s++) hero.equip[s] = sorted[s] || null;
 }
 
 function addExp(u, amount) {
@@ -1263,7 +1318,7 @@ const logText = () => logLines.map(l => l.t);
 const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0], wait: [0, 0] };
 
 function playerMove(dir) {
-  if (mode !== "map" || miniOpen) return;
+  if (mode !== "map" || miniOpen || recruitState) return;
   const [dx, dy] = DIRS[dir];
   const nx = pos.x + dx, ny = pos.y + dy;
 
@@ -1272,6 +1327,8 @@ function playerMove(dir) {
     if (target) {
       if (!canOneHit(target)) { startBattle(target); return; }
       oneHit(target);
+      // 仲間にする画面を出しているときは、決めてから敵が動く
+      if (recruitState) { recruitAfter = () => { enemiesAct(); updateFov(); }; renderMap(); return; }
       enemiesAct(); updateFov(); renderMap();
       return;
     }
@@ -1336,6 +1393,7 @@ function enemiesAct() {
       if (dist === 1) {
         if (!canOneHit(e)) { startBattle(e); return; }
         oneHit(e);
+        if (recruitState) return;   // 仲間にする画面を出している間は、残りの敵は動かない
         continue;
       }
       const sx = Math.sign(pos.x - e.x), sy = Math.sign(pos.y - e.y);
@@ -1852,15 +1910,19 @@ function winBattle() {
 }
 
 // 通常の敵を倒したときの落とし物と仲間（バトルでも、ひとうちでも同じ）
+// 仲間になる判定に当たったら、仲間にする画面を先に出し、決めてから結果のメッセージを出す
 function normalSpoils(e, res) {
+  const cand = rollRecruit(e);
+  const lines = [], buf = (t, c) => lines.push([t, c]);
   const id = rollNormalDrop(e);
-  if (id) logPartGain(gainPart(id), "手に入れた", res);
+  if (id) logPartGain(gainPart(id), "手に入れた", buf);
   if (Math.random() < ITEM_DROP_RATE) {
     const key = Math.random() < 0.5 ? "repair" : "cell";
     inv.items[key]++;
-    res(`${ITEMS[key].name}を手に入れた。`);
+    buf(`${ITEMS[key].name}を手に入れた。`);
   }
-  if (team.length < TEAM_MAX && Math.random() < e.def.recruit) recruit(e, res);
+  const flush = () => { for (const [t, c] of lines) res(t, c); lines.length = 0; };
+  if (cand) offerRecruit(cand, res, flush); else flush();
 }
 
 // ---- ひとうち：たいあたり1回で必ず倒せる通常の敵は、バトルに入らず倒す ----
@@ -1882,14 +1944,181 @@ function oneHit(e) {
   processLevelUps();
 }
 
-// 仲間は、最初の機体と同じレベルで加わる。名前と絵と固有技は元の動物
-function recruit(e, out = log) {
-  const def = e.def;
-  const u = createUnit({ name: uniqueName(e.name), sprite: e.sprite, kind: def.key,
-    hp: def.ally.hp, en: def.ally.en, tackle: def.ally.tackle, lv: leader().lv, unique: ANIMAL_UNIQUE[e.sprite] });
-  team.push(u);
-  gainPart(def.ally.part, { noMerge: true, prefer: u });
-  out(`${u.name}が仲間になった！（Lv${u.lv}・固有技「${MOVES[u.unique].name}」）`);
+// ================================================================
+//  仲間にする（チームが満員でも判定する。入りきらなければ村のストックへ）
+// ================================================================
+// 仲間になる機体：倒した敵と同じ動物、主人公機と同じレベル、固有技はその動物の技（Lv1）
+// パーツは1枠の固定。系統は大きさで決まり、レア度は倒した階の「敵の落とし物」の表（レジェンドは出ない）
+const RECRUIT_MAX_RARITY = 2;
+function makeRecruit(e) {
+  let id = floorRarityPart(e.def.drop);
+  if (partById(id).rarity > RECRUIT_MAX_RARITY) id = PARTS.find(p => p.type === e.def.drop && p.rarity === RECRUIT_MAX_RARITY).id;
+  return createAlly(e.def, e.sprite, { lv: leader().lv, part: id });
+}
+function rollRecruit(e) {
+  if (e.boss || e.rare || !e.def.recruit) return null;
+  if (Math.random() >= e.def.recruit) return null;
+  chooseAnimal(e);
+  return makeRecruit(e);
+}
+// 仲間にする（チームに空きがなければストックへ。ストックの空きは呼ぶ側で確かめる）
+function joinUnit(u, out = log, showPart = false) {
+  u.name = uniqueName(u.name);
+  u.hp = u.maxHp; u.en = u.maxEn; u.bs = freshBattleState();
+  const tail = showPart && u.equip[0] ? `（パーツ『${itemText(u.equip[0])}』）` : "";
+  const color = u.equip[0] ? RARITY[partOf(u.equip[0]).rarity].color : "";
+  if (team.length < TEAM_MAX) { team.push(u); out(`${u.name}が仲間になった！${tail}`, showPart ? color : ""); return "team"; }
+  stock.push(u);
+  out(`${u.name}が仲間になった！（村のストックに送った）${tail}`, showPart ? color : "");
+  return "stock";
+}
+const hasRoom = () => team.length < TEAM_MAX || stock.length < STOCK_MAX;
+
+// 設定「仲間にする確認」で分ける。then=決めたあとに出す結果のメッセージ
+let recruitState = null, recruitQueue = [];
+function offerRecruit(cand, out, then = () => {}) {
+  const m = settings.recruitConfirm;
+  if (m === "never") { then(); return; }
+  if (m === "always" && hasRoom()) { then(); joinUnit(cand, out, true); return; }
+  if (recruitState) { recruitQueue.push({ cand, out, then }); return; }
+  recruitState = { cand, out, then, view: hasRoom() ? "offer" : "full", pick: null };
+  renderRecruit();
+  $("recruit").hidden = false;
+}
+// 決める：yes=仲間にする
+function recruitDecide(yes) {
+  const st = recruitState;
+  if (!st || st.view === "pick") return;
+  if (yes && !hasRoom()) { st.view = "pick"; st.pick = null; renderRecruit(); return; }
+  closeRecruit();
+  st.then();
+  if (yes) joinUnit(st.cand, st.out, settings.recruitConfirm === "always");
+  else st.out(`${st.cand.name}は去っていった。`);
+  afterRecruit();
+}
+function closeRecruit() {
+  recruitState = null;
+  $("recruit").hidden = true;
+}
+// 次の候補か、止めていたマップの続き
+let recruitAfter = null;
+function afterRecruit() {
+  if (recruitQueue.length) { const q = recruitQueue.shift(); offerRecruit(q.cand, q.out, q.then); return; }
+  if (recruitAfter) { const f = recruitAfter; recruitAfter = null; f(); }
+  if (mode === "battle") renderBattle();
+  else if (mode === "map") renderMap();
+}
+// ストックの機体を解体して空けてから仲間にする（ダンジョン中でも、このためだけにストックを開ける）
+function recruitDismantlePicked() {
+  const st = recruitState, u = st && st.pick;
+  if (!u) return;
+  showDialog("解体", dismantleText(u), [
+    { label: "解体する", danger: true, act: () => {
+      dismantle(u, st.out);
+      closeRecruit();
+      st.then();
+      joinUnit(st.cand, st.out, settings.recruitConfirm === "always");
+      afterRecruit();
+    } },
+    { label: "やめる", act: () => {} }]);
+}
+
+// 小さな機体の行（絵・名前・レベル・HP・パーツ）。仲間にする画面とメニューの「仲間」タブで使う
+function unitLine(u, opts = {}) {
+  const row = el("div", "rcUnit" + (opts.pick ? " pick" : "") + (opts.on ? " on" : ""));
+  row.append(spriteEl(u.sprite, 1, false));
+  // 1行目：名前・レベル・HP・固有技、2行目：パーツ（仲間は🔒固定）
+  const t = el("div", "rcuText");
+  const l1 = el("div", "rcuL");
+  l1.append(el("b", "", u.name), ` Lv${u.lv}`);
+  if (opts.hp !== false) l1.append(`　HP${u.maxHp}`);
+  if (opts.unique) l1.append(`　${MOVES[u.unique].name}`);
+  if (u.isLeader) l1.append(el("span", "junk", "　主人公機"));
+  const l2 = el("div", "rcuL");
+  const it = u.equip.filter(Boolean);
+  if (!it.length) l2.append("パーツなし");
+  it.forEach((x, i) => { const sp = el("span", "", (i ? "・" : "") + itemText(x)); sp.style.color = RARITY[partOf(x).rarity].color; l2.append(sp); });
+  if (!u.isLeader && it.length) l2.append(el("span", "lock", " 🔒固定"));
+  t.append(l1, l2);
+  row.append(t);
+  if (opts.onClick) row.addEventListener("click", opts.onClick);
+  return row;
+}
+
+function renderRecruit() {
+  const st = recruitState, u = st.cand, body = $("rcBody"), btns = $("rcBtns");
+  body.textContent = ""; btns.textContent = "";
+  const btn = (label, fn, cls, id, dis) => { const b = rowButton(label, fn, dis, cls); b.id = id; btns.append(b); return b; };
+  if (st.view === "pick") {
+    body.append(el("h2", "", "解体する機体を選ぶ"));
+    body.append(el("div", "mnote", `ストック ${stock.length}/${STOCK_MAX}体。解体すると、パーツとジャンクが手に入ります。`));
+    const list = el("div", "rcTeam");
+    for (const x of stock) list.append(unitLine(x, { pick: true, on: st.pick === x, unique: true, onClick: () => { st.pick = x; renderRecruit(); } }));
+    body.append(list);
+    btn("解体する", recruitDismantlePicked, "danger", "rcDismantle", !st.pick);
+    btn("もどる", () => { st.view = "full"; renderRecruit(); }, "", "rcBack");
+    return;
+  }
+  body.append(el("h2", "", "仲間になりたそうにしている！"));
+  const top = el("div", "rcTop");
+  top.append(spriteEl(u.sprite, 3, false));
+  const nm = el("div");
+  nm.append(el("div", "rcName", u.name), el("div", "", `Lv${u.lv}`));
+  const g = el("div", "rcStats");
+  const stat = (k, v) => { const d = el("div", "", k + " "); d.append(el("b", "", v)); g.append(d); };
+  stat("HP", String(u.maxHp)); stat("EN", String(u.maxEn)); stat("たいあたり", String(Math.max(1, Math.round(tackleOf(u) * levelMult(u)))));
+  nm.append(g);
+  top.append(nm);
+  body.append(top);
+  const mi = moveInfo(u, "unique");
+  const sq = el("div", "rcSec");
+  sq.append(el("div", "rcLabel", "固有技"), el("div", "", `${mi.name}　EN${mi.en}`), el("small", "", mi.desc));
+  body.append(sq);
+  const it = u.equip[0], p = partOf(it);
+  const sp = el("div", "rcSec");
+  const pn = el("span", "", itemText(it)); pn.style.color = RARITY[p.rarity].color;
+  const pl = el("div"); pl.append(el("span", "tag " + p.type, PART_TYPE_LABEL[p.type]), pn, el("span", "lock", "　🔒固定"));
+  sp.append(el("div", "rcLabel", "パーツ（1枠・付け替えできない）"), pl, el("small", "", `威力${Math.round(itemPower(it))}　命中${p.acc}%　EN${p.en}`));
+  body.append(sp);
+  body.append(el("div", "rcLabel", "今のチーム"));
+  const tl = el("div", "rcTeam");
+  for (const x of team) tl.append(unitLine(x));
+  body.append(tl);
+  if (st.view === "full") {
+    body.append(el("div", "rcNote", `ストックが満員です（${stock.length}/${STOCK_MAX}体）`));
+    btn("ストックの機体を解体して空ける（Y）", () => recruitDecide(true), "primary", "rcYes");
+  } else {
+    if (team.length >= TEAM_MAX) body.append(el("div", "rcNote", "チームが満員なので、村のストックに送ります"));
+    btn("仲間にする（Y）", () => recruitDecide(true), "primary", "rcYes");
+  }
+  btn("あきらめる（N）", () => recruitDecide(false), "", "rcNo");
+}
+function recruitKey(key) {
+  const st = recruitState;
+  if (st.view === "pick") { if (key === "Escape" || key === "n" || key === "N") { st.view = "full"; renderRecruit(); } return true; }
+  if (key === "y" || key === "Y") recruitDecide(true);
+  else if (key === "n" || key === "N" || key === "Escape") recruitDecide(false);
+  return true;
+}
+
+// ================================================================
+//  解体（村のストックの機体だけ）：パーツは持ち物へ、ジャンクが手に入る
+// ================================================================
+const junkFor = u => JUNK_BASE[u.kind] + (u.equip[0] ? JUNK_RARITY[partOf(u.equip[0]).rarity] : 0);
+function dismantleText(u) {
+  const it = u.equip[0];
+  return `${u.name}を解体します。${it ? `パーツ『${itemText(it)}』が持ち物に入り、` : ""}ジャンクが${junkFor(u)}個手に入ります。よろしいですか？`;
+}
+function dismantle(u, out = log) {
+  if (!u || u.isLeader || !stock.includes(u)) return null;
+  const it = u.equip[0], j = junkFor(u);
+  stock = stock.filter(x => x !== u);
+  inv.junk = Math.min(JUNK_MAX, (inv.junk || 0) + j);
+  const res = it ? gainPart(it.id, { plus: it.plus || 0 }) : null;
+  out(`${u.name}を解体した。${it ? `『${itemText(it)}』と、` : ""}ジャンク×${j}を手に入れた`, it ? RARITY[partOf(it).rarity].color : "");
+  if (res && res.upgraded) out(`『${partOf(res.item).name}』が強化された！（+${res.item.plus}）`, RARITY[partOf(res.item).rarity].color);
+  for (const d of (res && res.discarded) || []) out(`持ち物がいっぱいなので『${itemText(d)}』を捨てた。`);
+  return { res, junk: j };
 }
 
 // ---- わざの一覧（常に表示）と「その他」 ----
@@ -1908,7 +2137,7 @@ function pickMove(key) {
   renderBattle();
 }
 function decide() {
-  if (!battle || battle.busy) return;
+  if (!battle || battle.busy || recruitState) return;
   if (battle.menu === "result") { endBattle(); return; }
   if (battle.actor < 0 || !battle.selected) return;
   const u = team[battle.actor];
@@ -2141,6 +2370,7 @@ function renderOther() {
 
 function battleKey(key) {
   if (!battle) return false;
+  if (recruitState) return recruitKey(key);
   if (!$("other").hidden) {
     if (key === "0" || key === "Escape") { closeOther(); return true; }
     return true;
@@ -2166,7 +2396,7 @@ function openMenu() {
   if (mode !== "map" && mode !== "village") return;
   menuFrom = mode;
   mode = "menu";
-  menuState = { unit: 0, pending: null, confirmRelease: false, preview: null, result: null, note: null };
+  menuState = { unit: 0, pending: null, preview: null, result: null, note: null };
   renderMenu();
   $("menu").hidden = false;
 }
@@ -2218,14 +2448,25 @@ function rowButton(label, fn, disabled, cls) {
 
 function renderMenu() {
   const ms = menuState;
+  const inVillage = menuFrom === "village";
+  if (ms.tab === "party" && !inVillage) ms.tab = null;
   if (ms.unit >= team.length) ms.unit = 0;
   const u = team[ms.unit];
 
   const tabs = $("menuTabs");
   tabs.textContent = "";
   team.forEach((t, i) => {
-    tabs.append(rowButton(`${t.name} Lv${t.lv}`, () => { menuState = { unit: i, pending: null, confirmRelease: false }; renderMenu(); }, false, i === ms.unit ? "on" : ""));
+    tabs.append(rowButton(`${t.name} Lv${t.lv}`, () => { menuState = { unit: i, pending: null }; renderMenu(); }, false, i === ms.unit && ms.tab !== "party" ? "on" : ""));
   });
+  // 「仲間」タブ（チームとストックの入れ替え、解体）は村のメニューだけ
+  if (inVillage) {
+    const pt = rowButton(`仲間（ストック${stock.length}）`, () => { menuState = { unit: 0, pending: null, tab: "party" }; renderMenu(); }, false, ms.tab === "party" ? "on" : "");
+    pt.id = "tab-party";
+    tabs.append(pt);
+  }
+  $("menuJunk").textContent = `ジャンク ×${inv.junk || 0}（使い道は今後追加）`;
+  $("btnBackVillage").hidden = menuFrom !== "map";
+  if (ms.tab === "party") { renderParty(); return; }
   // 固定ヘッダー：選んでいる機体のHPとEN（アイテムを使った直後は「25 → 40」）
   const uh = $("menuUnitHead");
   uh.textContent = "";
@@ -2236,7 +2477,6 @@ function renderMenu() {
 
   // 一括回復
   const bulk = el("div", "bulk");
-  const inVillage = menuFrom === "village";
   for (const [label, kind] of [["HP回復", "hp"], ["EN回復", "en"], ["まとめて回復", "both"]]) {
     const b = rowButton(label, () => askBulkHeal(kind), inVillage);
     b.id = "bulk-" + kind;
@@ -2262,7 +2502,15 @@ function renderMenu() {
   head.append(g);
   body.append(head);
 
-  const omakase = rowButton("おまかせ装備（強い順にチーム全員へ配る）", () => {
+  if (!u.isLeader) {
+    // 仲間のパーツは1枠の固定（付け替えできない）
+    body.append(el("h3", "", `${u.name}のパーツ（1枠・固定）`));
+    const row = el("div", "mrow slotRow");
+    row.append(u.equip[0] ? partInfo(u.equip[0], "🔒固定") : el("div", "info empty", "なし"));
+    body.append(row);
+    body.append(el("div", "mnote", "仲間のパーツは、仲間になったときに決まり、付け替えられません。"));
+  } else {
+  const omakase = rowButton("おまかせ装備（強い順に主人公機へ付ける）", () => {
     autoEquipAll();
     menuState.pending = null;
     log("おまかせ装備した。");
@@ -2306,6 +2554,7 @@ function renderMenu() {
     row.append(btns);
     body.append(row);
   }
+  }
 
   body.append(el("h3", "", `アイテム（${u.name}に使う）`));
   for (const key of ["repair", "cell"]) {
@@ -2345,25 +2594,99 @@ function renderMenu() {
   toggle("ひとうち", "oneHit", "たいあたり1回で倒せる弱い敵は、バトルに入らず倒す");
   toggle("ミニマップの常時表示", "miniMap", "広い画面で、右上に小さく出す");
   toggle("一括回復の確認なし", "bulkNoConfirm", "一括回復ボタンで、確認せずに使う");
-
-  if (!u.isLeader) {
-    body.append(el("h3", "", "チーム"));
+  {
+    // 仲間にする確認：押すたびに「毎回聞く → いつも仲間にする → いつもあきらめる」
     const row = el("div", "mrow");
-    const btns = el("div", "btns");
-    if (ms.confirmRelease) {
-      row.append(el("div", "info", `${u.name}を手放しますか？ 装備パーツは持ち物に戻ります。`));
-      btns.append(rowButton("やめる", () => { ms.confirmRelease = false; renderMenu(); }));
-      btns.append(rowButton("手放す", () => releaseAlly(u), false, "danger"));
-    } else {
-      row.append(el("div", "info", "この仲間をチームから外す"));
-      btns.append(rowButton("手放す", () => { ms.confirmRelease = true; renderMenu(); }, false, "danger"));
-    }
-    row.append(btns);
-    body.append(row);
+    const info = el("div", "info", "仲間にする確認"); info.append(el("small", "", "敵が仲間になりたそうなとき、どうするか"));
+    const i = RECRUIT_MODES.findIndex(m => m.key === settings.recruitConfirm);
+    const b = rowButton(RECRUIT_MODES[i].label, () => { settings.recruitConfirm = RECRUIT_MODES[(i + 1) % RECRUIT_MODES.length].key; saveGame(); renderMenu(); });
+    b.id = "set-recruitConfirm";
+    const btns = el("div", "btns"); btns.append(b); row.append(info, btns); body.append(row);
   }
+
 
   // 「村に戻る」はマップから開いたときだけ（見出しに常に表示）
   $("btnBackVillage").hidden = menuFrom !== "map";
+}
+
+// ---- メニュー：「仲間」タブ（村だけ）。チーム（最大3体）とストック（最大20体）の入れ替え、解体 ----
+// 操作ボタンは固定ヘッダーの中に置く（ストックが長くても、スクロールせずに押せる）
+function renderParty() {
+  const ms = menuState, sel = ms.sel || null;
+  const head = $("menuUnitHead");
+  head.textContent = "";
+  const bar = el("div", "partyBar");
+  const selText = ms.swap ? `『${ms.swap.name}』と入れ替える、チームの機体を選んでください`
+    : sel ? `選択中：${sel.name} Lv${sel.lv}（${team.includes(sel) ? "チーム" : "ストック"}）` : "機体を選んでください";
+  const st = el("div", "pbSel", selText);
+  if (ms.note) st.textContent = ms.note;
+  bar.append(st);
+  const bb = el("div", "pbBtns");
+  const inStock = sel && stock.includes(sel), inTeam = sel && team.includes(sel) && !sel.isLeader;
+  const b1 = rowButton("チームに入れる", () => partyToTeam(sel), !inStock || !!ms.swap); b1.id = "pt-in";
+  const b2 = rowButton("ストックに送る", () => partyToStock(sel), !inTeam || stock.length >= STOCK_MAX || !!ms.swap); b2.id = "pt-out";
+  const b3 = rowButton(ms.swap ? "やめる" : "解体", () => {
+    if (ms.swap) { ms.swap = null; ms.note = null; renderMenu(); return; }
+    showDialog("解体", dismantleText(sel), [
+      { label: "解体する", danger: true, act: () => { dismantle(sel); menuState = { unit: 0, pending: null, tab: "party" }; saveGame(); renderMenu(); renderVillage(); } },
+      { label: "やめる", act: () => {} }]);
+  }, ms.swap ? false : !inStock, ms.swap ? "" : "danger");
+  b3.id = "pt-dismantle";
+  bb.append(b1, b2, b3);
+  bar.append(bb);
+  head.append(bar);
+
+  const body = $("menuBody");
+  body.textContent = "";
+  body.append(el("h3", "", `チーム（${team.length}/${TEAM_MAX}）`));
+  const tl = el("div", "rcTeam");
+  team.forEach(x => {
+    const pick = !x.isLeader;
+    tl.append(unitLine(x, { pick, on: sel === x, unique: true, hp: false, onClick: pick ? () => partyPickTeam(x) : null }));
+  });
+  body.append(tl);
+  body.append(el("h3", "", `ストック（${stock.length}/${STOCK_MAX}）`));
+  const sl = el("div", "stockList");
+  sl.id = "stockList";
+  if (!stock.length) sl.append(el("div", "mrow empty", "ストックは空です。チームが満員のときに仲間にした機体が、ここに入ります"));
+  for (const x of stock) sl.append(unitLine(x, { pick: true, on: sel === x, unique: true, hp: false, onClick: () => { menuState.sel = x; menuState.swap = null; menuState.note = null; renderMenu(); } }));
+  body.append(sl);
+  body.append(el("div", "mnote", "仲間のパーツは固定（🔒）です。ストックの機体には経験値が入りません。入れ替えはこの村でだけできます。"));
+}
+function partyPickTeam(x) {
+  const ms = menuState;
+  if (ms.swap) { partySwap(ms.swap, x); return; }
+  ms.sel = x; ms.note = null; renderMenu();
+}
+// ストックの機体をチームへ（空きがなければ、入れ替える相手を選ぶ）
+function partyToTeam(u) {
+  if (menuFrom !== "village" || !stock.includes(u)) return;
+  if (team.length >= TEAM_MAX) { menuState.swap = u; menuState.note = null; renderMenu(); return; }
+  stock = stock.filter(x => x !== u);
+  u.hp = u.maxHp; u.en = u.maxEn; u.bs = freshBattleState();
+  team.push(u);
+  log(`${u.name}をチームに入れた。`);
+  menuState = { unit: 0, pending: null, tab: "party", sel: u };
+  saveGame(); renderMenu(); renderVillage();
+}
+function partyToStock(u) {
+  if (menuFrom !== "village" || !u || u.isLeader || !team.includes(u) || stock.length >= STOCK_MAX) return;
+  team = team.filter(x => x !== u);
+  u.hp = u.maxHp; u.en = u.maxEn;
+  stock.push(u);
+  log(`${u.name}をストックに送った。`);
+  menuState = { unit: 0, pending: null, tab: "party", sel: u };
+  saveGame(); renderMenu(); renderVillage();
+}
+function partySwap(inU, outU) {
+  if (menuFrom !== "village" || !stock.includes(inU) || !team.includes(outU) || outU.isLeader) return;
+  const i = team.indexOf(outU), j = stock.indexOf(inU);
+  inU.hp = inU.maxHp; inU.en = inU.maxEn; inU.bs = freshBattleState();
+  outU.hp = outU.maxHp; outU.en = outU.maxEn;
+  team[i] = inU; stock[j] = outU;
+  log(`${inU.name}と${outU.name}を入れ替えた。`);
+  menuState = { unit: 0, pending: null, tab: "party", sel: inU };
+  saveGame(); renderMenu(); renderVillage();
 }
 
 // ---- メニュー：アイテムの変化の表示、一括回復 ----
@@ -2436,13 +2759,6 @@ function askReturnVillage() {
   ]);
 }
 
-function releaseAlly(u) {
-  if (u.isLeader) return;
-  team = team.filter(t => t !== u);
-  log(`${u.name}と別れた。`);
-  menuState = { unit: 0, pending: null, confirmRelease: false };
-  renderMenu();
-}
 
 // ================================================================
 //  描画（マップ）。12×12ドットのタイルを整数倍で並べる
@@ -2673,8 +2989,9 @@ function showSelect() {
 // ================================================================
 function hideAllScreens() {
   miniOpen = false;
+  recruitState = null; recruitQueue = []; recruitAfter = null;
   for (const id of ["title", "village", "select", "mapScreen", "battle"]) $(id).hidden = true;
-  for (const id of ["endScreen", "menu", "dialog", "other"]) $(id).hidden = true;
+  for (const id of ["endScreen", "menu", "dialog", "other", "recruit"]) $(id).hidden = true;
 }
 
 // タイプを選んで新しく始める → 村へ
@@ -2683,11 +3000,12 @@ function startGame(key) {
   typeKey = key;
   resetLogs();
   team = [];
-  inv = { parts: [], items: { ...STARTING_ITEMS } };
+  inv = { parts: [], items: { ...STARTING_ITEMS }, junk: 0 };
+  stock = [];
   progress = { maxFloor: 0, bossDefeated: { 5: false, 10: false }, cleared: false };
   team.push(createUnit({ name: t.name, sprite: t.sprite, isLeader: true, kind: t.key,
     hp: t.hp, en: t.en, tackle: t.tackle, accBonus: t.accBonus, evade: t.evade, enGrowth: t.enGrowth, unique: t.unique }));
-  gainPart(t.part, { noMerge: true, prefer: team[0] });
+  gainPart(t.part, { noMerge: true });
   bestLevel = 1;
   goVillage([`${t.label}「${t.name}」で冒険を始める。`]);
 }
@@ -2719,7 +3037,8 @@ function renderVillage() {
   const rec = [progress.maxFloor ? `到達 ${progress.maxFloor}F` : "まだ潜っていない"];
   if (progress.bossDefeated[5]) rec.push("ゲートキーパー撃破");
   if (progress.cleared) rec.push("踏破済み");
-  $("villageInv").textContent = `パーツ ${inv.parts.length}個　修理キット ${inv.items.repair}　エネルギーセル ${inv.items.cell}　／　${rec.join("・")}`;
+  $("villageInv").textContent = `パーツ ${inv.parts.length}個　修理キット ${inv.items.repair}　エネルギーセル ${inv.items.cell}　ストック ${stock.length}/${STOCK_MAX}体　／　${rec.join("・")}`;
+  $("villageJunk").textContent = `ジャンク ×${inv.junk || 0}（使い道は今後追加）`;
   $("saveNote").hidden = !saveFailed;
   renderVillageScene();
   renderLog();
@@ -2843,13 +3162,21 @@ function saveData() {
     items: { ...inv.items },
     parts: inv.parts.map(it => it.id),
     plus: inv.parts.map(it => it.plus || 0),
-    team: team.map(u => ({
-      name: u.name, sprite: u.sprite, isLeader: u.isLeader, kind: u.kind,
-      baseHp: u.baseHp, baseEn: u.baseEn, baseTackle: u.baseTackle, accBonus: u.accBonus, evade: u.evade,
-      lv: u.lv, exp: u.exp, hp: u.hp, en: u.en, skills: { guard: u.skills.guard, unique: u.skills.unique }, unique: u.unique, manual: u.manual,
-      equip: u.equip.map(it => it ? idx.get(it) : null),
-    })),
+    junk: inv.junk || 0,
+    team: team.map(u => unitToSave(u, idx)),
+    stock: stock.map(u => unitToSave(u, idx)),
   };
+}
+// 機体1体ぶんの保存データ（チームとストックで同じ形）。主人公機は持ち物の番号、仲間は固定パーツそのもの
+function unitToSave(u, idx) {
+  const o = {
+    name: u.name, sprite: u.sprite, isLeader: u.isLeader, kind: u.kind,
+    baseHp: u.baseHp, baseEn: u.baseEn, baseTackle: u.baseTackle, accBonus: u.accBonus, evade: u.evade,
+    lv: u.lv, exp: u.exp, hp: u.hp, en: u.en, skills: { guard: u.skills.guard, unique: u.skills.unique }, unique: u.unique, manual: u.manual,
+  };
+  if (u.isLeader) o.equip = u.equip.map(it => it ? idx.get(it) : null);
+  else o.part = u.equip[0] ? { id: u.equip[0].id, plus: u.equip[0].plus || 0 } : null;
+  return o;
 }
 function saveGame() {
   try {
@@ -2870,17 +3197,23 @@ function readSave() {
   try {
     const d = JSON.parse(raw);
     const okNum = v => typeof v === "number" && isFinite(v);
-    if (!d || ![1, 2, SAVE_VERSION].includes(d.version)) throw 0;   // 1・2 は移行して読む
-    if (d.version === SAVE_VERSION && (!Array.isArray(d.plus) || d.plus.length !== d.parts.length || !d.plus.every(v => Number.isInteger(v) && v >= 0 && v <= PLUS_MAX))) throw 0;
+    if (!d || ![1, 2, 3, SAVE_VERSION].includes(d.version)) throw 0;   // 1〜3 は移行して読む
+    if (d.version >= 3 && (!Array.isArray(d.plus) || d.plus.length !== d.parts.length || !d.plus.every(v => Number.isInteger(v) && v >= 0 && v <= PLUS_MAX))) throw 0;
     if (!START_TYPES.some(t => t.key === d.typeKey)) throw 0;
     if (!Array.isArray(d.parts) || !d.parts.every(id => partById(id))) throw 0;
     if (!d.items || !okNum(d.items.repair) || !okNum(d.items.cell)) throw 0;
     if (!d.progress || !okNum(d.progress.maxFloor) || !d.progress.bossDefeated) throw 0;
     if (!Array.isArray(d.team) || d.team.length < 1 || d.team.length > TEAM_MAX || !d.team[0].isLeader) throw 0;
-    for (const u of d.team) {
+    if (d.version >= 4) {
+      if (!okNum(d.junk) || !Array.isArray(d.stock) || d.stock.length > STOCK_MAX) throw 0;
+      if (d.stock.some(u => u.isLeader)) throw 0;
+    }
+    const okIdx = i => i === null || (Number.isInteger(i) && i >= 0 && i < d.parts.length);
+    for (const u of d.team.concat(d.version >= 4 ? d.stock : [])) {
       if (!SPR[u.sprite] || !okNum(u.lv) || !okNum(u.exp) || !okNum(u.baseHp) || !okNum(u.baseEn) || !okNum(u.baseTackle)) throw 0;
-      if (!Array.isArray(u.equip) || u.equip.length !== SLOT_COUNT) throw 0;
-      if (!u.equip.every(i => i === null || (Number.isInteger(i) && i >= 0 && i < d.parts.length))) throw 0;
+      if (u.isLeader || d.version < 4) {
+        if (!Array.isArray(u.equip) || u.equip.length !== SLOT_COUNT || !u.equip.every(okIdx)) throw 0;
+      } else if (u.part !== null && !(u.part && partById(u.part.id) && Number.isInteger(u.part.plus) && u.part.plus >= 0 && u.part.plus <= PLUS_MAX)) throw 0;
       if (!u.skills || typeof u.skills !== "object") throw 0;
       if (d.version >= 2 && !(okNum(u.skills.guard) && okNum(u.skills.unique))) throw 0;
       if (!u.isLeader && !baseOfAlly(u)) throw 0;
@@ -2896,26 +3229,39 @@ function baseOfAlly(s) {
 }
 // 読み込み。基本値はいまの定義から作り直す
 // 版1→：たいあたり+2の廃止、ENの伸び、スキルはLv1から。版2→3：パーツの強化値は0、足した設定は初期値
+// 版3→4：ストックは空、ジャンクは0。仲間の装備は先頭の1つを固定パーツに残し、2つ目は持ち物へ（なければ大きさの初期パーツ）
 function applySave(d) {
   const migrated = d.version !== SAVE_VERSION;
   const skillsReset = d.version < 2;
   typeKey = d.typeKey;
   settings = { ...DEFAULT_SETTINGS };
-  if (d.settings) for (const k of Object.keys(DEFAULT_SETTINGS)) if (typeof d.settings[k] === "boolean") settings[k] = d.settings[k];
+  if (d.settings) for (const k of Object.keys(DEFAULT_SETTINGS)) {
+    const v = d.settings[k];
+    if (typeof v === typeof DEFAULT_SETTINGS[k] && (k !== "recruitConfirm" || RECRUIT_MODES.some(m => m.key === v))) settings[k] = v;
+  }
   partUid = d.partUid || 0;
   resetLogs();
   progress = { maxFloor: d.progress.maxFloor, bossDefeated: { 5: !!d.progress.bossDefeated[5], 10: !!d.progress.bossDefeated[10] }, cleared: !!d.progress.cleared };
-  inv = { parts: d.parts.map((id, i) => ({ id, uid: ++partUid, plus: d.version === SAVE_VERSION ? d.plus[i] : 0 })), items: { repair: d.items.repair, cell: d.items.cell } };
-  team = d.team.map(s => {
+  const all = d.parts.map((id, i) => ({ id, uid: ++partUid, plus: d.version >= 3 ? d.plus[i] : 0 }));
+  const moved = new Set();   // 古い仲間の固定パーツになったもの（持ち物から外す）
+  inv = { parts: all, items: { repair: d.items.repair, cell: d.items.cell }, junk: d.version >= 4 ? Math.min(JUNK_MAX, Math.max(0, Math.floor(d.junk))) : 0 };
+  const load = s => {
     let u;
     if (s.isLeader) {
       const t = START_TYPES.find(x => x.key === d.typeKey);
       u = createUnit({ name: s.name, sprite: t.sprite, isLeader: true, kind: t.key, hp: t.hp, en: t.en, tackle: t.tackle,
         accBonus: t.accBonus, evade: t.evade, enGrowth: t.enGrowth, unique: t.unique, lv: s.lv });
+      u.equip = s.equip.map(i => i === null ? null : all[i]);
     } else {
       const def = baseOfAlly(s);
-      u = createUnit({ name: s.name, sprite: s.sprite, kind: def.key, hp: def.ally.hp, en: def.ally.en, tackle: def.ally.tackle,
-        unique: ANIMAL_UNIQUE[s.sprite], lv: s.lv });
+      u = createAlly(def, s.sprite, { name: s.name, lv: s.lv });
+      if (d.version >= 4) {
+        u.equip = [s.part ? fixedPart(s.part.id, s.part.plus) : fixedPart(def.ally.part)];
+      } else {
+        const first = s.equip.find(i => i !== null);
+        if (first != null) { moved.add(all[first]); u.equip = [all[first]]; }
+        else u.equip = [fixedPart(def.ally.part)];
+      }
     }
     u.exp = s.exp; u.manual = !!s.manual;
     if (!skillsReset) {
@@ -2925,9 +3271,11 @@ function applySave(d) {
     // 最大値は式で作り直し、いまのHPとENは最大値を超えないようにする
     if (okNum(s.hp)) u.hp = Math.max(0, Math.min(u.maxHp, s.hp));
     if (okNum(s.en)) u.en = Math.max(0, Math.min(u.maxEn, s.en));
-    u.equip = s.equip.map(i => i === null ? null : inv.parts[i]);
     return u;
-  });
+  };
+  team = d.team.map(load);
+  stock = d.version >= 4 ? d.stock.map(load) : [];
+  if (moved.size) { inv.parts = all.filter(i => !moved.has(i)); trimInventory(); }
   bestLevel = Math.max(d.bestLevel || 1, ...team.map(u => u.lv));
   return migrated;
 }
@@ -2971,6 +3319,7 @@ document.addEventListener("keydown", ev => {
     if (ev.key === "Escape") { const bs = $("dlgBtns").children; bs[bs.length - 1].click(); }
     return;
   }
+  if (recruitState) { if (recruitKey(ev.key)) ev.preventDefault(); return; }
   if (mode === "over") {
     // 戦闘中にEnterで送っていた勢いで、結果画面を飛ばさないようにする
     if ((ev.key === "Enter" || ev.key === " ") && Date.now() - endShownAt > END_KEY_DELAY) { ev.preventDefault(); goVillage(); }
