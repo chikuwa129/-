@@ -89,9 +89,9 @@
     background: var(--t-good); color: var(--t-goodText); border: 2px solid var(--t-goodText); border-radius: 10px; box-shadow: 0 2px 8px var(--t-shadowSoft); white-space: nowrap; }
   #stairsBtn.walking { background: var(--t-btn); }
   #stairsBtn[hidden] { display: none; }
-  #miniFull { position: fixed; inset: 0; z-index: 30; padding: var(--safe-top) 12px var(--safe-bottom); background: var(--t-overlay); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+  #miniFull { position: fixed; inset: 0; z-index: 30; padding: var(--safe-top) 12px var(--safe-bottom); background: var(--t-overlayMini); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
   #miniFull[hidden] { display: none; }
-  #miniFull .hint { font-size: 12px; color: var(--t-textFaint); }
+  #miniFull .hint { font-size: 12px; color: var(--t-textHint); }
   #miniBig { border: 1px solid var(--t-btnLine); }
 
   /* 高さを固定して、長い行が折り返しても画面がずれないようにする（新しい行が下に残る） */
@@ -165,7 +165,7 @@
     display: grid; grid-template-columns: minmax(0, 1fr) 80px 54px 66px; align-items: center; gap: 6px;
     padding: 3px 6px; border: 1px solid transparent; border-radius: 6px;
   }
-  .prow.active { border-color: var(--t-select); background: var(--t-selectBg); }
+  .prow.active { border-color: var(--t-select); background: var(--t-selectRowBg); }
   .prow.down { opacity: 0.45; }
   .prow .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .prow .nm small { color: var(--t-textDim); }
@@ -190,13 +190,13 @@
   #cmds button { min-width: 0; }
   #cmds button {
     min-height: 48px; padding: 5px 8px; text-align: left;
-    background: var(--t-btn); border: 1px solid var(--t-btnLine); border-radius: 8px; font-size: 15px;
+    background: var(--t-btn2); border: 1px solid var(--t-btnLine); border-radius: 8px; font-size: 15px;
     display: flex; flex-direction: column; justify-content: center; gap: 2px;
   }
   #cmds button:active:not(:disabled) { background: var(--t-btnActive); }
   #cmds button .k { color: var(--t-accent); font-size: 12px; margin-right: 4px; }
   #cmds button small { color: var(--t-textDim); font-size: 11px; }
-  #cmds button.back { background: var(--t-inset); }
+  #cmds button.back { background: var(--t-insetBack); }
   #cmds button.noen { opacity: .4; filter: grayscale(1); }
   /* わざの一覧は1行に収めて、スマホでも決定ボタンまで1画面に入るようにする */
   #cmds.moveList { gap: 4px; }
@@ -225,7 +225,7 @@
   }
   .center { text-align: center; }
   .screen { position: relative; }
-  .gearBtn { position: absolute; top: 0; right: 0; z-index: 3; width: 40px; height: 40px; font-size: 20px; line-height: 1; background: var(--t-btn); border: 1px solid var(--t-btnLine); border-radius: 8px; }
+  .gearBtn { position: absolute; top: 0; right: 0; z-index: 3; width: 40px; height: 40px; font-size: 20px; line-height: 1; background: var(--t-btn2); border: 1px solid var(--t-btnLine); border-radius: 8px; }
   .adjVal { display: inline-block; min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; font-size: 14px; align-self: center; }
   .tutDialog { max-width: 420px; }
   .tutPage { font-size: 12px; color: var(--t-textDim); }
@@ -235,9 +235,9 @@
   .tutBtns button { min-height: 46px; font-size: 15px; border-radius: 8px; background: var(--t-btn); border: 1px solid var(--t-btnLine); }
   .tutBtns button.primary { background: var(--t-good); color: var(--t-goodText); border: none; }
   #layoutDiag { position: fixed; right: 4px; bottom: 4px; z-index: 2147483000; max-width: 92vw; margin: 0; padding: 6px 8px; font: 11px/1.4 ui-monospace, monospace;
-    color: var(--t-textStrong); background: var(--t-overlay); border: 1px solid var(--t-textFaint); border-radius: 6px; white-space: pre-wrap; -webkit-user-select: text; user-select: text; }
+    color: var(--t-textStrong); background: var(--t-overlayDiag); border: 1px solid var(--t-diagLine); border-radius: 6px; white-space: pre-wrap; -webkit-user-select: text; user-select: text; }
   #layoutDiag.min { max-height: 22px; overflow: hidden; }
-  .buildId { position: fixed; right: 8px; bottom: calc(var(--inset-bottom) + 4px); font-size: 10px; color: var(--t-textFaint); pointer-events: none; font-variant-numeric: tabular-nums; }
+  .buildId { position: fixed; right: 8px; bottom: calc(var(--inset-bottom) + 4px); font-size: 10px; color: var(--t-buildText); pointer-events: none; font-variant-numeric: tabular-nums; }
   /* 世界マップ */
   .wmHead { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .wmTitle { font-size: 15px; font-weight: bold; }
@@ -298,7 +298,7 @@
   .rcSec small { display: block; color: var(--t-textDim); }
   .rcNote { margin-top: 8px; font-size: 13px; color: var(--t-accent); }
   .rcTeam { margin-top: 8px; display: grid; gap: 4px; }
-  .rcUnit { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 6px; background: var(--t-inset); border-radius: 6px; }
+  .rcUnit { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 6px; background: var(--t-insetUnit); border-radius: 6px; }
   .rcUnit canvas { flex-shrink: 0; }
   .rcTeam, .stockList { grid-template-columns: minmax(0, 1fr); }
   .rcUnit .rcuText { min-width: 0; flex: 1; }
@@ -323,19 +323,19 @@
   .mfoot #menuSave { background: var(--t-infoBg); border: 1px solid var(--t-infoLine); }
   #saveToast { position: fixed; left: 50%; bottom: calc(var(--safe-bottom) + 70px); transform: translateX(-50%); z-index: 40; padding: 10px 18px; border-radius: 8px;
     background: var(--t-goodBg); border: 1px solid var(--t-goodLine); color: var(--t-textStrong); font-size: 15px; pointer-events: none; }
-  #saveToast.ng { background: var(--t-warnBg); border-color: var(--t-warnLine); }
+  #saveToast.ng { background: var(--t-warnBg); border-color: var(--t-toastNgLine); }
   #menuBulk .bulk { margin-top: 2px; }
   .mstick { position: sticky; top: -14px; z-index: 2; margin: -14px -16px 8px; padding: 0 16px 4px; background: var(--t-panel); border-bottom: 1px solid var(--t-line); }
   .mstick .mhead { position: static; margin: 0 -16px; padding: 10px 16px 6px; border-bottom: none; }
   #menu .tabs { flex-wrap: nowrap; overflow-x: auto; }
   #menu .tabs button { padding: 4px 10px; font-size: 13px; white-space: nowrap; }
   .bulk { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 4px; }
-  .bulk button { padding: 8px 4px; font-size: 13px; background: var(--t-goodBg); border: 1px solid var(--t-goodLine); border-radius: 8px; }
+  .bulk button { padding: 8px 4px; font-size: 13px; background: var(--t-goodBg2); border: 1px solid var(--t-goodLine); border-radius: 8px; }
   .mnote { font-size: 12px; color: var(--t-textDim); margin-top: 4px; }
   .mresult { font-size: 13px; margin-top: 6px; padding: 6px 8px; border: 1px solid var(--t-goodLine); border-radius: 6px; background: var(--t-goodBg); font-variant-numeric: tabular-nums; }
   .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
-  .tabs button { padding: 7px 12px; background: var(--t-btn); border: 1px solid var(--t-btnLine); border-radius: 6px; font-size: 14px; }
-  .tabs button.on { border-color: var(--t-select); color: var(--t-accent); background: var(--t-selectBg); }
+  .tabs button { padding: 7px 12px; background: var(--t-btn2); border: 1px solid var(--t-btnLine); border-radius: 6px; font-size: 14px; }
+  .tabs button.on { border-color: var(--t-select); color: var(--t-accent); background: var(--t-selectTabBg); }
   .unitHead { display: flex; gap: 12px; align-items: center; margin-top: 10px; }
   .unitHead canvas { flex-shrink: 0; background: var(--t-inset); border-radius: 6px; }
   .sgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 12px; font-size: 13px; font-variant-numeric: tabular-nums; flex: 1; min-width: 0; }
@@ -347,7 +347,7 @@
   .mrow .info { min-width: 0; }
   .mrow small { display: block; color: var(--t-textDim); font-size: 11px; font-variant-numeric: tabular-nums; }
   .mrow .btns { display: flex; gap: 4px; flex-shrink: 0; }
-  .mrow button { padding: 6px 10px; background: var(--t-btn); border: 1px solid var(--t-btnLine); border-radius: 6px; font-size: 13px; }
+  .mrow button { padding: 6px 10px; background: var(--t-btnRow); border: 1px solid var(--t-btnLine); border-radius: 6px; font-size: 13px; }
   .mrow button.danger { border-color: var(--t-warnLine); color: var(--t-warnText); }
   /* バトル：決定とその他、「その他」のボタン、固定ヘッダー */
   /* バトル画面はスマホ1画面に収める */
@@ -406,7 +406,7 @@
   .dlgBtns button.primary { background: var(--t-good); color: var(--t-goodText); border: none; }
   .mheadBtns { display: flex; gap: 8px; }
   #btnBackVillage { background: var(--t-returnBg); border: 1px solid var(--t-returnLine); }
-  .debug { position: fixed; right: 6px; bottom: calc(var(--safe-bottom) - 6px); font-size: 11px; color: var(--t-accent); }
+  .debug { position: fixed; right: 6px; bottom: calc(var(--safe-bottom) - 6px); font-size: 11px; color: var(--t-debugText); }
   /* ================= 狭い画面（幅600px以下）=================
      全体の高さ＝使える画面の高さ（100dvh）。上は表示枠のバー＋すき間、下はホームバー＋12px */
   @media (max-width: 600px) {
@@ -451,7 +451,7 @@
     #battle #cmds.moveList button { min-height: var(--move-h, 52px); height: var(--move-h, 52px); }
     /* わざ一覧がスクロールするとき（低い画面だけ）の印：一覧の下端にかかる影と文字 */
     #cmdsMore { position: relative; z-index: 2; height: 18px; margin-top: -18px; width: 100%; pointer-events: none; text-align: center;
-      font-size: 11px; line-height: 22px; color: var(--t-accent); background: linear-gradient(transparent, var(--t-bg)); }
+      font-size: 11px; line-height: 22px; color: var(--t-accent); background: linear-gradient(transparent, var(--t-fadeBg)); }
 
     /* 重ねて出す画面：中央寄せをやめ、バーのすぐ下から */
     .overlay { align-items: flex-start; padding: var(--safe-top) 12px var(--safe-bottom); }
@@ -649,12 +649,12 @@
 //  調整用の定数・データ
 // ================================================================
 // 版の目印（作業のたびに更新）。タイトル画面の隅、設定欄、?layout=1 の診断に出す
-const BUILD_ID = "1J-20261015-1626";
+const BUILD_ID = "1K-20261015-2028";
 // ================================================================
 //  色調（画面の色はすべてここから。ドット絵のパレット、ボスの色、レア度の色、世界地図の固定色は除く）
-//  THEME＝落ち着いた色（初期値）、THEME_OLD＝前の色。設定「色調」で切り替え（セーブに入る）
+//  THEME＝全画面の標準の色（1J の前の版の色）、THEME_MAP＝世界マップの画面だけの色（古地図）。地図の画面に入るときと出るときに切り替える
 // ================================================================
-const THEME = {
+const THEME_MAP = {
   bg: "#16110a",          /* 画面の背景（焦げ茶に近い暗い色） */
   panel: "#241b10",       /* パネル、メニューの面 */
   panel2: "#2e2314",      /* 少し明るいパネル */
@@ -686,8 +686,11 @@ const THEME = {
   overlay: "rgba(12,8,4,.86)", shadow: "#000", shadowSoft: "rgba(0,0,0,.6)", villageBg: "#2a2a1e",
   mapBg: "#0c0905", mapDim: "rgba(0,0,0,.5)", mapEnemyHpBg: "#400", mapEnemyHp: "#f44", oneHitDot: "#fff",
   flashHeal: "rgba(80,230,120,.35)", flashGuard: "rgba(90,220,255,.35)", flashAttack: "rgba(255,230,220,.45)",
+  btn2: "#2e2314", btnRow: "#2e2314", insetBack: "#1d160c", insetUnit: "#1d160c", selectRowBg: "#3a2c14", selectTabBg: "#3a2c14",
+  goodBg2: "#1c2614", toastNgLine: "#8a3a24", overlayMini: "rgba(12,8,4,.86)", overlayDiag: "rgba(12,8,4,.86)",
+  textHint: "#9a8762", diagLine: "#9a8762", buildText: "#9a8762", debugText: "#d9a441", fadeBg: "rgba(22,17,10,.95)",
 };
-const THEME_OLD = {
+const THEME = {
   bg: "#101114", panel: "#1a1b20", panel2: "#24252b", line: "#34363e", lineSoft: "#2a2b31",
   text: "#dcdde2", textDim: "#8a8c96", accent: "#ffd447", good: "#3fae6a", goodText: "#fff",
   hp: "#e5534b", en: "#43b4f0", danger: "#ff6b6b", select: "#ffd447",
@@ -707,13 +710,16 @@ const THEME_OLD = {
   overlay: "rgba(0,0,0,0.82)", shadow: "#000", shadowSoft: "rgba(0,0,0,.6)", villageBg: "#2a3a2e",
   mapBg: "#000", mapDim: "rgba(0,0,0,0.5)", mapEnemyHpBg: "#400", mapEnemyHp: "#f44", oneHitDot: "#fff",
   flashHeal: "rgba(80,230,120,.35)", flashGuard: "rgba(90,220,255,.35)", flashAttack: "rgba(255,230,220,.45)",
+  // 1J の前の版の色（1J でまとめていた近い色を、元の値に戻したもの）
+  btn2: "#24252b", btnRow: "#2c2d34", insetBack: "#1c1d22", insetUnit: "#1f2026", selectRowBg: "#26231a", selectTabBg: "#2a2618",
+  goodBg2: "#1f3328", toastNgLine: "#a85a3a", overlayMini: "rgba(0,0,0,.88)", overlayDiag: "rgba(0,0,0,.72)",
+  textHint: "#aaa", diagLine: "#888", buildText: "#5a5c66", debugText: "#f5d", fadeBg: "rgba(16,17,20,.95)",
 };
-const THEMES = { calm: THEME, old: THEME_OLD };
-const THEME_MODES = [{ key: "calm", label: "落ち着いた色" }, { key: "old", label: "前の色" }];
-const themeNow = () => THEMES[(typeof settings !== "undefined" && settings && settings.theme) || "calm"] || THEME;
-const tc = key => themeNow()[key];   // 処理の中で使う色
-function applyTheme() {
-  const r = document.documentElement.style, t = themeNow();
+let activeTheme = THEME;   // いま画面に使っている色の表（世界マップの画面だけ THEME_MAP）
+const tc = key => activeTheme[key];   // 処理の中で使う色
+function applyTheme(t = THEME) {
+  activeTheme = t;
+  const r = document.documentElement.style;
   for (const [k, v] of Object.entries(t)) r.setProperty("--t-" + k, v);
 }
 // 診断：バトルの欄に入ったメッセージの記録（件数、記録する文字数）
@@ -1175,6 +1181,8 @@ const VIEW_MAX = 15, VIEW_MIN_COLS = 13, VIEW_MIN_ROWS = 11;   // 表示する�
 const VIEW_MIN_ROWS_NARROW = 5;    // 狭い画面：高さが足りないときは行数を減らして、拡大率を保つ（プレイヤーは常に中央付近）
 const NARROW_MAX = 600;            // この幅以下は「狭い画面」（CSSの max-width: 600px と同じ）
 const ROOM_TRIES = 50, ROOM_MAX = 9;
+const STAIRS_DOOR_DIST = 3;        // 階段は、部屋の出入口からこのマス数より遠いところだけ
+const STAIRS_MAP_TRIES = 30;       // 階段を置ける部屋がないとき、地形を作り直す回数の上限
 
 // ================================================================
 //  グラフィック（図形の組み合わせからドット絵を作る）
@@ -1525,7 +1533,7 @@ let typeKey = null;
 let progress = null;     // { maxFloor, bossDefeated: {5, 10}, cleared }
 let saveFailed = false;
 // 設定（セーブに含める）：演出、確認なしで即実行、仲間のおまかせ、ひとうち、ミニマップの常時表示、一括回復の確認なし
-const DEFAULT_SETTINGS = { fx: true, instant: false, allyAuto: true, oneHit: true, miniMap: true, bulkNoConfirm: false, recruitConfirm: "ask", theme: "calm", mapTexture: true };
+const DEFAULT_SETTINGS = { fx: true, instant: false, allyAuto: true, oneHit: true, miniMap: true, bulkNoConfirm: false, recruitConfirm: "ask", theme: "calm", mapTexture: true };   // theme は使わない（1J の名残。古いセーブとの互換のため残す）
 let stock = [];          // 村のストック（仲間と同じ形の機体データ。主人公機は入らない）
 let settings = { ...DEFAULT_SETTINGS };
 let blinkOn = true;        // 0.5秒ごとに反転（キラキラ、ミニマップの点）
@@ -1831,11 +1839,18 @@ function newFloor() {
   floorDone = false; autoWalking = false;
   if (isBossFloor(floorNo)) { bossFloor(); return; }
 
-  let rooms = generateMap();
-  while (rooms.length < 4) rooms = generateMap();
-  const start = center(rooms[0]);
+  // スタート地点を決めてから、階段を選ぶ。階段を置ける部屋がない地形は作り直す
+  let rooms, start, plan;
+  for (let t = 0; ; t++) {
+    rooms = generateMap();
+    if (rooms.length < 4) continue;
+    start = center(rooms[0]);
+    plan = planStairs(rooms, start);
+    if (plan || t >= STAIRS_MAP_TRIES) break;
+  }
   pos = { x: start.x, y: start.y };
-  const s = freeCellIn(rooms[rooms.length - 1]);
+  floorRooms = rooms;
+  const s = plan ? plan.cell : freeCellIn(rooms[rooms.length - 1]);   // 念のための逃げ道（作り直しても置けないとき）
   map[s.y][s.x] = STAIRS;
 
   const count = floorNo <= EARLY_FLOORS ? rndRange(...EARLY_ENEMY_COUNT) : enemyCountFor(floorNo);
@@ -1856,8 +1871,109 @@ function newFloor() {
     groundItems.push({ x: p.x, y: p.y, key: "part", part: floorRarityPart(types[rnd(types.length)]) });
     placed++;
   }
+  ensurePathLoot(rooms, start, s);
   placeRare(s);
   updateFov();
+}
+
+// ---- 階段の置き場所（通常階） ----
+// 部屋の床にだけ置く。通路、部屋の出入口（通路とつながるマス）と、そこから STAIRS_DOOR_DIST マス以内には置かない。
+// 出入口が1つの部屋（行き止まり）を優先し、その中でスタートから歩く距離が長い部屋。なければ、いちばん遠い部屋。
+// 部屋の中では、出入口までの歩く距離が最大のマス（同じなら壁際の角）
+let floorRooms = [];   // いまの階の部屋（確認用）
+const inRoom = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+const roomIndexAt = (rooms, x, y) => rooms.findIndex(r => inRoom(r, x, y));
+const DIR4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+// 歩く距離（壁以外を通る）。pass で通れるマスを絞れる
+function walkDist(sources, pass = (x, y) => map[y][x] !== WALL) {
+  const d = Array.from({ length: MAP_H }, () => Array(MAP_W).fill(Infinity)), q = [];
+  for (const [x, y] of sources) { d[y][x] = 0; q.push([x, y]); }
+  for (let i = 0; i < q.length; i++) {
+    const [x, y] = q[i];
+    for (const [dx, dy] of DIR4) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= MAP_W || ny >= MAP_H || d[ny][nx] !== Infinity || !pass(nx, ny)) continue;
+      d[ny][nx] = d[y][x] + 1; q.push([nx, ny]);
+    }
+  }
+  return d;
+}
+// 部屋の出入口：部屋の床のうち、部屋の外の床（通路）と上下左右でつながるマス。groups＝出入口の数（外側の通路のまとまり）
+function roomDoors(r) {
+  const doors = [], outside = [];
+  for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) {
+    for (const [dx, dy] of DIR4) {
+      const nx = x + dx, ny = y + dy;
+      if (inRoom(r, nx, ny) || map[ny][nx] === WALL) continue;
+      if (!doors.some(([a, b]) => a === x && b === y)) doors.push([x, y]);
+      if (!outside.some(([a, b]) => a === nx && b === ny)) outside.push([nx, ny]);
+    }
+  }
+  // 外側の通路のマスを、つながりごとにまとめる
+  let groups = 0;
+  const seenO = new Set(), key = (x, y) => x + "," + y;
+  for (const o of outside) {
+    if (seenO.has(key(...o))) continue;
+    groups++;
+    const st = [o]; seenO.add(key(...o));
+    while (st.length) {
+      const [x, y] = st.pop();
+      for (const [dx, dy] of DIR4) {
+        const n = outside.find(([a, b]) => a === x + dx && b === y + dy);
+        if (n && !seenO.has(key(...n))) { seenO.add(key(...n)); st.push(n); }
+      }
+    }
+  }
+  return { doors, groups };
+}
+function planStairs(rooms, start) {
+  const dStart = walkDist([[start.x, start.y]]);
+  const cands = [];
+  rooms.forEach((r, i) => {
+    if (i === 0) return;   // スタートの部屋は除く
+    const { doors, groups } = roomDoors(r);
+    if (!doors.length) return;
+    const dDoor = walkDist(doors, (x, y) => inRoom(r, x, y) && map[y][x] !== WALL);
+    let best = null, reach = Infinity;
+    for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) {
+      reach = Math.min(reach, dStart[y][x]);
+      const dd = dDoor[y][x];
+      if (dd === Infinity || dd <= STAIRS_DOOR_DIST || dStart[y][x] === Infinity) continue;
+      const walls = DIR4.filter(([dx, dy]) => map[y + dy][x + dx] === WALL).length;
+      const score = dd * 10 + (walls >= 2 ? 2 : walls);   // 遠いほど、角（壁2面）ほどよい
+      if (!best || score > best.score || (score === best.score && Math.random() < 0.5)) best = { x, y, score };
+    }
+    if (best) cands.push({ room: i, deadEnd: groups === 1, reach, cell: { x: best.x, y: best.y } });
+  });
+  if (!cands.length) return null;
+  const dead = cands.filter(c => c.deadEnd), pool = dead.length ? dead : cands;
+  return pool.reduce((a, c) => (c.reach > a.reach ? c : a));
+}
+// 階段の部屋に着く前の最短経路の途中に部屋があれば、そのうち少なくとも1つに、取れるもの（アイテムかパーツ）があるようにする。
+// 数は増やさず、置いたものを1つ（アイテムを優先）その部屋へ移す
+function pathRooms(rooms, start, s) {
+  const d = walkDist([[s.x, s.y]]);
+  const out = new Set(), sr = roomIndexAt(rooms, s.x, s.y);
+  let x = start.x, y = start.y;
+  if (d[y][x] === Infinity) return [];
+  while (d[y][x] > 0) {
+    const i = roomIndexAt(rooms, x, y);
+    if (i > 0 && i !== sr) out.add(i);
+    const n = DIR4.map(([dx, dy]) => [x + dx, y + dy]).find(([nx, ny]) => d[ny] && d[ny][nx] === d[y][x] - 1);
+    [x, y] = n;
+  }
+  return [...out];
+}
+function ensurePathLoot(rooms, start, s) {
+  const pr = pathRooms(rooms, start, s);
+  if (!pr.length) return;
+  if (groundItems.some(it => pr.includes(roomIndexAt(rooms, it.x, it.y)))) return;
+  const it = groundItems.find(g => g.key !== "part") || groundItems[0];
+  if (!it) return;
+  for (let t = 0; t < 20; t++) {
+    const p = freeCellIn(rooms[pr[rnd(pr.length)]]);
+    if (p) { it.x = p.x; it.y = p.y; return; }
+  }
 }
 
 // ボス階：準備部屋 → 1本道の通路 → ボス部屋 → ボスの後ろに階段（左から右へ）
@@ -3489,15 +3605,6 @@ function renderMenu() {
     const btns = el("div", "btns"); btns.append(b); row.append(info, btns); body.append(row);
   }
   toggle("地図の質感", "mapTexture", "世界地図の紙のざらつき・シミ・暗い縁（オフで色の塗りだけ）");
-  {
-    // 色調：落ち着いた色／前の色
-    const row = el("div", "mrow");
-    const info = el("div", "info", "色調"); info.append(el("small", "", "画面全体の色（問題があったときは「前の色」に戻せる）"));
-    const i = Math.max(0, THEME_MODES.findIndex(m => m.key === settings.theme));
-    const b = rowButton(THEME_MODES[i].label, () => { settings.theme = THEME_MODES[(i + 1) % THEME_MODES.length].key; applyTheme(); saveGame(); renderMenu(); });
-    b.id = "set-theme";
-    const btns = el("div", "btns"); btns.append(b); row.append(info, btns); body.append(row);
-  }
   body.append(topAdjustRow(renderMenu));
   body.append(buildRow());
   body.append(galleryRow("menu"));
@@ -4253,9 +4360,8 @@ function applySave(d) {
   settings = { ...DEFAULT_SETTINGS };
   if (d.settings) for (const k of Object.keys(DEFAULT_SETTINGS)) {
     const v = d.settings[k];
-    if (typeof v === typeof DEFAULT_SETTINGS[k] && (k !== "recruitConfirm" || RECRUIT_MODES.some(m => m.key === v)) && (k !== "theme" || THEMES[v])) settings[k] = v;
+    if (typeof v === typeof DEFAULT_SETTINGS[k] && (k !== "recruitConfirm" || RECRUIT_MODES.some(m => m.key === v))) settings[k] = v;
   }
-  applyTheme();
   partUid = d.partUid || 0;
   resetLogs();
   progress = { maxFloor: d.progress.maxFloor, bossDefeated: { 5: !!d.progress.bossDefeated[5], 10: !!d.progress.bossDefeated[10] }, cleared: !!d.progress.cleared, clears: {} };
@@ -4618,6 +4724,7 @@ function openWorld() {
   const t0 = performance.now();
   hideAllScreens();
   mode = "world";
+  applyTheme(THEME_MAP);   // 世界マップの画面だけ、古地図の色
   $("world").hidden = false;
   buildWorldMap();
   updateWorldMarks();
@@ -4626,6 +4733,7 @@ function openWorld() {
 function closeWorld() {
   if (mode !== "world") return;
   hideAllScreens();
+  applyTheme(THEME);
   mode = "village";
   $("village").hidden = false;
   renderVillage();
