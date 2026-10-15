@@ -244,6 +244,9 @@
   #gallery { max-width: 520px; margin: 0 auto; padding: var(--safe-top) 12px calc(var(--safe-bottom) + 16px); }
   #gallery .galHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   #gallery h1 { font-size: 20px; margin: 0; }
+  #gallery .galBtns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  #gallery .galBtn { min-height: 40px; padding: 6px 16px; font-size: 14px; border-radius: 8px; background: var(--ok); color: #fff; border: none; }
+  #gallery .galSize { font-size: 15px; margin: 18px 0 0; padding-top: 8px; border-top: 1px solid var(--line); }
   #gallery .galToggle { min-height: 40px; padding: 6px 12px; font-size: 14px; border-radius: 8px; background: #23324a; border: 1px solid #3d8fd9; }
   #gallery .galSec { font-size: 13px; color: var(--dim); font-weight: normal; margin: 14px 0 6px; letter-spacing: .04em; }
   #gallery .galGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
@@ -334,6 +337,11 @@
   #battleLog { height: calc(3 * 1.45em + 8px); }
   #battle #cmdTitle { display: none; }
   #battle .arena { padding: 2px 8px; }
+  /* 群れの手下（見た目だけ。タップに反応しない） */
+  #minions { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+  #minions .minion { position: absolute; pointer-events: none; }
+  #minions.stomp .minion { animation: stomp var(--stomp-ms, 1000ms) steps(2, jump-none) infinite; }
+  @keyframes stomp { 0%, 100% { translate: 0 0; } 50% { translate: 0 calc(-1 * var(--stomp-px, 2px)); } }
   #battle .ally { padding: 0; }
   #battle #allies { gap: 2px; }
   #battle .prow { padding: 1px 6px; }
@@ -615,7 +623,7 @@
 //  調整用の定数・データ
 // ================================================================
 // 版の目印（作業のたびに更新）。タイトル画面の隅、設定欄、?layout=1 の診断に出す
-const BUILD_ID = "1H-20261015-1145";
+const BUILD_ID = "1I-20261015-1529";
 // 診断：バトルの欄に入ったメッセージの記録（件数、記録する文字数）
 const MSG_TRACE_MAX = 8, MSG_TRACE_TEXT = 20;
 // ?debug=1 を付けたときだけ、全機体のHPを大きくする（テスト用）
@@ -854,13 +862,103 @@ const SAMPLE_GORILLA={n:"ゴリラ（見本・64×64）",w:64,h:64,
  a:[[28,21,"h"],[29,21,"h"],[35,21,"h"],[36,21,"h"],[30,25,"k"],[34,25,"k"],[28,28,"h"],[30,28,"h"],[32,28,"h"],[34,28,"h"],[26,14,"h"],[28,13,"h"],[31,9,"h"],[33,9,"h"],[51,10,"h"],[51,14,"h"],[55,9,"h"],[55,13,"h"],[59,11,"h"],[6,13,"h"],[10,13,"h"],[6,12,"h"],[10,12,"h"]]
 };
 const SPRITES_GALLERY = /[?&]sprites=1(&|$)/.test(location.search);   // ?sprites=1：ゲームの代わりに絵の一覧を出す
-// ボスの絵：今は仮に、もとの絵（base）を大きさに合わせて整数倍にして、色（tone）を変えたもの。新しい絵は、あとでここに足す
-const BOSS_SPRITES = { boss: { base: "rex", tone: "boss" } };
+// ---- 絵の向き ----
+// facing＝元の絵の顔の向き（"right"／"left"／"front"）、bodyDir＝元の絵で体が流れる向き（"left"／"right"／"none"）
+// 敵（右側）は「顔が左、体が右へ」、味方（左側）は「顔が右、体が左へ」になるよう、bodyDir から反転を決める（flipFor）
+const ANIMAL_FACING = { facing: "right", bodyDir: "left" };   // 今ある7種類の動物
 
-// ボス（階の補正はかけない）。sprite＝絵（BOSS_SPRITES）、spriteSize＝絵の大きさ
+// ---- 機械遺跡のボスの絵（64×48。顔だけ正面向き、体は横に流す） ----
+const METAL2 = { c: "#aab0ba", g: "#4a4f58" };
+const TONES2 = {
+  guardian:     { b: "#6d7280", d: "#454a58", l: "#98a0b4", e: "#ff6a30", y: "#ffb020" },
+  raptor:       { b: "#8a3a30", d: "#5a2420", l: "#b85a48", e: "#ffd23a", y: "#ff9a30", w: "#f3f3f3" },
+  raptorMinion: { b: "#c4a070", d: "#8a6c44", l: "#e0c898", e: "#ffd23a", w: "#f3f3f3" },
+};
+const bossTonePalette = key => ({ k: K_OUT, ...METAL2, ...TONES2[key] });
+// ラプトル型の親分と手下（axis 96）。親分はトサカ付き。手下はトサカなしで、親分の MINION_K 倍
+const RAPTOR_BODY=[
+["P",[[19,27],[12,27],[12,33],[20,34]],"d"],
+["P",[[12,27],[6,28],[6,32],[12,33]],"b"],
+["P",[[6,28],[1,29],[1,31],[6,32]],"d"],
+["P",[[1,30],[3,28],[3,32]],"c"],
+["P",[[20,32],[28,32],[29,38],[22,40]],"d"],
+["P",[[23,38],[28,38],[26,45],[21,45]],"g"],
+["P",[[17,44],[28,44],[29,47],[15,47]],"g"],
+["P",[[18,26],[26,21],[38,20],[44,24],[42,32],[32,36],[20,34]],"b"],
+["P",[[20,27],[38,24],[40,28],[22,31]],"l"],
+["P",[[22,22],[24,17],[27,21]],"c"],["P",[[28,21],[30,16],[33,20]],"c"],["P",[[34,20],[36,15],[39,19]],"c"],
+["P",[[26,32],[36,32],[38,38],[30,40]],"b"],
+["P",[[30,38],[36,38],[33,45],[28,45]],"d"],
+["P",[[24,44],[36,44],[38,47],[22,47]],"g"],
+["P",[[22,45],[18,43],[20,47]],"c"],
+["E",28,32,4,4,"l"],
+["P",[[38,26],[43,28],[44,33],[41,34]],"d"],["P",[[43,33],[47,34],[44,36]],"c"],
+["P",[[38,20],[44,22],[46,28],[40,30]],"d"]];
+const RAPTOR_CREST=[
+{s:["P",[[45,11],[40,5],[43,13]],"y"]},
+["P",[[46,10],[48,1],[50,10]],"y"]];
+const RAPTOR_HEAD=[
+{s:["P",[[48,10],[43,12],[41,18],[43,24],[48,26]],"b"]},
+{s:["P",[[48,21],[45,21],[45,27],[48,29]],"l"]},
+{s:["P",[[48,13],[43,14],[43,16],[48,15]],"d"]},
+{sd:["R",43,15,3,2,"g"]},{sd:["R",42,20,2,3,"g"]},
+{d:["R",43,14,10,1,"g"]},
+{sd:["P",[[45,26],[46,26],[45.5,30]],"w"]}];
+const RAPTOR_AM=[[44,16,"e"],[46,28,"k"]];
+const RAPTOR_A=[[28,32,"e"],[25,28,"k"],[31,27,"k"],[35,26,"k"],[26,40,"l"],[30,22,"l"]];
+const RAPTOR_CHIEF={n:"ゲートキーパー",w:BOSS_SPRITE_W,h:BOSS_SPRITE_H,axis:96,facing:"front",bodyDir:"left",
+ o:RAPTOR_BODY.concat(RAPTOR_CREST,RAPTOR_HEAD),am:RAPTOR_AM,a:RAPTOR_A};
+const MINION_K=0.7,MINION_DX=4,MINION_DY=14;   // 手下の大きさの係数と、ずらす量
+const RAPTOR_MINION={n:"手下",w:BOSS_SPRITE_W,h:BOSS_SPRITE_H,axis:96*MINION_K+2*MINION_DX,facing:"front",bodyDir:"left",
+ o:scaleList(RAPTOR_BODY.concat(RAPTOR_HEAD),MINION_K,MINION_DX,MINION_DY),
+ am:scalePixels(RAPTOR_AM,MINION_K,MINION_DX,MINION_DY),a:scalePixels(RAPTOR_A,MINION_K,MINION_DX,MINION_DY)};
+// トリケラトプス型の守護機（axis 84）
+const TRICERA={n:"遺跡の守護機オメガ",w:BOSS_SPRITE_W,h:BOSS_SPRITE_H,axis:84,facing:"front",bodyDir:"left",
+o:[
+["P",[[7,27],[1,31],[2,34],[9,34]],"d"],
+["P",[[2,31],[5,29],[5,35]],"c"],
+["P",[[24,35],[30,35],[31,45],[25,45]],"d"],["P",[[16,35],[22,35],[23,45],[17,45]],"d"],
+["P",[[23,45],[32,45],[33,47],[22,47]],"g"],["P",[[15,45],[24,45],[25,47],[14,47]],"g"],
+["P",[[6,24],[24,18],[40,22],[44,30],[40,38],[8,38],[3,30]],"b"],
+["P",[[10,26],[30,23],[34,27],[10,31]],"l"],
+["P",[[10,23],[12,18],[15,22]],"c"],["P",[[16,21],[18,15],[21,20]],"c"],["P",[[22,19],[24,14],[27,19]],"c"],
+["P",[[30,36],[39,36],[40,45],[29,45]],"b"],["P",[[9,36],[18,36],[19,45],[8,45]],"b"],
+["P",[[28,45],[41,45],[42,47],[27,47]],"g"],["P",[[7,45],[20,45],[21,47],[6,47]],"g"],
+["E",34,40,4,3,"l"],["E",13,40,4,3,"l"],
+["E",14,32,4.5,4.5,"l"],["E",35,31,4.5,4.5,"l"],
+{s:["P",[[42,2],[32,3],[26,8],[24,15],[26,22],[33,26],[42,25]],"d"]},
+{s:["P",[[26,8],[22,6],[26,13]],"c"]},
+{s:["P",[[42,6],[34,7],[29,11],[28,16],[30,21],[35,23],[42,22]],"l"]},
+{s:["E",31,15,2.5,2.5,"g"]},{s:["E",31,15,1.2,1.2,"e"]},
+{d:["R",41,3,2,20,"g"]},
+{s:["P",[[42,12],[35,14],[33,21],[36,28],[42,30]],"b"]},
+{s:["P",[[37,23],[34,23],[35,28],[38,29]],"d"]},
+{s:["P",[[42,25],[38,25],[39,30],[42,32]],"l"]},
+{s:["P",[[42,16],[35,16],[35,19],[42,18]],"d"]},
+{s:["P",[[36,17],[32,6],[39,15]],"c"]},
+["P",[[39,25],[42,17],[45,25]],"c"],
+{sd:["R",36,18,3,2,"g"]}
+],
+am:[[37,19,"e"],[41,26,"k"]],
+a:[[14,32,"e"],[35,31,"e"],[12,24,"k"],[20,28,"k"],[28,26,"k"],[33,42,"k"],[12,42,"k"],[26,40,"l"],[18,16,"l"],[24,17,"l"]]};
+// ボスの絵の表（絵のデータと色）。ボスを増やすときは、ここと BOSSES に足す
+const BOSS_SPRITES = {
+  raptorChief:  { def: RAPTOR_CHIEF,  tone: "raptor" },
+  raptorMinion: { def: RAPTOR_MINION, tone: "raptorMinion" },
+  guardian:     { def: TRICERA,       tone: "guardian" },
+};
+// 群れの描写（見た目だけ。HPも当たり判定も持たない）
+const MINION_COUNT_BY_WIDTH = [[360, 3], [260, 2], [200, 1]];   // 敵の領域の幅（px）ごとの手下の数。200未満は0
+const MINION_LUNGE_PX = 16;          // 飛び出す距離（手下の倍率2のとき。倍率に合わせて変える）
+const MINION_LUNGE_BASE_SCALE = 2;
+const MINION_LUNGE_MS = 150;         // 1体あたり
+const MINION_LUNGE_TOTAL_MS = 500;   // 全体の上限
+const MINION_STOMP_PX = 2, MINION_STOMP_MS = 1000;   // 「力を溜めている」間の足踏み
+
+// ボス（階の補正はかけない）。sprite＝絵（BOSS_SPRITES）、spriteSize＝絵の大きさ、minions＝群れの手下の絵（見た目だけ）
 const BOSSES = {
-  5:  { name: "ゲートキーパー",     hp: 200, atk: 16, acc: 85, exp: 40, sprite: "boss", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H } },
-  10: { name: "遺跡の守護機オメガ", hp: 300, atk: 26, acc: 85, exp: 0, doubleBelowHalf: true, sprite: "boss", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H } },
+  5:  { name: "ゲートキーパー",     hp: 200, atk: 16, acc: 85, exp: 40, sprite: "raptorChief", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H }, minions: { sprite: "raptorMinion" } },
+  10: { name: "遺跡の守護機オメガ", hp: 300, atk: 26, acc: 85, exp: 0, doubleBelowHalf: true, sprite: "guardian", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H } },
 };
 const FINAL_FLOOR = 10;
 // ダンジョンのデータ（1か所にまとめる）。今は1つ目の遺跡だけ。将来はここに足す（仕掛け、前庭、出る動物の系統など）
@@ -967,22 +1065,40 @@ function opColor(op){return op[0]==="P"?op[2]:op[5];}
 function paintOp(a,pid,w,h,op,id){
   const t=op[0],col=opColor(op);
   const set=(x,y)=>{a[y][x]=col;pid[y][x]=col===0?0:id;};
-  if(t==="P"){for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(inPoly(x+0.5,y+0.5,op[1]))set(x,y);}
-  else if(t==="E"){const m=op[6]===undefined?99:op[6];for(let y=0;y<h;y++)for(let x=0;x<w;x++){const dx=(x+0.5-op[1])/op[3],dy=(y+0.5-op[2])/op[4];if(dx*dx+dy*dy<=1&&y+0.5<=m)set(x,y);}}
-  else if(t==="R"){for(let y=op[2];y<op[2]+op[4];y++)for(let x=op[1];x<op[1]+op[3];x++)if(y>=0&&y<h&&x>=0&&x<w)set(x,y);}
+  // 図形の外接の四角の中だけ調べる（結果は全部のマスを調べたときと同じ）
+  const clampX=v=>Math.max(0,Math.min(w,v)),clampY=v=>Math.max(0,Math.min(h,v));
+  if(t==="P"){
+    const xs=op[1].map(q=>q[0]),ys=op[1].map(q=>q[1]);
+    const x0=clampX(Math.floor(Math.min(...xs))-1),x1=clampX(Math.ceil(Math.max(...xs))+1),y0=clampY(Math.floor(Math.min(...ys))-1),y1=clampY(Math.ceil(Math.max(...ys))+1);
+    for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)if(inPoly(x+0.5,y+0.5,op[1]))set(x,y);
+  }
+  else if(t==="E"){
+    const m=op[6]===undefined?99:op[6];
+    const x0=clampX(Math.floor(op[1]-op[3])-1),x1=clampX(Math.ceil(op[1]+op[3])+1),y0=clampY(Math.floor(op[2]-op[4])-1),y1=clampY(Math.ceil(op[2]+op[4])+1);
+    for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){const dx=(x+0.5-op[1])/op[3],dy=(y+0.5-op[2])/op[4];if(dx*dx+dy*dy<=1&&y+0.5<=m)set(x,y);}
+  }
+  else if(t==="R"){
+    // マスの中心が四角の中にあるマスを塗る（座標が整数なら今までと同じ。小数でも動く）
+    const x0=Math.ceil(op[1]-0.5),x1=Math.ceil(op[1]+op[3]-0.5),y0=Math.ceil(op[2]-0.5),y1=Math.ceil(op[2]+op[4]-0.5);
+    for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)if(y>=0&&y<h&&x>=0&&x<w)set(x,y);
+  }
 }
-function mirrorOp(op,w){
+// 左右対称：x' ＝ axis − x（axis を省略したときは横幅 w）。小数でもよい
+function mirrorOp(op,ax){
   const t=op[0];
-  if(t==="P")return["P",op[1].map(p=>[w-p[0],p[1]]),op[2]];
-  if(t==="E")return["E",w-op[1],op[2],op[3],op[4],op[5],op[6]];
-  return["R",w-op[1]-op[3],op[2],op[3],op[4],op[5]];
+  if(t==="P")return["P",op[1].map(p=>[ax-p[0],p[1]]),op[2]];
+  if(t==="E")return["E",ax-op[1],op[2],op[3],op[4],op[5],op[6]];
+  return["R",ax-op[1]-op[3],op[2],op[3],op[4],op[5]];
 }
+// { sd: 図形 }＝左右対称の細部（この図形と、軸で反転した図形の2つを、細部として描く）
 function buildSprite(def,w,h){
+  const ax=def.axis===undefined?w:def.axis;
   const a=makeGrid(w,h),pid=makeGrid(w,h),b=makeGrid(w,h),list=[];
   for(const e of def.o){
     if(Array.isArray(e))list.push([e,true]);
     else if(e.d)list.push([e.d,false]);
-    else if(e.s){list.push([e.s,true]);list.push([mirrorOp(e.s,w),true]);}
+    else if(e.s){list.push([e.s,true]);list.push([mirrorOp(e.s,ax),true]);}
+    else if(e.sd){list.push([e.sd,false]);list.push([mirrorOp(e.sd,ax),false]);}
   }
   let id=0;
   for(const [op,part] of list){if(part)id++;paintOp(a,pid,w,h,op,part?id:0);}
@@ -1003,22 +1119,26 @@ function buildSprite(def,w,h){
     if(a[y][x])b[y][x]=mark[y][x]?"k":a[y][x];
     else{const nb=(y>0&&a[y-1][x])||(y<h-1&&a[y+1][x])||(x>0&&a[y][x-1])||(x<w-1&&a[y][x+1]);if(nb)b[y][x]="k";}
   }
-  (def.a||[]).forEach(q=>{b[q[1]][q[0]]=q[2];});
-  (def.am||[]).forEach(q=>{b[q[1]][q[0]]=q[2];b[q[1]][w-1-q[0]]=q[2];});
+  // 最後に打つ点（輪郭のあと）。領域の外の点は描かない。am は x' ＝ round(axis − 1 − x)
+  const put=(x,y,c)=>{if(x>=0&&x<w&&y>=0&&y<h)b[y][x]=c;};
+  (def.a||[]).forEach(q=>put(q[0],q[1],q[2]));
+  (def.am||[]).forEach(q=>{put(q[0],q[1],q[2]);put(Math.round(ax-1-q[0]),q[1],q[2]);});
   return b;
 }
-// 図形を k 倍にする（ボスの仮の絵）
-function scaleOp(op,k){
+// 拡大縮小（群れの手下の絵を作る）。四角は多角形にする。軸は axis ＝ k × axis ＋ 2 × dx
+function scaleOp(op,k,dx,dy){
   const t=op[0];
-  if(t==="P")return["P",op[1].map(p=>[p[0]*k,p[1]*k]),op[2]];
-  if(t==="E")return["E",op[1]*k,op[2]*k,op[3]*k,op[4]*k,op[5],op[6]===undefined?undefined:op[6]*k];
-  return["R",op[1]*k,op[2]*k,op[3]*k,op[4]*k,op[5]];
+  if(t==="P")return["P",op[1].map(p=>[p[0]*k+dx,p[1]*k+dy]),op[2]];
+  if(t==="E")return["E",op[1]*k+dx,op[2]*k+dy,op[3]*k,op[4]*k,op[5],op[6]===undefined?undefined:op[6]*k+dy];
+  const x=op[1]*k+dx,y=op[2]*k+dy,w=op[3]*k,h=op[4]*k;
+  return["P",[[x,y],[x+w,y],[x+w,y+h],[x,y+h]],op[5]];
 }
-function scaleDef(def,k){
-  const o=def.o.map(e=>Array.isArray(e)?scaleOp(e,k):e.d?{d:scaleOp(e.d,k)}:{s:scaleOp(e.s,k)});
-  (def.a||[]).forEach(([x,y,c])=>o.push({d:["R",x*k,y*k,k,k,c]}));
-  return {n:def.n,o,a:[],am:[],inner:def.inner,minArea:def.minArea};
+function scaleList(o,k,dx,dy){
+  return o.map(e=>Array.isArray(e)?scaleOp(e,k,dx,dy):e.d?{d:scaleOp(e.d,k,dx,dy)}:e.s?{s:scaleOp(e.s,k,dx,dy)}:{sd:scaleOp(e.sd,k,dx,dy)});
 }
+function scalePixels(l,k,dx,dy){return l.map(q=>[Math.round(q[0]*k+dx),Math.round(q[1]*k+dy),q[2]]);}
+// 絵を左右反転した2次元配列（向きの規則で使う。描き直さない）
+const flipGrid = g => g.map(r => r.slice().reverse());
 
 // バトル用の動物の絵（32×24ドット、右向き）。色は TONES（動物ごとの単色系）から
 const BATTLE={
@@ -1091,7 +1211,7 @@ bird:{n:"ホークウィング",
 // マップ用の絵（12×12ドット）。内側の黒線は使わない
 const RING=["E",6,10.5,5,1.2,"q"];
 const ENEMY_OPS=[RING,["R",3,1,1,2,"d"],["R",8,1,1,2,"d"],["R",3,3,6,4,"b"],["R",3,7,6,2,"b"],["R",2,7,1,2,"d"],["R",9,7,1,2,"d"],["R",3,9,2,2,"d"],["R",7,9,2,2,"d"],["R",4,7,4,1,"d"]];
-for (const k in BATTLE) BATTLE[k].p = tonePalette(k);   // パレットは動物ごとの単色系
+for (const k in BATTLE) Object.assign(BATTLE[k], ANIMAL_FACING, { p: tonePalette(k) });   // 向きと、動物ごとの単色系のパレット
 const MAPICON={
 player:{p:{k:"#2b2b2b",q:"#4fe0ff",b:"#3d8fd9",d:"#2a66a8",l:"#cfe6ff",y:"#ffd23a"},
  o:[RING,["R",3,2,6,4,"b"],["R",4,3,4,2,"y"],["R",3,6,6,3,"b"],["R",5,7,2,1,"l"],["R",2,6,1,3,"d"],["R",9,6,1,3,"d"],["R",3,9,2,2,"d"],["R",7,9,2,2,"d"],["R",5,1,2,1,"y"]],a:[]},
@@ -1123,12 +1243,14 @@ const TILES = {
 const SPR = {};
 function prepareSprites() {
   for (const [k, d] of Object.entries(BATTLE)) SPR[k] = { g: buildSprite(d, BATTLE_W, BATTLE_H), p: d.p, w: BATTLE_W, h: BATTLE_H };
-  // ボス：絵の大きさはボスのデータ（spriteSize）から。仮の絵は、もとの絵を整数倍にしたもの
+  for (const k of Object.keys(BATTLE)) Object.assign(SPR[k], { facing: BATTLE[k].facing, bodyDir: BATTLE[k].bodyDir });
+  // ボス（と群れの手下）：大きさと向きは絵のデータから
   for (const [key, bs] of Object.entries(BOSS_SPRITES)) {
-    const size = Object.values(BOSSES).find(b => b.sprite === key).spriteSize;
-    const def = scaleDef(BATTLE[bs.base], Math.round(size.w / BATTLE_W));
-    SPR[key] = { g: buildSprite(def, size.w, size.h), p: tonePalette(bs.tone), w: size.w, h: size.h };
+    const d = bs.def;
+    SPR[key] = { g: buildSprite(d, d.w, d.h), p: bossTonePalette(bs.tone), w: d.w, h: d.h, facing: d.facing, bodyDir: d.bodyDir };
   }
+  // 敵として使う反転した版も、ここで1回だけ作る
+  for (const k of [...Object.keys(BATTLE), ...Object.keys(BOSS_SPRITES)]) SPR[k].gf = flipGrid(SPR[k].g);
   for (const [k, d] of Object.entries(MAPICON)) SPR["m_" + k] = { g: buildSprite(d, MAP_N, MAP_N), p: d.p, w: MAP_N, h: MAP_N };
   for (const [k, t] of Object.entries(TILES)) SPR["t_" + k] = { g: t.g, p: t.p, w: MAP_N, h: MAP_N };
   const re = buildRareSprite(MAPICON.enemy, MAP_N, MAP_N);
@@ -1144,14 +1266,21 @@ function spriteImage(key, s, flip) {
   const sp = SPR[key], c = document.createElement("canvas");
   c.width = sp.w * s; c.height = sp.h * s;
   const x2 = c.getContext("2d");
+  // 反転は、作った絵の2次元配列を左右入れ替えた版で描く（なければ1回だけ作って保存）
+  const g = flip ? (sp.gf || (sp.gf = flipGrid(sp.g))) : sp.g;
   for (let y = 0; y < sp.h; y++) for (let x = 0; x < sp.w; x++) {
-    const col = sp.p[sp.g[y][x]];
+    const col = sp.p[g[y][x]];
     if (!col) continue;
     x2.fillStyle = col;
-    x2.fillRect((flip ? sp.w - 1 - x : x) * s, y * s, s, s);
+    x2.fillRect(x * s, y * s, s, s);
   }
   spriteCache.set(ck, c);
   return c;
+}
+// 向きの規則：敵（右側）は顔が左・体が右へ、味方（左側）は顔が右・体が左へ。bodyDir（元の絵で体が流れる向き）で決める
+function flipFor(key, side) {
+  const bd = (SPR[key] && SPR[key].bodyDir) || ANIMAL_FACING.bodyDir;
+  return side === "enemy" ? bd === "left" : bd === "right";
 }
 // DOMに置く用のキャンバス
 function spriteEl(key, s, flip) {
@@ -1223,7 +1352,8 @@ function rareSpriteKey(animal) {
   const key = "rare_" + animal;
   if (!SPR[key]) {
     const r = buildRareSprite(BATTLE[animal], BATTLE_W, BATTLE_H);
-    SPR[key] = { g: r.grid, p: r.pal, w: BATTLE_W + 2 * RARE_PAD, h: BATTLE_H + 2 * RARE_PAD };
+    SPR[key] = { g: r.grid, p: r.pal, w: BATTLE_W + 2 * RARE_PAD, h: BATTLE_H + 2 * RARE_PAD, facing: BATTLE[animal].facing, bodyDir: BATTLE[animal].bodyDir };
+    SPR[key].gf = flipGrid(SPR[key].g);
   }
   return key;
 }
@@ -1856,6 +1986,7 @@ function applyLayoutVars() {
   px("--arena-h", arenaHeight()); px("--party-row-h", h < COMPACT_H ? PARTY_ROW_H_COMPACT : h < LOW_SCREEN_H ? PARTY_ROW_H_LOW : PARTY_ROW_H);
   px("--blog-h", BATTLE_LOG_H); px("--minfo-h", h < COMPACT_H ? MOVE_INFO_H_COMPACT : MOVE_INFO_H); px("--move-h", MOVE_BTN_H);
   px("--move-list-min", MOVE_LIST_MIN_H);
+  px("--stomp-px", MINION_STOMP_PX); r.setProperty("--stomp-ms", MINION_STOMP_MS + "ms");
 }
 
 function startBattle(e) {
@@ -1882,7 +2013,7 @@ function startBattle(e) {
   const sc = battleScales(e.boss ? e.def.spriteSize : undefined);
   const ew = $("eWrap");
   ew.textContent = "";
-  const ec = e.rare ? rareEl(e, sc.enemy) : spriteEl(e.sprite, e.boss ? sc.boss : sc.enemy, true);
+  const ec = e.rare ? rareEl(e, sc.enemy) : spriteEl(e.sprite, e.boss ? sc.boss : sc.enemy, flipFor(e.sprite, "enemy"));
   ec.id = "eSprite";
   ew.append(ec);
   const allies = $("allies");
@@ -1890,18 +2021,76 @@ function startBattle(e) {
   team.forEach((u, i) => {
     const d = document.createElement("div");
     d.className = "ally"; d.id = "ally" + i;
-    d.append(spriteEl(u.sprite, sc.ally, false));
+    d.append(spriteEl(u.sprite, sc.ally, flipFor(u.sprite, "ally")));
     allies.append(d);
   });
+  setupMinions(e, sc.boss);
   beginTurn();
 }
 
+// ---- 群れの描写（見た目だけ）：ボスのデータに minions があるとき、親分の前（左側）に手下を並べる ----
+// 手下は HP・名前・当たり判定を持たず、タップにも反応しない。乱数は使わない（戦闘の結果に関係しない）
+function minionCount(areaW) {
+  for (const [w, n] of MINION_COUNT_BY_WIDTH) if (areaW >= w) return n;
+  return 0;
+}
+// 絵の、色のある範囲（左右の列と、いちばん下の行）
+function opaqueBox(g) {
+  let l = Infinity, r = -1, t = Infinity, b = -1;
+  g.forEach((row, y) => row.forEach((c, x) => { if (c) { l = Math.min(l, x); r = Math.max(r, x); t = Math.min(t, y); b = Math.max(b, y); } }));
+  return { l, r, t, b };
+}
+function setupMinions(e, bossScale) {
+  const old = $("minions"); if (old) old.remove();
+  battle.minions = null;
+  if (!e.boss || !e.def.minions) return;
+  const arena = $("arena"), ar = arena.getBoundingClientRect();
+  const boss = $("eSprite").getBoundingClientRect(), alliesR = $("allies").getBoundingClientRect();
+  const key = e.def.minions.sprite, ms = Math.max(1, bossScale - 1);
+  const flip = flipFor(key, "enemy"), mg = flip ? SPR[key].gf : SPR[key].g, mb = opaqueBox(mg);
+  const cg = flipFor(e.sprite, "enemy") ? SPR[e.sprite].gf : SPR[e.sprite].g, cb = opaqueBox(cg);
+  const gap = 4;
+  const left = alliesR.right + gap, right = boss.left + cb.l * bossScale - gap;   // 味方の絵と、親分（の顔）の左端の間
+  const mw = (mb.r - mb.l + 1) * ms;
+  let n = minionCount(ar.width);
+  const avail = right - left;
+  while (n > 0 && avail < mw + (n - 1) * Math.ceil(mw * 0.3)) n--;   // 入らないときは減らす
+  if (!n) return;
+  const step = n > 1 ? Math.min(mw * 0.8, (avail - mw) / (n - 1)) : 0;
+  const ground = boss.top + (cb.b + 1) * bossScale;   // 親分の足の位置（地面の線）
+  const box = el("div"); box.id = "minions";
+  const list = [];
+  for (let j = 0; j < n; j++) {   // j=0 が親分のすぐ前（奥）、大きいほど手前（味方に近い）
+    const c = spriteEl(key, ms, flip); c.className = "px minion";
+    const x = right - mw - j * step - mb.l * ms;
+    const lift = (n - 1 - j) * 2 * ms;   // 奥の手下ほど少し高く
+    c.style.left = `${Math.round(x - ar.left - arena.clientLeft)}px`;
+    c.style.top = `${Math.round(ground - lift - (mb.b + 1) * ms - ar.top - arena.clientTop)}px`;
+    c.style.zIndex = String(1 + j);
+    box.append(c); list.push(c);
+  }
+  arena.append(box);
+  battle.minions = { els: list.reverse(), scale: ms };   // 味方に近い順
+}
+// 親分の攻撃に合わせて、手下が味方の方へ飛び出して戻る（heavy=強攻撃は全員同時）
+function minionsAct(heavy) {
+  const m = battle && battle.minions;
+  if (!m || !settings.fx) return;
+  const dist = MINION_LUNGE_PX * m.scale / MINION_LUNGE_BASE_SCALE, n = m.els.length;
+  const step = heavy || n < 2 ? 0 : Math.min(MINION_LUNGE_MS, (MINION_LUNGE_TOTAL_MS - MINION_LUNGE_MS) / (n - 1));
+  m.els.forEach((c, i) => {
+    if (!c.animate) return;
+    c.animate([{ transform: "translateX(0)" }, { transform: `translateX(${-dist}px)` }, { transform: "translateX(0)" }],
+      { duration: MINION_LUNGE_MS, delay: i * step, easing: "ease-out" });
+  });
+}
+
 // バトル画面のレア個体の絵（キラキラは点滅のたびに描き直す）。縁取りの分だけ外にはみ出させる
-function rareEl(e, s) {
+function rareEl(e, s, flip = flipFor(e.sprite, "enemy")) {
   const key = rareSpriteKey(e.sprite), sp = SPR[key];
   const c = document.createElement("canvas");
   c.width = sp.w * s; c.height = sp.h * s; c.className = "px";
-  c.dataset.sprite = key; c.dataset.scale = s; c.dataset.flip = "1"; c.dataset.rare = "1";
+  c.dataset.sprite = key; c.dataset.scale = s; c.dataset.flip = flip ? "1" : "0"; c.dataset.rare = "1";
   c.style.margin = `${-RARE_PAD * s}px`;
   paintRareEl(c);
   return c;
@@ -1910,7 +2099,7 @@ function paintRareEl(c) {
   const s = +c.dataset.scale, x2 = c.getContext("2d");
   x2.imageSmoothingEnabled = false;
   x2.clearRect(0, 0, c.width, c.height);
-  drawRare(x2, c.dataset.sprite, SPARKS_BATTLE, RARE_PAD * s, RARE_PAD * s, s, true);
+  drawRare(x2, c.dataset.sprite, SPARKS_BATTLE, RARE_PAD * s, RARE_PAD * s, s, c.dataset.flip === "1");
 }
 
 // バトル終了後の後片付け（勝ち・逃げ共通）
@@ -2249,6 +2438,7 @@ async function enemyPhase() {
   if (battle.heavyReady) {
     battle.heavyReady = false;
     const t = randomAlive();
+    minionsAct(true);
     if (t) enemyStrike(e, t, enemyPower(e, BOSS_HEAVY_MULT), e.acc - BOSS_HEAVY_ACC_DOWN, `${e.name}の強攻撃`, true);
     renderBattle();
     await pause();
@@ -2268,6 +2458,7 @@ async function enemyPhase() {
   for (let i = 0; i < times; i++) {
     const t = randomAlive();
     if (!t) break;
+    minionsAct(false);
     enemyStrike(e, t, enemyPower(e), e.acc, times > 1 ? `${e.name}の連撃(${i + 1})` : `${e.name}の攻撃`);
     renderBattle();
     await pause();
@@ -2310,6 +2501,7 @@ function winBattle() {
   const res = (t, c) => battle.results.push({ t, c: c || "" });
   battle.results.push({ t: `${e.name}を倒した！${e.exp ? ` 経験値 +${e.exp}` : ""}` });
   $("eSprite").style.opacity = "0.2";
+  if ($("minions")) $("minions").hidden = true;   // 手下は親分と同時に消える
 
   if (e.boss) {
     progress.bossDefeated[floorNo] = true;
@@ -2457,7 +2649,7 @@ function recruitDismantlePicked() {
 // 小さな機体の行（絵・名前・レベル・HP・パーツ）。仲間にする画面とメニューの「仲間」タブで使う
 function unitLine(u, opts = {}) {
   const row = el("div", "rcUnit" + (opts.pick ? " pick" : "") + (opts.on ? " on" : ""));
-  row.append(spriteEl(u.sprite, 1, false));
+  row.append(spriteEl(u.sprite, 1, flipFor(u.sprite, "ally")));
   // 1行目：名前・レベル・HP・固有技、2行目：パーツ（仲間は🔒固定）
   const t = el("div", "rcuText");
   const l1 = el("div", "rcuL");
@@ -2497,7 +2689,7 @@ function renderRecruit() {
   }
   body.append(el("h2", "", "仲間になりたそうにしている！"));
   const top = el("div", "rcTop");
-  top.append(spriteEl(u.sprite, 3, false));
+  top.append(spriteEl(u.sprite, 3, flipFor(u.sprite, "ally")));
   const nm = el("div");
   nm.append(el("div", "rcName", u.name), el("div", "", `Lv${u.lv}`));
   const g = el("div", "rcStats");
@@ -2706,6 +2898,7 @@ function renderCompactInfo(box, b) {
 let currentCmds = [];
 function renderBattle() {
   if (!battle) return;
+  if ($("minions")) $("minions").classList.toggle("stomp", !!(battle.heavyReady && settings.fx));   // 力を溜めている間は足踏み
   const e = battle.enemy;
   $("eName").textContent = (e.boss ? "BOSS " : "") + e.name;
   $("eName").classList.toggle("rareName", !!e.rare);
@@ -3024,7 +3217,7 @@ function renderMenu() {
 
   // 機体の絵とステータス
   const head = el("div", "unitHead");
-  head.append(spriteEl(u.sprite, 3, false));
+  head.append(spriteEl(u.sprite, 3, flipFor(u.sprite, "ally")));
   const g = el("div", "sgrid");
   const stat = (k, v) => { const d = el("div", "", k + " "); d.append(el("b", "", v)); g.append(d); };
   stat("Lv", u.lv >= LEVEL_MAX ? `${u.lv}（最大）` : String(u.lv));
@@ -3127,6 +3320,7 @@ function renderMenu() {
   }
   body.append(topAdjustRow(renderMenu));
   body.append(buildRow());
+  body.append(galleryRow("menu"));
   {
     const row = el("div", "mrow");
     row.append(el("div", "info", "あそびかた"));
@@ -3581,7 +3775,7 @@ function showSelect() {
   list.textContent = "";
   START_TYPES.forEach((t, i) => {
     const b = el("button", "typeCard");
-    b.append(spriteEl(t.sprite, isNarrow() ? 2 : 3, false));
+    b.append(spriteEl(t.sprite, isNarrow() ? 2 : 3, flipFor(t.sprite, "ally")));
     const nm = el("div", "tname"); nm.append(el("span", "k", String(i + 1)), t.label, el("span", "role", t.role), el("small", "", t.name));
     const st = el("div", "stats");
     const add = (k, v) => { const s = el("span", "", k + " "); s.append(el("b", "", v)); st.append(s); };
@@ -3979,6 +4173,7 @@ function openQuickSettings() {
   const body = $("qsetBody"); body.textContent = "";
   body.append(topAdjustRow(openQuickSettings));
   body.append(buildRow());
+  body.append(galleryRow("qset"));
   $("qset").hidden = false;
 }
 
@@ -4038,39 +4233,80 @@ function rebuildSprites() {
   spriteCache.clear();
   prepareSprites(); prepareGallerySprites();
 }
-function showGallery() {
-  hideAllScreens();
+// from："url"（?sprites=1）／"menu"（メニューの設定欄）／"qset"（タイトル・タイプ選択の歯車の設定）
+let galleryState = null;   // { from, prevMode, view: "enemy" | "ally" }
+function showGallery(from = "url") {
+  galleryState = { from, prevMode: mode, view: "enemy" };
+  if (from === "url") hideAllScreens();
+  for (const id of ["menu", "qset"]) $(id).hidden = true;
   mode = "gallery";
   $("app").hidden = true;
   prepareGallerySprites();
   renderGallery();
+  window.scrollTo(0, 0);
+}
+function closeGallery() {
+  const st = galleryState;
+  if (!st) return;
+  galleryState = null;
+  const g = $("gallery"); if (g) g.remove();
+  // 一覧で線をオフにしていたら、ゲームの絵は元に戻す
+  if (innerOutlineOn !== INNER_OUTLINE) { innerOutlineOn = INNER_OUTLINE; rebuildSprites(); }
+  $("app").hidden = false;
+  if (st.from === "url") { boot(); return; }
+  mode = st.prevMode;
+  if (st.from === "menu") { $("menu").hidden = false; renderMenu(); }
+  else openQuickSettings();
 }
 function renderGallery() {
   let g = $("gallery");
   if (!g) { g = el("div"); g.id = "gallery"; document.body.append(g); }
   g.textContent = "";
+  const view = galleryState ? galleryState.view : "enemy";
   const head = el("div", "galHead");
   head.append(el("h1", "", "絵の一覧"));
+  const back = el("button", "galBtn", "もどる"); back.id = "galBack"; back.onclick = closeGallery;
+  head.append(back);
+  g.append(head);
+  const btns = el("div", "galBtns");
   const tg = el("button", "galToggle", `内側の黒線：${innerOutlineOn ? "オン" : "オフ"}`); tg.id = "galToggle";
   tg.onclick = () => { innerOutlineOn = !innerOutlineOn; rebuildSprites(); renderGallery(); };
-  head.append(tg);
-  g.append(head);
+  const vw = el("button", "galToggle", view === "enemy" ? "敵として表示（右側・顔が左）" : "味方として表示（左側・顔が右）"); vw.id = "galView";
+  vw.onclick = () => { if (galleryState) galleryState.view = view === "enemy" ? "ally" : "enemy"; renderGallery(); };
+  btns.append(tg, vw);
+  g.append(btns);
   const sec = (title, cards) => { g.append(el("h2", "galSec", title)); const grid = el("div", "galGrid"); cards.forEach(c => grid.append(c)); g.append(grid); };
   const card = (name, canvas, note, wide) => { const c = el("div", "galCard" + (wide ? " galWide" : "")); c.append(canvas, el("div", "galName", name)); if (note) c.append(el("div", "galNote", note)); return c; };
+  const dirNote = key => `facing:${SPR[key].facing} / bodyDir:${SPR[key].bodyDir}`;
   const sc = battleScales();
-  sec(`動物（バトルでの表示：${sc.enemy}倍）`, Object.entries(BATTLE).map(([k, d]) => card(d.n, spriteEl(k, sc.enemy, true), `${BATTLE_W}×${BATTLE_H}`)));
-  sec("ボス（バトルでの表示と同じ倍率）", Object.entries(BOSS_SPRITES).map(([k]) => {
-    const bs = Object.values(BOSSES).filter(b => b.sprite === k), size = bs[0].spriteSize, s = bossScaleFor(size.w, size.h);
-    return card(bs.map(b => b.name).join("／"), spriteEl(k, s, true), `${size.w}×${size.h}・${s}倍`, true);
-  }));
-  const rareCard = (k, d) => { const wrap = el("div"); wrap.style.padding = `${RARE_PAD * sc.enemy}px`; wrap.append(rareEl({ sprite: k }, sc.enemy)); return card("金色の" + d.n, wrap); };
+  g.append(el("h2", "galSize", `${BATTLE_W}×${BATTLE_H}（通常の敵と仲間）`));
+  sec(`動物（${sc.enemy}倍）`, Object.entries(BATTLE).map(([k, d]) => card(d.n, spriteEl(k, sc.enemy, flipFor(k, view)), dirNote(k))));
+  const rareCard = (k, d) => { const wrap = el("div"); wrap.style.padding = `${RARE_PAD * sc.enemy}px`; wrap.append(rareEl({ sprite: k }, sc.enemy, flipFor(k, view))); return card("金色の" + d.n, wrap, dirNote(k)); };
   sec("レア個体（金色）", Object.entries(BATTLE).map(([k, d]) => rareCard(k, d)));
-  sec(`マップ用の絵（${MAP_N}×${MAP_N}、${GALLERY_MAP_SCALE}倍）`, [...Object.keys(MAPICON).map(k => card(k, spriteEl("m_" + k, GALLERY_MAP_SCALE, false))),
+  g.append(el("h2", "galSize", `${BOSS_SPRITE_W}×${BOSS_SPRITE_H}（ボス）`));
+  sec("ボス（バトルでの表示と同じ倍率）", Object.entries(BOSS_SPRITES).map(([k, bs]) => {
+    const d = bs.def, chief = Object.values(BOSSES).find(b => b.sprite === k), owner = Object.values(BOSSES).find(b => b.minions && b.minions.sprite === k);
+    const s0 = bossScaleFor(d.w, d.h), s = owner ? Math.max(1, s0 - 1) : s0;
+    const name = chief ? chief.name : owner ? `${owner.name}の${d.n}` : d.n;
+    return card(name, spriteEl(k, s, flipFor(k, view)), `${d.w}×${d.h}・${s}倍・${dirNote(k)}`, true);
+  }));
+  g.append(el("h2", "galSize", `${MAP_N}×${MAP_N}（マップ用）`));
+  sec(`マップ用の絵（${GALLERY_MAP_SCALE}倍）`, [...Object.keys(MAPICON).map(k => card(k, spriteEl("m_" + k, GALLERY_MAP_SCALE, false))),
     card("rare", spriteEl("m_rare", GALLERY_MAP_SCALE, false)), card("glint", spriteEl("m_glint", GALLERY_MAP_SCALE, false))]);
+  g.append(el("h2", "galSize", `${SAMPLE_GORILLA.w}×${SAMPLE_GORILLA.h}（見本）`));
   const gs = bossScaleFor(SAMPLE_GORILLA.w, SAMPLE_GORILLA.h);
   sec("新しい描き方の見本", [card(SAMPLE_GORILLA.n, spriteEl("sample_gorilla", Math.max(2, gs), false), "左右対称・ゲームでは使わない", true)]);
   const bid = el("div", "buildId", BUILD_ID); bid.id = "buildGallery";
   g.append(bid);
+}
+// 設定欄の「絵の一覧」の行
+function galleryRow(from) {
+  const row = el("div", "mrow");
+  const info = el("div", "info", "絵の一覧"); info.append(el("small", "", "敵・仲間・ボスの絵を、まとめて見る"));
+  const b = rowButton("開く", () => showGallery(from)); b.id = from === "menu" ? "galOpenMenu" : "galOpenQset";
+  const btns = el("div", "btns"); btns.append(b);
+  row.append(info, btns);
+  return row;
 }
 
 // 起動：初めてなら説明（5枚）→ タイプ選択。セーブがあればタイトル（つづきから／はじめから）
@@ -4102,6 +4338,7 @@ const KEYMAP = {
   " ": "wait", ".": "wait",
 };
 document.addEventListener("keydown", ev => {
+  if (mode === "gallery") { if (ev.key === "Escape") { ev.preventDefault(); closeGallery(); } return; }
   if (tutState) {
     if (ev.key === "Enter" || ev.key === "ArrowRight" || ev.key === " ") { ev.preventDefault(); tutorialStep(1); }
     else if (ev.key === "ArrowLeft") { ev.preventDefault(); tutorialStep(-1); }
