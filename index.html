@@ -20,7 +20,9 @@
     /* 外側（公開ページの枠）が付ける余白は使わない（二重に数えないように） */
     padding: 0 !important;
   }
-  @media (max-width: 600px) { :root { --top-bar-h: var(--top-bar-narrow, 122px); --top-gap: var(--top-gap-narrow, 6px); } }
+  /* 表示枠のバーの分：タッチ操作の端末（スマホ）だけ TOP_BAR_H。マウス操作の端末は、幅が狭くても 0（調整値はどちらにも効く） */
+  @media (max-width: 600px) { :root { --top-bar-h: var(--top-bar-fine, 0px); --top-gap: var(--top-gap-narrow, 6px); } }
+  @media (max-width: 600px) and (pointer: coarse) { :root { --top-bar-h: var(--top-bar-narrow, 48px); } }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   html { scroll-padding-top: 0 !important; }
@@ -403,7 +405,7 @@
     #battleLog { height: var(--blog-h, 48px); line-height: 20px; font-size: 12px; }
     #battle #moveInfo { height: var(--minfo-h, 48px); overflow: hidden; align-content: center; }
     #battle #moveInfo[hidden] { display: grid !important; visibility: hidden; }
-    #battle #cmds { flex: 1 1 0; min-height: 0; overflow-y: auto; align-content: start; }
+    #battle #cmds { flex: 1 1 0; min-height: var(--move-list-min, 96px); overflow-y: auto; align-content: start; }
     #battle #cmds.moveList { gap: 4px; }
     #battle #cmds.moveList button { min-height: var(--move-h, 52px); height: var(--move-h, 52px); }
     /* わざ一覧がスクロールするとき（低い画面だけ）の印：一覧の下端にかかる影と文字 */
@@ -413,6 +415,26 @@
     /* 重ねて出す画面：中央寄せをやめ、バーのすぐ下から */
     .overlay { align-items: flex-start; padding: var(--safe-top) 12px var(--safe-bottom); }
     #miniFull { justify-content: flex-start; padding-top: var(--safe-top); }
+  }
+  /* ================= コンパクト表示（狭い画面で、高さ640px未満）=================
+     絵の領域を縮め、味方の欄を詰め、メッセージ欄をわざの説明の枠と1つにまとめて、わざ一覧に最低2行分を回す */
+  @media (max-width: 600px) and (max-height: 639px) {
+    #battle .ehead { gap: 2px; }
+    #battle #eName { font-size: 15px; }
+    #battle .ehead .row { line-height: 18px; }
+    #battle .wide { height: 8px; }
+    #battleLog { display: none; }
+    #battle #moveInfo { height: var(--minfo-h, 44px); font-size: 11px; padding: 2px 8px; }
+    #battle #moveInfo .miLog { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; }
+    #battle .prow { font-size: 11px; padding: 0 6px; }
+    #battle .prow .bar { height: 6px; }
+    #battle .bars .bar.en { height: 4px; }
+  }
+  /* さらに低い画面（高さ500px未満）：バトル画面全体をスクロール。下端のボタンは画面の下に固定 */
+  @media (max-width: 600px) and (max-height: 499px) {
+    #battle.screen { overflow-y: auto; scroll-padding-bottom: 60px; }   /* 下に固定したボタンの裏に、わざが隠れないように */
+    #battle #cmds { flex: none; overflow: visible; }
+    #battle #cmdBar { position: sticky; bottom: 0; z-index: 5; background: var(--bg); padding: 4px 0 0; }
   }
 </style>
 </head>
@@ -818,6 +840,9 @@ const TUTORIAL_KEY = "robotRuinsTutorial";  // 最初の説明を見たか（セ
 const LAYOUT_DIAG = /[?&]layout=1(&|$)/.test(location.search);   // ?layout=1：画面の実測値を右下に出す
 const PAD_BTN_H = 52, PAD_BTN_W = 64, PAD_GAP = 6;   // 十字ボタン（3段で約170px）
 const ARENA_MIN_H = 190, ARENA_MIN_H_LOW = 160, LOW_SCREEN_H = 700;   // バトルの絵の領域（縮めない）。低い画面は160
+const COMPACT_H = 640, SCROLL_H = 500;   // 狭い画面で、この高さ未満はコンパクト表示、さらに低いとバトル画面全体をスクロール
+const ARENA_COMPACT_H = 116, PARTY_ROW_H_COMPACT = 30, MOVE_INFO_H_COMPACT = 44;
+const MOVE_LIST_MIN_H = 96;        // わざ一覧の最低の高さ（2行分）
 const PARTY_ROW_H = 38, PARTY_ROW_H_LOW = 36;   // バトルの味方の欄（1体1行、状態はタグで同じ行に）。低い画面は36
 const BATTLE_LOG_H = 48, MOVE_INFO_H = 48, MOVE_BTN_H = 52, MOVE_BTN_H_MIN = 44;   // わざ一覧：1つの高さ。入らないときは44まで詰める
 const MOVE_LIST_GAP = 4;
@@ -1265,7 +1290,7 @@ function processLevelUps() {
       u.maxHp += hpUp; u.maxEn += enUp;
       if (u.hp > 0) u.hp += hpUp;
       u.en += enUp;
-      log(`${u.name}はLv${u.lv}になった！`);
+      mapLog(`${u.name}はLv${u.lv}になった！`);
       bestLevel = Math.max(bestLevel, u.lv);
     }
   }
@@ -1475,7 +1500,8 @@ function lineOfSight(x0, y0, x1, y1) {
 // バトル中はバトルの欄、それ以外はマップ（村）の欄に出す
 function log(msg, color, target) {
   const l = { t: msg, c: color || "" };
-  const arr = (target || (mode === "battle" ? "battle" : "map")) === "battle" ? battleLines : mapLines;
+  // 行き先を書かないメッセージは、バトル中（バトルの画面が出ている間）だけバトルの欄へ。マップの出来事は mapLog で必ずマップの欄へ
+  const arr = (target || (mode === "battle" && battle ? "battle" : "map")) === "battle" ? battleLines : mapLines;
   arr.push(l);
   while (arr.length > 3) arr.shift();
   logLines.push(l);
@@ -1485,6 +1511,7 @@ function log(msg, color, target) {
 const mapLog = (msg, color) => log(msg, color, "map");
 function resetLogs() { logLines = []; mapLines = []; battleLines = []; renderLog(); }
 function renderLog() {
+  if (battle && mode === "battle" && isCompact()) renderMoveInfo();   // コンパクト表示ではメッセージを説明の枠に出す
   for (const id of ["mapLog", "battleLog", "villageLog"]) {
     const lines = id === "battleLog" ? battleLines : mapLines;
     const divs = $(id).children, pad = 3 - lines.length;
@@ -1524,9 +1551,9 @@ function playerMove(dir) {
     const t = map[ny][nx];
     if (t === STAIRS) { descend(); return; }
     if (t === HEAL) healAll();
-    if (t === GATE && dx > 0) log("この先はボス部屋。準備はいいか？");
+    if (t === GATE && dx > 0) mapLog("この先はボス部屋。準備はいいか？");
     if (t === BOSSFLOOR && !wasBossRoom && enemies.some(e => e.boss)) {
-      log(`強敵の気配がする…「${enemies.find(e => e.boss).name}」がいる！`);
+      mapLog(`強敵の気配がする…「${enemies.find(e => e.boss).name}」がいる！`);
     }
   }
   enemiesAct();
@@ -1536,7 +1563,7 @@ function playerMove(dir) {
 
 function healAll() {
   for (const u of team) { u.hp = u.maxHp; u.en = u.maxEn; }
-  log("回復ポイント：全員のHPとENが全回復した。");
+  mapLog("回復ポイント：全員のHPとENが全回復した。");
 }
 
 function pickUpGround() {
@@ -1544,10 +1571,10 @@ function pickUpGround() {
   if (!it) return;
   groundItems = groundItems.filter(i => i !== it);
   if (it.key === "part") {
-    logPartGain(gainPart(it.part), "拾った");
+    logPartGain(gainPart(it.part), "拾った", mapLog);
   } else {
     inv.items[it.key]++;
-    log(`${ITEMS[it.key].name}を拾った。（所持${inv.items[it.key]}）`);
+    mapLog(`${ITEMS[it.key].name}を拾った。（所持${inv.items[it.key]}）`);
   }
 }
 
@@ -1560,10 +1587,10 @@ function descend() {
   if (DEBUG) for (const u of team) u.hp = u.maxHp;   // テスト用：階を降りるたびにHP全回復
   newFloor();
   if (isBossFloor(floorNo)) {
-    log(`${floorNo}F ボスフロアに着いた。（全員EN+${STAIRS_ENERGY_BONUS}）`);
-    log("準備部屋だ。回復ポイントで全回復できる。");
+    mapLog(`${floorNo}F ボスフロアに着いた。（全員EN+${STAIRS_ENERGY_BONUS}）`);
+    mapLog("準備部屋だ。回復ポイントで全回復できる。");
   } else {
-    log(`${floorNo}Fへ降りた。（全員EN+${STAIRS_ENERGY_BONUS}）`);
+    mapLog(`${floorNo}Fへ降りた。（全員EN+${STAIRS_ENERGY_BONUS}）`);
   }
   renderMap();
 }
@@ -1648,16 +1675,22 @@ function topAdjustRow(after) {
   row.append(info, btns);
   return row;
 }
-const arenaHeight = () => window.innerHeight < LOW_SCREEN_H ? ARENA_MIN_H_LOW : ARENA_MIN_H;
+const isCompact = () => isNarrow() && window.innerHeight < COMPACT_H;
+const isScrollBattle = () => isNarrow() && window.innerHeight < SCROLL_H;
+const isCoarse = () => !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+const arenaHeight = () => window.innerHeight < COMPACT_H ? ARENA_COMPACT_H : window.innerHeight < LOW_SCREEN_H ? ARENA_MIN_H_LOW : ARENA_MIN_H;
 // 画面の作りの値を CSS に渡す（起動時と、画面の大きさが変わったとき）
 function applyLayoutVars() {
   const r = document.documentElement.style;
   const px = (k, v) => r.setProperty(k, v + "px");
   // 上の余白 = TOP_BAR_H + すき間 + 調整値（0より小さくはしない）
   px("--top-bar-narrow", Math.max(-TOP_BAR_GAP, TOP_BAR_H + topAdjust)); px("--top-gap-narrow", TOP_BAR_GAP);
+  px("--top-bar-fine", Math.max(-TOP_BAR_GAP, topAdjust));   // マウス操作の端末（バーの分なし。調整値だけ）
   px("--pad-h", PAD_BTN_H); px("--pad-w", PAD_BTN_W); px("--pad-gap", PAD_GAP);
-  px("--arena-h", arenaHeight()); px("--party-row-h", window.innerHeight < LOW_SCREEN_H ? PARTY_ROW_H_LOW : PARTY_ROW_H);
-  px("--blog-h", BATTLE_LOG_H); px("--minfo-h", MOVE_INFO_H); px("--move-h", MOVE_BTN_H);
+  const h = window.innerHeight;
+  px("--arena-h", arenaHeight()); px("--party-row-h", h < COMPACT_H ? PARTY_ROW_H_COMPACT : h < LOW_SCREEN_H ? PARTY_ROW_H_LOW : PARTY_ROW_H);
+  px("--blog-h", BATTLE_LOG_H); px("--minfo-h", h < COMPACT_H ? MOVE_INFO_H_COMPACT : MOVE_INFO_H); px("--move-h", MOVE_BTN_H);
+  px("--move-list-min", MOVE_LIST_MIN_H);
 }
 
 function startBattle(e) {
@@ -1719,7 +1752,7 @@ function paintRareEl(c) {
 function afterBattle() {
   for (const u of team) {
     u.bs = freshBattleState();
-    if (u.hp <= 0) { u.hp = Math.max(1, Math.floor(u.maxHp * REVIVE_HP_RATE)); log(`${u.name}が再起動した。（HP${u.hp}）`); }
+    if (u.hp <= 0) { u.hp = Math.max(1, Math.floor(u.maxHp * REVIVE_HP_RATE)); mapLog(`${u.name}が再起動した。（HP${u.hp}）`); }
   }
   processLevelUps();
 }
@@ -2464,6 +2497,7 @@ function battleCommands() {
 function renderMoveInfo() {
   const box = $("moveInfo");
   const b = battle;
+  if (b && isCompact()) { renderCompactInfo(box, b); return; }
   if (b && b.note) {
     box.hidden = false; box.textContent = "";
     box.append(el("div", "miName", b.note.text));
@@ -2483,6 +2517,23 @@ function renderMoveInfo() {
   else line.push(`効果：${info.short}`);
   line.push(`EN${info.en}（残り${u.en - info.en}）`);
   box.append(el("div", "miLine", line.join("　")));
+}
+
+// コンパクト表示：バトルのメッセージ（直近の1行）と、選んでいるわざの要点（1行）を、1つの枠に
+function renderCompactInfo(box, b) {
+  box.hidden = false; box.textContent = "";
+  const last = battleLines[battleLines.length - 1];
+  const lg = el("div", "miLog", b.note ? b.note.text : last ? last.t : "");
+  if (!b.note && last && last.c) lg.style.color = last.c;
+  box.append(lg);
+  if (b.menu === "moves" && b.selected && b.actor >= 0) {
+    const u = team[b.actor], info = moveInfo(u, b.selected);
+    const line = [`${info.name}`];
+    if (info.acc != null) line.push(`命中${info.acc}%`);
+    line.push(info.damaging ? `予測${info.power}${info.hits > 1 ? `×${info.hits}` : ""}` : info.short);
+    line.push(`EN${info.en}（残${u.en - info.en}）`);
+    box.append(el("div", "miLine", line.join("　")));
+  }
 }
 
 let currentCmds = [];
@@ -2577,6 +2628,7 @@ function renderBattle() {
 function fitMoveList() {
   const box = $("cmds"), more = $("cmdsMore");
   if (!isNarrow() || !box.classList.contains("moveList") || !box.children.length) { more.hidden = true; return; }
+  if (isScrollBattle()) { box.style.setProperty("--move-h", MOVE_BTN_H_MIN + "px"); more.hidden = true; return; }   // 画面全体のスクロールで見る
   const rows = Math.ceil(box.children.length / 2), need = h => rows * h + (rows - 1) * MOVE_LIST_GAP;
   const avail = box.clientHeight;
   let h = MOVE_BTN_H;
@@ -3779,7 +3831,7 @@ function updateLayoutDiag() {
     `innerHeight ${innerHeight}  innerWidth ${innerWidth}`,
     `visualViewport h ${vv ? r(vv.height) : "-"} offsetTop ${vv ? r(vv.offsetTop) : "-"}`,
     `safe-area top ${sat} bottom ${sab}`,
-    `TOP_BAR_H ${TOP_BAR_H} 調整 ${topAdjust} すき間 ${TOP_BAR_GAP} → 上の余白 ${isNarrow() ? Math.max(0, TOP_BAR_H + topAdjust + TOP_BAR_GAP) : 8}px`,
+    `TOP_BAR_H ${TOP_BAR_H}（${isCoarse() ? "タッチ" : "マウス→0"}） 調整 ${topAdjust} すき間 ${TOP_BAR_GAP} → 上の余白 ${isNarrow() ? Math.max(0, (isCoarse() ? TOP_BAR_H : 0) + topAdjust + TOP_BAR_GAP) : 8}px`,
     `画面 ${screenEl ? (screenEl.id || screenEl.parentElement.id) : "-"} 最初の要素 ${firstEl ? r(firstEl.getBoundingClientRect().top) : "-"}  最後のボタン下端 ${lastBtn ? r(lastBtn.getBoundingClientRect().bottom) : "-"}`,
     `html 高さ ${document.documentElement.clientHeight}/${document.documentElement.scrollHeight} padding-top ${hs.paddingTop}`,
     `body padding-top ${bs.paddingTop} margin-top ${bs.marginTop}`,
