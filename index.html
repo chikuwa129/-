@@ -623,7 +623,7 @@
 //  調整用の定数・データ
 // ================================================================
 // 版の目印（作業のたびに更新）。タイトル画面の隅、設定欄、?layout=1 の診断に出す
-const BUILD_ID = "1I-20261015-1529";
+const BUILD_ID = "1I-20261015-1547";
 // 診断：バトルの欄に入ったメッセージの記録（件数、記録する文字数）
 const MSG_TRACE_MAX = 8, MSG_TRACE_TEXT = 20;
 // ?debug=1 を付けたときだけ、全機体のHPを大きくする（テスト用）
@@ -949,8 +949,10 @@ const BOSS_SPRITES = {
 };
 // 群れの描写（見た目だけ。HPも当たり判定も持たない）
 const MINION_COUNT_BY_WIDTH = [[360, 3], [260, 2], [200, 1]];   // 敵の領域の幅（px）ごとの手下の数。200未満は0
-const MINION_LUNGE_PX = 16;          // 飛び出す距離（手下の倍率2のとき。倍率に合わせて変える）
-const MINION_LUNGE_BASE_SCALE = 2;
+const MINION_LUNGE_PX = 8;           // 跳ねる距離（左へ）
+const MINION_HEIGHT_RATE = 0.35;     // 手下の高さ ≦ 親分の絵の高さ × これ（整数倍、最小1）
+const MINION_CORNER_INSET = 6;       // 敵の領域の右上の角から、内側へ
+const MINION_GAP = 4;                // 手下どうしの間隔
 const MINION_LUNGE_MS = 150;         // 1体あたり
 const MINION_LUNGE_TOTAL_MS = 500;   // 全体の上限
 const MINION_STOMP_PX = 2, MINION_STOMP_MS = 1000;   // 「力を溜めている」間の足踏み
@@ -1251,6 +1253,11 @@ function prepareSprites() {
   }
   // 敵として使う反転した版も、ここで1回だけ作る
   for (const k of [...Object.keys(BATTLE), ...Object.keys(BOSS_SPRITES)]) SPR[k].gf = flipGrid(SPR[k].g);
+  // 群れの手下：描かれている部分だけを切り出した版（反転した版も）
+  for (const b of Object.values(BOSSES)) if (b.minions) {
+    const src = SPR[b.minions.sprite], g = cropGrid(src.g);
+    SPR[cropKey(b.minions.sprite)] = { ...src, g, gf: flipGrid(g), w: g[0].length, h: g.length };
+  }
   for (const [k, d] of Object.entries(MAPICON)) SPR["m_" + k] = { g: buildSprite(d, MAP_N, MAP_N), p: d.p, w: MAP_N, h: MAP_N };
   for (const [k, t] of Object.entries(TILES)) SPR["t_" + k] = { g: t.g, p: t.p, w: MAP_N, h: MAP_N };
   const re = buildRareSprite(MAPICON.enemy, MAP_N, MAP_N);
@@ -2040,43 +2047,60 @@ function opaqueBox(g) {
   g.forEach((row, y) => row.forEach((c, x) => { if (c) { l = Math.min(l, x); r = Math.max(r, x); t = Math.min(t, y); b = Math.max(b, y); } }));
   return { l, r, t, b };
 }
+// 手下は、描かれている部分だけを切り出した絵（cropKey）を、敵の領域の右上の角に、右から左へ小さく並べる
+const cropKey = key => key + "@crop";
+function cropGrid(g) {
+  const b = opaqueBox(g);
+  return g.slice(b.t, b.b + 1).map(r => r.slice(b.l, b.r + 1));
+}
 function setupMinions(e, bossScale) {
   const old = $("minions"); if (old) old.remove();
   battle.minions = null;
   if (!e.boss || !e.def.minions) return;
   const arena = $("arena"), ar = arena.getBoundingClientRect();
-  const boss = $("eSprite").getBoundingClientRect(), alliesR = $("allies").getBoundingClientRect();
-  const key = e.def.minions.sprite, ms = Math.max(1, bossScale - 1);
-  const flip = flipFor(key, "enemy"), mg = flip ? SPR[key].gf : SPR[key].g, mb = opaqueBox(mg);
-  const cg = flipFor(e.sprite, "enemy") ? SPR[e.sprite].gf : SPR[e.sprite].g, cb = opaqueBox(cg);
-  const gap = 4;
-  const left = alliesR.right + gap, right = boss.left + cb.l * bossScale - gap;   // 味方の絵と、親分（の顔）の左端の間
-  const mw = (mb.r - mb.l + 1) * ms;
-  let n = minionCount(ar.width);
-  const avail = right - left;
-  while (n > 0 && avail < mw + (n - 1) * Math.ceil(mw * 0.3)) n--;   // 入らないときは減らす
-  if (!n) return;
-  const step = n > 1 ? Math.min(mw * 0.8, (avail - mw) / (n - 1)) : 0;
-  const ground = boss.top + (cb.b + 1) * bossScale;   // 親分の足の位置（地面の線）
-  const box = el("div"); box.id = "minions";
-  const list = [];
-  for (let j = 0; j < n; j++) {   // j=0 が親分のすぐ前（奥）、大きいほど手前（味方に近い）
-    const c = spriteEl(key, ms, flip); c.className = "px minion";
-    const x = right - mw - j * step - mb.l * ms;
-    const lift = (n - 1 - j) * 2 * ms;   // 奥の手下ほど少し高く
-    c.style.left = `${Math.round(x - ar.left - arena.clientLeft)}px`;
-    c.style.top = `${Math.round(ground - lift - (mb.b + 1) * ms - ar.top - arena.clientTop)}px`;
-    c.style.zIndex = String(1 + j);
-    box.append(c); list.push(c);
+  const bc = $("eSprite"), br = bc.getBoundingClientRect(), alliesR = $("allies").getBoundingClientRect();
+  const key = cropKey(e.def.minions.sprite), sp = SPR[key], flip = flipFor(e.def.minions.sprite, "enemy");
+  // 倍率：手下の高さが、親分の絵の高さの MINION_HEIGHT_RATE 以内になる最大の整数（最小1）
+  const ms = Math.max(1, Math.floor(br.height * MINION_HEIGHT_RATE / sp.h));
+  const mw = sp.w * ms, mh = sp.h * ms;
+  // 敵の領域：味方の絵の右から、絵の領域の右端まで（枠の内側）
+  const inner = { l: ar.left + arena.clientLeft, t: ar.top + arena.clientTop, r: ar.left + arena.clientLeft + arena.clientWidth, b: ar.top + arena.clientTop + arena.clientHeight };
+  const x0 = inner.r - MINION_CORNER_INSET, y0 = inner.t + MINION_CORNER_INSET;
+  // 親分の絵の、色のあるマス（画面の座標）。手下の四角と1マスでも重なったら、その手下は置かない
+  const bg = flipFor(e.sprite, "enemy") ? SPR[e.sprite].gf : SPR[e.sprite].g;
+  const hitsBoss = rc => {
+    const x1 = Math.max(0, Math.floor((rc.l - br.left) / bossScale)), x2 = Math.min(bg[0].length - 1, Math.floor((rc.r - 0.01 - br.left) / bossScale));
+    const y1 = Math.max(0, Math.floor((rc.t - br.top) / bossScale)), y2 = Math.min(bg.length - 1, Math.floor((rc.b - 0.01 - br.top) / bossScale));
+    for (let y = y1; y <= y2; y++) for (let x = x1; x <= x2; x++) if (bg[y][x]) return true;
+    return false;
+  };
+  const overlap = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
+  const allyBox = { l: alliesR.left, r: alliesR.right, t: alliesR.top, b: alliesR.bottom };
+  const rects = [];
+  for (let j = 0; j < minionCount(ar.width); j++) {
+    const rc = { l: x0 - mw - j * (mw + MINION_GAP), t: y0, r: x0 - j * (mw + MINION_GAP), b: y0 + mh };
+    // 親分の絵・味方の絵・敵の領域の外に重なるなら、そこで止める（数を減らす）
+    if (rc.l < Math.max(inner.l, alliesR.right) || rc.b > inner.b || hitsBoss(rc) || overlap(rc, allyBox)) break;
+    rects.push(rc);
   }
+  if (!rects.length) return;
+  const box = el("div"); box.id = "minions";
+  const list = rects.map((rc, j) => {
+    const c = spriteEl(key, ms, flip); c.className = "px minion";
+    c.style.left = `${Math.round(rc.l - inner.l)}px`;
+    c.style.top = `${Math.round(rc.t - inner.t)}px`;
+    c.style.zIndex = String(1 + j);
+    box.append(c);
+    return c;
+  });
   arena.append(box);
-  battle.minions = { els: list.reverse(), scale: ms };   // 味方に近い順
+  battle.minions = { els: list.reverse(), scale: ms };   // 左（味方に近い）から順
 }
 // 親分の攻撃に合わせて、手下が味方の方へ飛び出して戻る（heavy=強攻撃は全員同時）
 function minionsAct(heavy) {
   const m = battle && battle.minions;
   if (!m || !settings.fx) return;
-  const dist = MINION_LUNGE_PX * m.scale / MINION_LUNGE_BASE_SCALE, n = m.els.length;
+  const dist = MINION_LUNGE_PX, n = m.els.length;
   const step = heavy || n < 2 ? 0 : Math.min(MINION_LUNGE_MS, (MINION_LUNGE_TOTAL_MS - MINION_LUNGE_MS) / (n - 1));
   m.els.forEach((c, i) => {
     if (!c.animate) return;
