@@ -669,7 +669,7 @@
 //  調整用の定数・データ
 // ================================================================
 // 版の目印（作業のたびに更新）。タイトル画面の隅、設定欄、?layout=1 の診断に出す
-const BUILD_ID = "1K-20261017-0930";
+const BUILD_ID = "1L-20261017-1120";
 // ================================================================
 //  色調（画面の色はすべてここから。ドット絵のパレット、ボスの色、レア度の色、世界地図の固定色は除く）
 //  THEME＝全画面の標準の色（1J の前の版の色）、THEME_MAP＝世界マップの画面だけの色（古地図）。地図の画面に入るときと出るときに切り替える
@@ -1160,16 +1160,17 @@ const DESERT_HP_MULT = 1.0, DESERT_ATK_MULT = 1.0;
 // 動物（敵・仲間）。size＝大きさ（ENEMY_TYPES の key）、spriteId＝絵（差し替えはここだけ）、abilities＝能力、
 // hpMult・atkMult＝敵のときの倍率、unique＝仲間になったときの固有技。機械遺跡の動物は、絵の名前がそのまま動物の名前（animalDef で作る）
 const ANIMAL_DEFS = {
-  dustSnake:   { name: "ダストスネーク",     size: "small", abilities: ["heatproof"], hpMult: 0.9, atkMult: 1.1, spriteId: "turtle", unique: "coil" },
-  lizaron:     { name: "リザロン",           size: "small", abilities: [],            hpMult: 0.8, atkMult: 1.0, spriteId: "dango",  unique: "tailSweep" },
-  fenex:       { name: "フェネクス",         size: "small", abilities: [],            hpMult: 0.8, atkMult: 1.1, spriteId: "wolf",   unique: "keenEar" },
-  scarabot:    { name: "スカラボット",       size: "small", abilities: [],            hpMult: 1.1, atkMult: 0.9, spriteId: "bird",   unique: "rollAttack" },
-  sandScorpio: { name: "サンドスコーピオ",   size: "mid",   abilities: ["heatproof"], hpMult: 1.0, atkMult: 1.2, spriteId: "lion",   unique: "venom" },
-  strideBird:  { name: "ストライドバード",   size: "mid",   abilities: [],            hpMult: 0.9, atkMult: 1.1, spriteId: "bird",   unique: "strideKick" },
-  sandFish:    { name: "サンドフィッシュ",   size: "mid",   abilities: [],            hpMult: 1.0, atkMult: 1.2, spriteId: "ptera",  unique: "sandDive" },
-  sandRhino:   { name: "サンドライノ",       size: "large", abilities: [],            hpMult: 1.2, atkMult: 1.1, spriteId: "rex",    unique: "hornRush" },
-  sandCamel:   { name: "サンドキャメル",     size: "large", abilities: ["heatproof"], hpMult: 1.4, atkMult: 0.9, spriteId: "rex",    unique: "brace" },
+  dustSnake:   { name: "ダストスネーク",     size: "small", abilities: ["heatproof"], hpMult: 0.9, atkMult: 1.1, spriteId: "snake",   unique: "coil" },
+  fenex:       { name: "フェネクス",         size: "small", abilities: [],            hpMult: 0.8, atkMult: 1.1, spriteId: "fennec",  unique: "keenEar" },
+  scarabot:    { name: "スカラボット",       size: "small", abilities: [],            hpMult: 1.1, atkMult: 0.9, spriteId: "scarab",  unique: "rollAttack" },
+  lizaron:     { name: "リザロン",           size: "mid",   abilities: ["heatproof"], hpMult: 1.0, atkMult: 1.1, spriteId: "lizard",  unique: "tailSweep" },
+  strideBird:  { name: "ストライドバード",   size: "mid",   abilities: [],            hpMult: 0.9, atkMult: 1.1, spriteId: "ostrich", unique: "strideKick" },
+  sandFish:    { name: "サンドフィッシュ",   size: "mid",   abilities: [],            hpMult: 1.0, atkMult: 1.2, spriteId: "shark",   unique: "sandDive" },
+  sandRhino:   { name: "サンドライノ",       size: "large", abilities: [],            hpMult: 1.2, atkMult: 1.1, spriteId: "rhino",   unique: "hornRush" },
+  sandCamel:   { name: "サンドキャメル",     size: "large", abilities: ["heatproof"], hpMult: 1.4, atkMult: 0.9, spriteId: "camel",   unique: "brace" },
 };
+// なくした動物（古いセーブの読み込みで置き換える）：id → 置き換える動物と、村に着いたときに1回だけ出すメッセージ
+const ANIMAL_REPLACED = { sandScorpio: { to: "lizaron", oldName: "サンドスコーピオ", text: "サンドスコーピオは、リザロンになった" } };
 // 能力（機体が持つ。動物の abilities、または能力パーツで持つ）
 const ABILITIES = { heatproof: { name: "耐熱" } };
 // 仕掛け：ability＝無効にする能力。熱気は洞窟の通常階だけ（前庭・準備部屋・ボス部屋・ボス戦の直後は効かない）
@@ -1183,14 +1184,22 @@ const HEATSINK_FLOOR_CHANCE = 0.05, HEATSINK_DROP_CHANCE = 0.02, HEATSINK_BOSS_C
 const HEATSINK_BOSS_FLOORS = [5];
 const GIMMICK_JOIN_CHANCE = 0.40;  // 仕掛けに必要な能力の仲間がいない間、その能力の動物が仲間になる確率
 const GIMMICK_PITY = 3;            // その条件で、続けてこの回数仲間にならなかったら、次は必ず仲間になる
+// 床と壁の色（ダンジョンの tiles。null＝機械遺跡のタイル TILES のまま）
+const TILES_DESERT={
+ floor:"#e6d3a0",floorDot:"#d4bf88",
+ wall:"#9a7a50",wallLine:"#b08e5c",wallShade:"#7e6040",
+ courtFloor:"#ecdcae",courtDot:"#d8c48e",
+ rock:"#a88a5e",rockLine:"#bc9c6a",
+ bossFloor:"#8a5a40"
+};
 // ダンジョン。floorOffset＝敵の強さの階の補正の下駄（実効の階 ef ＝ 階 ＋ floorOffset。前庭は courtyardOffset）、
 // courtyard＝前庭（内部の階 0）があるか、place＝世界マップの場所、clearTitle・clearPlace・exitText＝クリアの画面と文
 const DUNGEONS = [
-  { key: "ruins", name: "機械遺跡", floors: FINAL_FLOOR, bosses: BOSSES, enemyBands: RUINS_BANDS, animals: null,
+  { key: "ruins", name: "機械遺跡", tiles: null, floors: FINAL_FLOOR, bosses: BOSSES, enemyBands: RUINS_BANDS, animals: null,
     hpScale: ENEMY_HP_SCALE, atkScale: ENEMY_ATK_SCALE, hpMult: 1, atkMult: 1, gimmick: null, courtyard: false, floorOffset: 0, courtyardOffset: 0,
     direction: "down", floorPrefix: "B", hasRare: true, dropBands: DROP_RARITY,
     clearTitle: "遺跡踏破！", clearPlace: "遺跡の最深部", exitText: "遺跡の最深部から地上へ戻った。" },
-  { key: "desert", name: "砂漠の洞窟", floors: FINAL_FLOOR, bosses: DESERT_BOSSES, enemyBands: DESERT_BANDS, animals: Object.keys(ANIMAL_DEFS),
+  { key: "desert", name: "砂漠の洞窟", tiles: TILES_DESERT, floors: FINAL_FLOOR, bosses: DESERT_BOSSES, enemyBands: DESERT_BANDS, animals: Object.keys(ANIMAL_DEFS),
     hpScale: ENEMY_HP_SCALE, atkScale: ENEMY_ATK_SCALE, hpMult: DESERT_HP_MULT, atkMult: DESERT_ATK_MULT, gimmick: "heat", courtyard: true, floorOffset: 5, courtyardOffset: 4,
     direction: "down", floorPrefix: "B", hasRare: true, dropBands: DROP_RARITY,
     clearTitle: "砂漠の洞窟を踏破！", clearPlace: "砂漠の洞窟の最深部", exitText: "砂漠の洞窟の最深部から地上へ戻った。",
@@ -1286,7 +1295,6 @@ const MOVES = {
   tailSweep:  { id: "tailSweep",  name: "しっぽ払い", kind: "unique", en: 4, target: "enemy", effect: "damage", formula: "tackle", lv1: 1.5, lv10: 2.1, accMod: 10, element: null, flash: "attack" },
   keenEar:    { id: "keenEar",    name: "聞き耳",     kind: "unique", en: 5, target: "allyAll", effect: "earCut", lv1: 20, lv10: 35, element: null, flash: "guard" },
   rollAttack: { id: "rollAttack", name: "ころがり",   kind: "unique", en: 5, target: "enemy", effect: "damage", formula: "tackle", lv1: 1.7, lv10: 2.4, accMod: -5, element: null, flash: "attack" },
-  venom:      { id: "venom",      name: "毒針",       kind: "unique", en: 6, target: "enemy", effect: "damage", formula: "tackle", lv1: 1.9, lv10: 2.6, accMod: 0, element: null, flash: "attack" },
   strideKick: { id: "strideKick", name: "疾走蹴り",   kind: "unique", en: 5, target: "enemy", effect: "damage", formula: "tackle", hits: 2, lv1: 1.8, lv10: 2.5, accMod: 5, element: null, flash: "attack" },
   sandDive:   { id: "sandDive",   name: "砂ばくしん", kind: "unique", en: 7, target: "enemy", effect: "damage", formula: "tackle", lv1: 2.1, lv10: 2.9, accMod: -15, element: null, flash: "attack" },
   hornRush:   { id: "hornRush",   name: "角つき突進", kind: "unique", en: 8, target: "enemy", effect: "damage", formula: "tackle", lv1: 2.4, lv10: 3.3, accMod: -10, element: null, flash: "attack" },
@@ -1488,6 +1496,106 @@ bird:{n:"ホークウィング",
 const RING=["E",6,10.5,5,1.2,"q"];
 const ENEMY_OPS=[RING,["R",3,1,1,2,"d"],["R",8,1,1,2,"d"],["R",3,3,6,4,"b"],["R",3,7,6,2,"b"],["R",2,7,1,2,"d"],["R",9,7,1,2,"d"],["R",3,9,2,2,"d"],["R",7,9,2,2,"d"],["R",4,7,4,1,"d"]];
 for (const k in BATTLE) Object.assign(BATTLE[k], ANIMAL_FACING, { p: tonePalette(k) });   // 向きと、動物ごとの単色系のパレット
+// ---- 砂漠の洞窟の動物の絵（1L。32×24、右向き。パレットは {k:K_OUT, ...METAL3, ...TONES_DESERT2[名前]}） ----
+const METAL3={c:"#aab0ba",g:"#4a4f58"};
+const TONES_DESERT2={
+ snake:{b:"#9a9a52",d:"#6a6a32",l:"#c4c47a",e:"#ff4a2a",y:"#e8d060",w:"#f3f3f3"},
+ lizard:{b:"#8fa05a",d:"#5e6e38",l:"#c0cc88",e:"#ff4a2a",w:"#f3f3f3"},
+ fennec:{b:"#c89860",d:"#946a3c",l:"#f0d4a0",e:"#ff4a2a",y:"#ffb020"},
+ scarab:{b:"#6a7a9a",d:"#46567a",l:"#a0b0d0",e:"#ff4a2a",y:"#ffb020"},
+ ostrich:{b:"#c4a46c",d:"#8c6c40",l:"#e8d4a0",e:"#ff4a2a",y:"#ffb020"},
+ rhino:{b:"#8e8e82",d:"#5c5c52",l:"#bcbcae",h:"#efe8d4",e:"#ff4a2a"},
+ shark:{b:"#8a98a8",d:"#5c6878",l:"#c4d0dc",e:"#ff4a2a",y:"#ffb020",w:"#f3f3f3"},
+ camel:{b:"#b89060",d:"#85643c",l:"#e6c898",e:"#ff4a2a"}
+};
+const DESERT_SPRITES={
+snake:{n:"ダストスネーク",axis:52,facing:"front",bodyDir:"left",
+ o:[
+ ["P",[[1,20],[4,18],[4,22]],"c"],
+ ["E",5,20,2.2,2.2,"b"],["E",8.5,18.5,2.8,2.8,"d"],["E",13,20,3,3,"b"],["E",18,19,3.2,3.2,"d"],["E",22,16,3.4,3.4,"b"],["E",24,12,3,3,"d"],
+ {s:["P",[[26,1],[22,2],[21,7],[26,8]],"d"]},
+ {s:["P",[[26,3],[23,4.5],[22,8],[26,11]],"b"]},
+ {s:["P",[[26,5],[23,5],[23,6.5],[26,6]],"d"]}],
+ am:[[24,7,"e"]],a:[[8,16,"c"],[13,17,"c"],[18,16,"c"]]},
+lizard:{n:"リザロン",facing:"right",bodyDir:"left",
+ o:[
+ ["P",[[11,13],[7,14],[7,17],[11,17]],"d"],["P",[[7,14],[3,15],[3,17],[7,17]],"b"],["P",[[3,15],[1,16],[3,17]],"c"],
+ ["P",[[11,18],[13,18],[12,22],[9,23],[8,22],[10,20]],"g"],["P",[[18,18],[20,18],[20,22],[17,23],[16,22],[18,20]],"g"],
+ ["P",[[10,12],[20,12],[23,15],[21,18],[11,18],[9,15]],"b"],
+ ["P",[[11,12],[12,7],[14,12]],"c"],["P",[[14,12],[16,6],[18,12]],"c"],["P",[[18,12],[19,8],[21,12]],"c"],
+ ["P",[[10,16],[21,16],[20,18],[11,18]],"l"],
+ ["P",[[22,11],[28,11],[31,14],[28,17],[22,16]],"b"],
+ ["P",[[24,15],[30,15],[29,17],[24,17]],"d"],
+ ["P",[[10,18],[12,18],[11,22],[8,23],[7,22],[9,20]],"d"],["P",[[17,18],[19,18],[19,22],[16,23],[15,22],[17,20]],"d"],
+ {d:["R",11,14,10,1,"d"]}],
+ a:[[26,13,"e"],[29,13,"k"],[27,16,"w"],[29,16,"w"],[13,13,"l"],[17,13,"l"]]},
+fennec:{n:"フェネクス",facing:"right",bodyDir:"left",
+ o:[
+ ["P",[[1,13],[7,12],[9,16],[3,18]],"b"],["P",[[1,13],[3,12],[3,16]],"l"],
+ ["R",9,17,2,6,"g"],["R",19,17,2,6,"g"],
+ ["E",15,15,8,4,"b"],
+ ["R",12,17,2,6,"d"],["R",22,17,2,6,"d"],
+ ["P",[[21,11],[26,10],[31,14],[26,17],[21,16]],"b"],
+ ["P",[[21,11],[22,2],[26,10]],"b"],["P",[[24,10],[28,2],[29,11]],"b"],
+ ["P",[[22,9],[23,5],[25,9]],"c"],["P",[[25,9],[27,5],[28,10]],"c"],
+ {d:["R",8,15,14,1,"d"]}],
+ a:[[27,13,"e"],[22,3,"y"],[28,3,"y"],[12,13,"l"],[17,13,"l"]]},
+scarab:{n:"スカラボット",facing:"right",bodyDir:"left",
+ o:[
+ ["P",[[8,17],[10,17],[5,22],[3,22]],"g"],["P",[[12,18],[14,18],[11,23],[9,23]],"g"],["P",[[18,18],[20,18],[21,23],[19,23]],"g"],["P",[[22,17],[24,17],[28,22],[26,22]],"g"],
+ ["E",15,14,10,6.5,"b",19],["R",15,8,1,11,"d"],
+ ["P",[[23,9],[28,9],[30,13],[26,16],[23,15]],"d"],
+ ["P",[[28,9],[31,4],[31,10]],"c"],["P",[[25,9],[26,6],[27,9]],"c"],
+ ["R",10,5,12,1,"c"],["R",15,6,2,3,"g"]],
+ a:[[27,11,"e"],[10,12,"l"],[12,11,"l"],[19,12,"l"],[21,13,"l"],[12,16,"k"],[18,16,"k"],[15,5,"y"]]},
+ostrich:{n:"ストライドバード",facing:"right",bodyDir:"left",
+ o:[
+ ["P",[[1,8],[7,10],[7,15],[2,15]],"d"],
+ ["R",15,15,2,7,"d"],["P",[[14,22],[18,22],[20,23],[13,23]],"d"],
+ ["E",13,12,7,4,"b"],
+ ["R",11,15,2,7,"g"],["R",10,19,4,1,"c"],["P",[[10,22],[14,22],[16,23],[8,23]],"g"],["R",15,19,2,1,"c"],
+ ["P",[[8,10],[15,9],[16,13],[9,14]],"l"],
+ ["P",[[18,10],[21,10],[25,4],[22,3]],"b"],
+ ["P",[[22,2],[28,2],[30,5],[24,5]],"b"],["P",[[28,3],[31,4],[28,5]],"y"]],
+ a:[[26,3,"e"],[3,10,"k"],[4,12,"k"],[5,14,"k"],[10,11,"k"],[12,11,"k"],[14,11,"k"],[22,6,"l"]]},
+rhino:{n:"サンドライノ",facing:"right",bodyDir:"left",
+ o:[
+ ["R",8,17,4,6,"g"],["R",19,17,4,6,"g"],["R",1,12,2,2,"d"],
+ ["P",[[3,10],[14,7],[21,9],[23,14],[22,18],[4,18],[2,14]],"b"],
+ ["P",[[14,8],[20,9],[21,14],[15,14]],"l"],
+ ["P",[[4,11],[10,10],[10,16],[4,16]],"l"],
+ ["P",[[8,9],[9,5],[11,8]],"c"],["P",[[14,7],[15,3],[17,6]],"c"],
+ ["R",10,17,5,6,"d"],["R",21,17,5,6,"d"],["R",10,20,5,1,"c"],["R",21,20,5,1,"c"],
+ ["R",19,7,2,2,"d"],
+ ["P",[[21,10],[28,12],[30,16],[27,19],[22,18]],"b"],
+ ["P",[[24,12],[29,14],[30,8]],"h"]],
+ a:[[26,14,"e"],[29,16,"k"],[30,9,"l"],[12,10,"l"],[17,11,"l"],[6,13,"l"]]},
+shark:{n:"サンドフィッシュ",facing:"right",bodyDir:"left",
+ o:[
+ ["P",[[1,8],[7,13],[7,15],[1,20]],"d"],
+ ["P",[[6,12],[18,10],[28,12],[31,15],[28,18],[18,19],[6,16]],"b"],
+ ["P",[[7,16],[18,17],[29,16],[28,18],[18,19],[6,16]],"d"],
+ ["P",[[14,10],[17,3],[21,10]],"g"],
+ ["P",[[22,17],[31,16],[28,20],[22,19]],"g"],
+ ["P",[[14,15],[18,15],[14,21]],"c"],
+ ["R",3,12,3,6,"c"]],
+ a:[[26,13,"e"],[4,15,"y"],[25,17,"w"],[27,17,"w"],[29,16,"w"],[20,13,"k"],[21,14,"k"],[22,15,"k"],[10,13,"l"],[16,12,"l"],[17,6,"l"]]},
+camel:{n:"サンドキャメル",facing:"right",bodyDir:"left",
+ o:[
+ ["R",8,16,2,7,"g"],["R",18,16,2,7,"g"],
+ ["R",9,6,5,5,"g"],["R",10,5,3,1,"c"],["R",15,6,5,5,"g"],["R",16,5,3,1,"c"],
+ ["P",[[5,11],[22,10],[24,14],[22,18],[6,18],[4,14]],"b"],
+ ["P",[[22,12],[25,5],[28,5],[27,13],[24,15]],"d"],
+ ["R",25,3,5,4,"b"],["R",28,5,3,2,"d"],
+ ["R",2,12,2,3,"d"],
+ ["R",7,17,3,6,"d"],["R",19,17,3,6,"d"],["R",7,20,3,1,"c"],["R",19,20,3,1,"c"],
+ ["R",6,22,5,1,"g"],["R",18,22,5,1,"g"],
+ {d:["R",6,14,16,1,"d"]}],
+ a:[[27,4,"e"],[8,12,"l"],[14,12,"l"],[20,12,"l"],[12,16,"k"],[18,16,"k"]]}
+};
+for (const k in DESERT_SPRITES) DESERT_SPRITES[k].p = { k: K_OUT, ...METAL3, ...TONES_DESERT2[k] };
+// 32×24 の動物の絵の定義（機械遺跡の BATTLE と、砂漠の DESERT_SPRITES）
+const animalSpriteDef = key => BATTLE[key] || DESERT_SPRITES[key];
 const MAPICON={
 player:{p:{k:"#2b2b2b",q:"#4fe0ff",b:"#3d8fd9",d:"#2a66a8",l:"#cfe6ff",y:"#ffd23a"},
  o:[RING,["R",3,2,6,4,"b"],["R",4,3,4,2,"y"],["R",3,6,6,3,"b"],["R",5,7,2,1,"l"],["R",2,6,1,3,"d"],["R",9,6,1,3,"d"],["R",3,9,2,2,"d"],["R",7,9,2,2,"d"],["R",5,1,2,1,"y"]],a:[]},
@@ -1531,18 +1639,38 @@ const TILES = {
   gate:      { g: tileGrid("f", [[5, 0, 2, 12, "y"], [5, 2, 2, 1, "k"], [5, 5, 2, 1, "k"], [5, 8, 2, 1, "k"], [5, 11, 2, 1, "k"]]), p: { f: "#d8d4b8", y: "#ffd23a", k: "#2b2b2b" } },
 };
 
+// ダンジョンの色のタイル（tiles の色から作る）。形は機械遺跡のタイルと同じ位置関係。前庭は床と岩を別に持つ
+function colorTiles(c) {
+  const W = MAP_N - 1;
+  return {
+    floor:      { g: tileGrid("f", [[3, 3, 1, 1, "g"], [9, 8, 1, 1, "g"]]), p: { f: c.floor, g: c.floorDot } },
+    wall:       { g: tileGrid("w", [[0, 3, 12, 1, "l"], [0, 8, 12, 1, "l"], [5, 0, 1, 3, "l"], [2, 4, 1, 4, "l"], [8, 4, 1, 4, "l"], [0, 11, 1, 1, "s"]]), p: { w: c.wall, l: c.wallLine, s: c.wallShade } },
+    bossfloor:  { g: tileGrid("f", []), p: { f: c.bossFloor } },
+    gate:       { g: TILES.gate.g, p: { ...TILES.gate.p, f: c.floor } },
+    courtFloor: { g: tileGrid("f", [[3, 3, 1, 1, "g"], [9, 8, 1, 1, "g"], [6, 6, 1, 1, "g"]]), p: { f: c.courtFloor, g: c.courtDot } },
+    rock:       { g: tileGrid("r", [[0, 0, 12, 1, "l"], [W, 0, 1, 12, "l"]]), p: { r: c.rock, l: c.rockLine } },
+  };
+}
+// いまの階のタイルの絵（ダンジョンの色。前庭は前庭の床と岩）
+function tileKey(name) {
+  if (!dungeon.tiles) return "t_" + name;
+  if (floorNo === 0 && dungeon.courtyard) name = name === "floor" ? "courtFloor" : name === "wall" ? "rock" : name;
+  return `t_${dungeon.key}_${name}`;
+}
 // 絵のデータ（起動時に1回だけ作る）
 const SPR = {};
 function prepareSprites() {
   for (const [k, d] of Object.entries(BATTLE)) SPR[k] = { g: buildSprite(d, BATTLE_W, BATTLE_H), p: d.p, w: BATTLE_W, h: BATTLE_H };
   for (const k of Object.keys(BATTLE)) Object.assign(SPR[k], { facing: BATTLE[k].facing, bodyDir: BATTLE[k].bodyDir });
+  // 砂漠の動物（向きと軸は絵のデータから）
+  for (const [k, d] of Object.entries(DESERT_SPRITES)) SPR[k] = { g: buildSprite(d, BATTLE_W, BATTLE_H), p: d.p, w: BATTLE_W, h: BATTLE_H, facing: d.facing, bodyDir: d.bodyDir };
   // ボス（と群れの手下）：大きさと向きは絵のデータから
   for (const [key, bs] of Object.entries(BOSS_SPRITES)) {
     const d = bs.def;
     SPR[key] = { g: buildSprite(d, d.w, d.h), p: bs.pal || bossTonePalette(bs.tone), w: d.w, h: d.h, facing: d.facing, bodyDir: d.bodyDir };
   }
   // 敵として使う反転した版も、ここで1回だけ作る
-  for (const k of [...Object.keys(BATTLE), ...Object.keys(BOSS_SPRITES)]) SPR[k].gf = flipGrid(SPR[k].g);
+  for (const k of [...Object.keys(BATTLE), ...Object.keys(DESERT_SPRITES), ...Object.keys(BOSS_SPRITES)]) SPR[k].gf = flipGrid(SPR[k].g);
   // 群れの手下：描かれている部分だけを切り出した版（反転した版も）
   for (const b of Object.values(BOSSES)) if (b.minions) {
     const src = SPR[b.minions.sprite], g = cropGrid(src.g);
@@ -1552,6 +1680,7 @@ function prepareSprites() {
   for (const [k, d] of Object.entries(MAPICON_HERO)) { const g = buildSprite(d, MAP_N, MAP_N); SPR["m_hero_" + k] = { g, gf: flipGrid(g), p: d.p, w: MAP_N, h: MAP_N }; }   // 左向きの版も、起動時に1回だけ作る
   SPR.m_mech = { g: buildSprite(MAPICON_MECH, MAP_N, MAP_N), p: MAPICON_MECH.p, w: MAP_N, h: MAP_N };
   for (const [k, t] of Object.entries(TILES)) SPR["t_" + k] = { g: t.g, p: t.p, w: MAP_N, h: MAP_N };
+  for (const d of DUNGEONS) if (d.tiles) for (const [k, t] of Object.entries(colorTiles(d.tiles))) SPR[`t_${d.key}_${k}`] = { g: t.g, p: t.p, w: MAP_N, h: MAP_N };
   const re = buildRareSprite(MAPICON.enemy, MAP_N, MAP_N);
   SPR.m_rare = { g: re.grid, p: re.pal, w: MAP_N + 2 * RARE_PAD, h: MAP_N + 2 * RARE_PAD };
   SPR.m_glint = { g: addGlow(padGrid(buildSprite(GLINT, MAP_N, MAP_N), RARE_PAD)), p: { ...GLINT.p, G1: "#ffd23a", G2: "#fff0a8" },
@@ -1656,8 +1785,8 @@ const RARE_PAD = 2;   // レアの絵は上下左右に2ドット大きい。描
 function rareSpriteKey(animal) {
   const key = "rare_" + animal;
   if (!SPR[key]) {
-    const r = buildRareSprite(BATTLE[animal], BATTLE_W, BATTLE_H);
-    SPR[key] = { g: r.grid, p: r.pal, w: BATTLE_W + 2 * RARE_PAD, h: BATTLE_H + 2 * RARE_PAD, facing: BATTLE[animal].facing, bodyDir: BATTLE[animal].bodyDir };
+    const d = animalSpriteDef(animal), r = buildRareSprite(d, BATTLE_W, BATTLE_H);
+    SPR[key] = { g: r.grid, p: r.pal, w: BATTLE_W + 2 * RARE_PAD, h: BATTLE_H + 2 * RARE_PAD, facing: d.facing, bodyDir: d.bodyDir };
     SPR[key].gf = flipGrid(SPR[key].g);
   }
   return key;
@@ -4290,10 +4419,10 @@ function renderMap() {
       const x = camX + vx, y = camY + vy;
       if (!seen[y][x]) continue;
       const t = map[y][x];
-      if (t === WALL) draw("t_wall", x, y);
-      else if (t === BOSSFLOOR) draw("t_bossfloor", x, y);
-      else if (t === GATE) draw("t_gate", x, y);
-      else draw("t_floor", x, y);
+      if (t === WALL) draw(tileKey("wall"), x, y);
+      else if (t === BOSSFLOOR) draw(tileKey("bossfloor"), x, y);
+      else if (t === GATE) draw(tileKey("gate"), x, y);
+      else draw(tileKey("floor"), x, y);
       if (t === STAIRS) draw("m_stairs", x, y);
     }
   }
@@ -4800,6 +4929,7 @@ function readSave() {
     const d = JSON.parse(raw);
     const okNum = v => typeof v === "number" && isFinite(v);
     if (!d || ![1, 2, 3, 4, 5, 6, SAVE_VERSION].includes(d.version)) throw 0;   // 1〜6 は移行して読む
+    d._notes = replaceGoneAnimals(d);
     if (d.version >= 3 && (!Array.isArray(d.plus) || d.plus.length !== d.parts.length || !d.plus.every(v => Number.isInteger(v) && v >= 0 && v <= PLUS_MAX))) throw 0;
     if (!START_TYPES.some(t => t.key === d.typeKey)) throw 0;
     if (!Array.isArray(d.parts) || !d.parts.every(id => partById(id))) throw 0;
@@ -4834,6 +4964,21 @@ function readSave() {
   } catch (e) {
     return { status: "broken" };
   }
+}
+// なくした動物の機体を、置き換える動物にする（レベル・経験値・パーツ・スキルレベルはそのまま。固有技と絵は置き換え先のもの）。
+// 版は上げない。返り値：村に着いたときに1回だけ出すメッセージ
+function replaceGoneAnimals(d) {
+  const notes = new Set();
+  const units = (Array.isArray(d.team) ? d.team : []).concat(Array.isArray(d.stock) ? d.stock : []);
+  for (const u of units) {
+    const r = u && ANIMAL_REPLACED[u.animal];
+    if (!r) continue;
+    const a = ANIMAL_DEFS[r.to];
+    u.animal = r.to; u.sprite = a.spriteId; u.unique = a.unique; u.kind = a.size;
+    if (typeof u.name === "string" && u.name.startsWith(r.oldName)) u.name = a.name + u.name.slice(r.oldName.length);
+    notes.add(r.text);
+  }
+  return [...notes];
 }
 // 仲間の基本値（大きさ）を、保存された大きさか動物から決める
 function baseOfAlly(s) {
@@ -5341,8 +5486,10 @@ function renderGallery() {
   sec(`動物（${sc.enemy}倍）`, Object.entries(BATTLE).map(([k, d]) => card(d.n, spriteEl(k, sc.enemy, flipFor(k, view)), dirNote(k))));
   const rareCard = (k, d) => { const wrap = el("div"); wrap.style.padding = `${RARE_PAD * sc.enemy}px`; wrap.append(rareEl({ sprite: k }, sc.enemy, flipFor(k, view))); return card("金色の" + d.n, wrap, dirNote(k)); };
   sec("レア個体（金色）", Object.entries(BATTLE).map(([k, d]) => rareCard(k, d)));
-  // 砂漠の動物（仮の絵：spriteId の絵。名前は動物のもの）
-  sec("砂漠の動物（仮の絵）", Object.entries(ANIMAL_DEFS).map(([id, a]) => card(a.name + (a.abilities.length ? `（${a.abilities.map(x => ABILITIES[x].name).join("・")}）` : ""), spriteEl(a.spriteId, sc.enemy, flipFor(a.spriteId, view)), `spriteId:${a.spriteId}・${ENEMY_TYPES.find(t => t.key === a.size).label}`)));
+  // 砂漠の動物（1L）：動物のデータの spriteId の絵。耐熱の動物には「耐熱」のタグ
+  const desertCard = (id, a) => { const c = card(a.name, spriteEl(a.spriteId, sc.enemy, flipFor(a.spriteId, view)), `spriteId:${a.spriteId}・${ENEMY_TYPES.find(t => t.key === a.size).label}・${dirNote(a.spriteId)}`); for (const ab of a.abilities) c.querySelector(".galName").append(el("span", "abTag", ABILITIES[ab].name)); return c; };
+  sec(`砂漠の動物（${sc.enemy}倍）`, Object.entries(ANIMAL_DEFS).map(([id, a]) => desertCard(id, a)));
+  sec("砂漠のレア個体（金色）", Object.entries(DESERT_SPRITES).map(([k, d]) => rareCard(k, d)));
   g.append(el("h2", "galSize", `${BOSS_SPRITE_W}×${BOSS_SPRITE_H}（ボス）`));
   sec("ボス（バトルでの表示と同じ倍率）", Object.entries(BOSS_SPRITES).map(([k, bs]) => {
     const d = bs.def, chief = DUNGEONS.flatMap(dg => Object.values(dg.bosses)).find(b => b.sprite === k), owner = Object.values(BOSSES).find(b => b.minions && b.minions.sprite === k);
@@ -5379,8 +5526,8 @@ function boot() {
   $("btnContinue").hidden = r.status !== "ok";
   $("titleNote").textContent = r.status === "ok" ? "セーブデータがあります。" : "セーブデータを読めませんでした。はじめから遊べます。";
   $("btnContinue").onclick = () => {
-    const migrated = applySave(r.data);
-    goVillage(migrated ? ["つづきから再開した。", r.data.version < 2 ? "古いセーブデータを新しい形式に移しました（防御と固有技はLv1から）。" : "古いセーブデータを新しい形式に移しました。"] : ["つづきから再開した。"]);
+    const migrated = applySave(r.data), notes = r.data._notes || [];
+    goVillage((migrated ? ["つづきから再開した。", r.data.version < 2 ? "古いセーブデータを新しい形式に移しました（防御と固有技はLv1から）。" : "古いセーブデータを新しい形式に移しました。"] : ["つづきから再開した。"]).concat(notes));
   };
 }
 
