@@ -669,7 +669,7 @@
 //  調整用の定数・データ
 // ================================================================
 // 版の目印（作業のたびに更新）。タイトル画面の隅、設定欄、?layout=1 の診断に出す
-const BUILD_ID = "1K-20261017-0745";
+const BUILD_ID = "1K-20261017-0930";
 // ================================================================
 //  色調（画面の色はすべてここから。ドット絵のパレット、ボスの色、レア度の色、世界地図の固定色は除く）
 //  THEME＝全画面の標準の色（1J の前の版の色）、THEME_MAP＝世界マップの画面だけの色（古地図）。地図の画面に入るときと出るときに切り替える
@@ -1203,13 +1203,15 @@ const dungeonByKey = key => DUNGEONS.find(d => d.key === key);
 // entry＝入り口の説明、gimmick＝仕掛けの説明
 const WORLD_PLACES = [
   { id: 0, key: "village", name: "はじめの村",   x: 78,  y: 390, icon: "house",   village: true, gimmick: "—", base: null, unlock: { always: true }, dungeon: null, entry: "" },
-  { id: 1, key: "ruins",   name: "機械遺跡",     x: 150, y: 310, icon: "gear",    gimmick: "なし（入門用）",       base: 3,  unlock: { always: true },        dungeon: "ruins", entry: "B1Fから入る" },
+  { id: 1, key: "ruins",   name: "機械遺跡",     x: 150, y: 310, icon: "gear",    gimmick: "なし（入門用）",       base: 1.5,  unlock: { always: true },        dungeon: "ruins", entry: "B1Fから入る" },
   { id: 2, key: "desert",  name: "砂漠の洞窟",   x: 275, y: 380, icon: "pyramid", gimmick: "熱気：耐熱の力が必要", base: 7,  unlock: { clears: ["ruins"] },  dungeon: "desert", entry: "前庭から入る" },
   { id: 3, key: "forest",  name: "森の洞窟",     x: 195, y: 215, icon: "tree",    gimmick: "岩：怪力の力が必要",   base: 9,  unlock: { clears: ["desert"] }, dungeon: null, entry: "前庭から入る" },
   { id: 4, key: "sky",     name: "天空遺跡",     x: 340, y: 105, icon: "cloud",   gimmick: "段差：浮遊の力が必要", base: 11,  unlock: { clears: ["forest"] }, dungeon: null, entry: "前庭から入る" },
   { id: 5, key: "lake",    name: "地底湖",       x: 455, y: 255, icon: "wave",    gimmick: "水路：水中の力が必要", base: 13,  unlock: { clears: ["sky"] },    dungeon: null, entry: "前庭から入る" },
   { id: 6, key: "tower",   name: "ラスボスの塔", x: 590, y: 125, icon: "tower",   gimmick: "なし（最後の戦い）",   base: 15, unlock: { clears: ["desert", "forest", "sky", "lake"] }, dungeon: null, entry: "入り口から登る" },
 ];
+// 目安の基準値（base）：1K-1 の実測（ボット各タイプ20回）で、入口での power が「ほどよい」（差 0〜2）になる値。機械遺跡は入口 1.9〜2.5 → 1.5、
+// 砂漠は入口（機械遺跡クリア時 約9.3、?debug=1&desert=1 で 8.5）→ 7。森から先は仮の値
 const WORLD_NOGO_TEXT = { village: "村は出発地点です。行き先を選んでください", locked: "未解放のため、出発できません", soon: "準備中のため、出発できません" };   // 「出発」が押せない理由
 const WORLD_MAP_MIN_RATE = 0.55;   // 世界地図を縮める下限（元の大きさに対する割合）
 const WORLD_ROADS = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6]];   // 道（場所の id の組）
