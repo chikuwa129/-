@@ -76,6 +76,9 @@
   #floorLabel { font-size: 15px; font-weight: bold; }
   #teamRows { display: grid; gap: 3px; min-height: calc(3 * 19px + 6px); align-content: start; }
   #floorLabel.bossfl { color: var(--t-boss); }
+  .heatTag { margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 11px; line-height: 15px; vertical-align: 2px; border: 1px solid; font-weight: bold; }
+  .heatTag.ok { color: var(--t-heatOk); border-color: var(--t-heatOk); }
+  .heatTag.ng { color: var(--t-heatNg); border-color: var(--t-heatNg); }
   .trow { display: grid; grid-template-columns: minmax(0, 1fr) 70px 64px 66px; align-items: center; gap: 6px; }
   .trow .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .trow .nm small { color: var(--t-textDim); }
@@ -283,6 +286,7 @@
   .rcTop { display: flex; gap: 12px; align-items: center; }
   .rcTop canvas { flex-shrink: 0; }
   .rcName { font-size: 19px; font-weight: bold; }
+  .rcGimmick { margin: 2px 0 6px; padding: 5px 8px; border-radius: 6px; font-weight: bold; color: var(--t-gimmickHi); border: 2px solid var(--t-gimmickHi); background: var(--t-heatTagBg); }
   .rcStats { display: grid; grid-template-columns: repeat(3, auto); gap: 2px 12px; font-size: 13px; margin-top: 4px; }
   .rcStats b { font-size: 15px; }
   .rcSec { margin-top: 8px; padding: 6px 8px; background: var(--t-inset); border-radius: 6px; font-size: 13px; }
@@ -386,6 +390,9 @@
   .tag.gun { background: var(--t-tagGun); }
   .tag.missile { background: var(--t-tagMissile); }
   .tag.laser { background: var(--t-tagLaser); }
+  .tag.ability { background: var(--t-heatTagText); }
+  .abTag { display: inline-block; margin-left: 4px; padding: 0 4px; border-radius: 3px; font-size: 11px; font-weight: bold; line-height: 15px;
+    background: var(--t-heatTagBg); color: var(--t-heatTagText); border: 1px solid var(--t-heatTagText); vertical-align: 1px; }
   .eq { color: var(--t-accent); font-size: 11px; margin-left: 4px; }
   .empty { color: var(--t-textFaint); }
   /* 村・タイトル */
@@ -649,7 +656,7 @@
 //  調整用の定数・データ
 // ================================================================
 // 版の目印（作業のたびに更新）。タイトル画面の隅、設定欄、?layout=1 の診断に出す
-const BUILD_ID = "1K-20261015-2028";
+const BUILD_ID = "1K-20261017-0134";
 // ================================================================
 //  色調（画面の色はすべてここから。ドット絵のパレット、ボスの色、レア度の色、世界地図の固定色は除く）
 //  THEME＝全画面の標準の色（1J の前の版の色）、THEME_MAP＝世界マップの画面だけの色（古地図）。地図の画面に入るときと出るときに切り替える
@@ -714,6 +721,8 @@ const THEME = {
   btn2: "#24252b", btnRow: "#2c2d34", insetBack: "#1c1d22", insetUnit: "#1f2026", selectRowBg: "#26231a", selectTabBg: "#2a2618",
   goodBg2: "#1f3328", toastNgLine: "#a85a3a", overlayMini: "rgba(0,0,0,.88)", overlayDiag: "rgba(0,0,0,.72)",
   textHint: "#aaa", diagLine: "#888", buildText: "#5a5c66", debugText: "#f5d", fadeBg: "rgba(16,17,20,.95)",
+  // 1K：熱気のタグ（無効＝緑、あり＝赤）、耐熱のタグ、仲間にする画面の強調
+  heatOk: "#5fe07a", heatNg: "#ff6b6b", heatTagBg: "#3a2414", heatTagText: "#ffb07a", gimmickHi: "#ffb02e",
 };
 let activeTheme = THEME;   // いま画面に使っている色の表（世界マップの画面だけ THEME_MAP）
 const tc = key => activeTheme[key];   // 処理の中で使う色
@@ -727,6 +736,10 @@ const MSG_TRACE_MAX = 8, MSG_TRACE_TEXT = 20;
 // ?debug=1 を付けたときだけ、全機体のHPを大きくする（テスト用）
 const DEBUG = /[?&]debug=1(&|$)/.test(location.search);
 const DEBUG_HP_BONUS = 1500;
+// ?debug=1&desert=1：機械遺跡をクリアした状態（クリア1回、主人公機Lv11、パーツ数個、仲間なし）で始める（砂漠のバランスの確認用。HPの上乗せはしない）
+const DESERT_PARAM = DEBUG && /[?&]desert=1(&|$)/.test(location.search);
+const DEBUG_HP = DEBUG && !DESERT_PARAM;
+const DESERT_DEBUG_START = { lv: 11, parts: ["g2", "m1", "l1", "g1"] };
 
 const STAIRS_ENERGY_BONUS = 30;    // 次の階へ進んだとき、全員のエネルギー回復
 const WIN_ENERGY_BONUS = 5;        // 戦闘に勝ったとき、生きている全員のエネルギー回復
@@ -768,14 +781,16 @@ const DEFEAT_PENALTY = {
 
 // セーブ（localStorage）
 const SAVE_KEY = "robotRuinsSave";
-const SAVE_VERSION = 6;            // 6：ダンジョンごとのクリア回数（clears）。5：固定パーツ＋自由枠。4：ストック、ジャンク、仲間の固定パーツ。3：パーツの強化値と設定の追加。1〜4 は読み込み時に移行する
+const SAVE_VERSION = 7;            // 7：ダンジョンごとの記録（progress.dungeons）と、仲間の動物。6：ダンジョンごとのクリア回数（clears）。5：固定パーツ＋自由枠。4：ストック、ジャンク、仲間の固定パーツ。3：パーツの強化値と設定の追加。1〜4 は読み込み時に移行する
 
 // 村から出発できる階（条件を満たしたものだけ選べる）
+// 出発できる階（ダンジョンごとの記録 r と、ダンジョン d から決める）。前庭があるダンジョンは「前庭から」がいつでも選べる
 const DEPARTURES = [
-  { floor: 1,  label: fl => `${fl}から`,             ok: pr => true },
-  { floor: 5,  label: fl => `${fl}の準備部屋から`,   ok: pr => pr.maxFloor >= 5 },
-  { floor: 6,  label: fl => `${fl}から`,             ok: pr => !!pr.bossDefeated[5] },
-  { floor: 10, label: fl => `${fl}の準備部屋から`,   ok: pr => pr.maxFloor >= 10 },
+  { floor: 0,  label: fl => `${fl}から`,             ok: (r, d) => d.courtyard },
+  { floor: 1,  label: fl => `${fl}から`,             ok: (r, d) => !d.courtyard || r.reached >= 1 },
+  { floor: 5,  label: fl => `${fl}の準備部屋から`,   ok: r => r.reached >= 5 },
+  { floor: 6,  label: fl => `${fl}から`,             ok: r => !!r.boss5 },
+  { floor: 10, label: fl => `${fl}の準備部屋から`,   ok: r => r.reached >= 10 },
 ];
 
 // タイプの強み（共通の値）
@@ -841,8 +856,11 @@ const PARTS = [
   { id: "l1", type: "laser",   rarity: 1, name: "レーザーS2",         power: 13, acc: 90, en: 14 },
   { id: "l2", type: "laser",   rarity: 2, name: "プラズマレーザーR",  power: 18, acc: 92, en: 16 },
   { id: "l3", type: "laser",   rarity: 3, name: "サンダーフレア",     power: 25, acc: 95, en: 20 },
+  // 能力パーツ：わざを持たない（威力・命中・消費ENなし）。強化しない。自動装備・おまかせ装備・期待ダメージの対象外。持ち物の上限には数える
+  { id: "a1", type: "ability", rarity: 1, name: "放熱ユニット", ability: "heatproof", power: 0, acc: 0, en: 0 },
 ];
-const PART_TYPE_LABEL = { gun: "ガン", missile: "ミサイル", laser: "レーザー" };
+const PART_TYPE_LABEL = { gun: "ガン", missile: "ミサイル", laser: "レーザー" };   // 武器の系統（落とし物の系統はこの3つから選ぶ）
+const PART_KIND_LABEL = { ...PART_TYPE_LABEL, ability: "能力" };                // 画面の表示用
 const SLOT_COUNT = HERO_FREE_SLOTS;   // 互換用（古いセーブの主人公機の枠の数）
 // 成長：レベルで与えるダメージが伸びる（倍率 = 1 + 係数×(Lv-1)）。同じパーツを拾うと強化（+1〜+5）
 const LEVEL_DAMAGE_COEF = 0.05;
@@ -875,8 +893,9 @@ const DROP_RARITY = [
   { maxFloor: 3, rates: [0.90, 0.10, 0.00, 0] },
   { maxFloor: 6, rates: [0.70, 0.27, 0.03, 0] },
   { maxFloor: 9, rates: [0.50, 0.40, 0.10, 0] },
-];
-const BOSS_DROP_RARITY = { 5: [0, 0.65, 0.25, 0.10], 10: [0, 0, 0.70, 0.30] };
+  { maxFloor: 12, rates: [0.30, 0.50, 0.20, 0] },
+  { maxFloor: 15, rates: [0.15, 0.50, 0.35, 0] },
+];   // maxFloor は実効の階 ef（階＋ダンジョンの下駄）
 
 // 通常の敵（大きさごとの基本値）。drop=落とすパーツの系統。ally=仲間になったときの基本値（Lv1）
 // animals=同じ大きさの中からランダムに選ばれる動物（sprite=バトル用の絵、minFloor=出てくる階）
@@ -894,10 +913,8 @@ const ENEMY_TYPES = [
 // 階による補正：HP × (0.6 + 0.3×(階-1))、攻撃 × (0.7 + 0.1×(階-1))、切り上げ
 const ENEMY_HP_SCALE = { base: 0.6, perFloor: 0.3 };
 const ENEMY_ATK_SCALE = { base: 0.7, perFloor: 0.1 };
-const EARLY_FLOORS = 2;            // 1〜2階は敵が少なく、命中も低め
-const EARLY_ENEMY_COUNT = [2, 3];
+const EARLY_FLOORS = 2;            // 実効の階がこれ以下の敵は、命中が低め（敵の数はダンジョンの表 enemyBands）
 const EARLY_ACC_PENALTY = 10;
-const enemyCountFor = f => f <= 4 ? f + 2 : Math.min(6, f - 1);   // 3階以降の敵の数
 const ENEMY_SIGHT = 7;
 
 // ================================================================
@@ -1041,10 +1058,43 @@ o:[
 am:[[37,19,"e"],[41,26,"k"]],
 a:[[14,32,"e"],[35,31,"e"],[12,24,"k"],[20,28,"k"],[28,26,"k"],[33,42,"k"],[12,42,"k"],[26,40,"l"],[18,16,"l"],[24,17,"l"]]};
 // ボスの絵の表（絵のデータと色）。ボスを増やすときは、ここと BOSSES に足す
+// ---- 砂漠の洞窟のボスの絵（64×48） ----
+const TONES_DESERT={
+ cobra:{b:"#8a9a3a",d:"#5c6a22",l:"#b8c860",e:"#ff4a2a",y:"#e8d060",w:"#f3f3f3"},
+ worm:{b:"#b89060",d:"#8a6638",l:"#d8b886",e:"#ff4a2a",y:"#c8a86a",w:"#f3f3f3"}
+};
+const COBRA_KING={n:"コブラ王",w:BOSS_SPRITE_W,h:BOSS_SPRITE_H,axis:88,facing:"front",bodyDir:"left",
+o:[
+["P",[[1,45],[5,43],[5,47]],"c"],
+["E",6,43,2.4,2.4,"b"],["E",10,40,3,3,"d"],["E",15,40,3.4,3.4,"b"],["E",21,42,3.8,3.8,"d"],["E",27,41,4.1,4.1,"b"],["E",33,39,4.3,4.3,"d"],["E",39,40,4.5,4.5,"b"],
+{s:["P",[[44,2],[32,4],[30,12],[31,22],[38,28],[44,26]],"d"]},
+{s:["P",[[32,10],[27,6],[34,8]],"c"]},
+{s:["P",[[44,5],[34,7],[32,13],[33,21],[39,25],[44,23]],"y"]},
+{d:["R",34,12,20,1,"g"]},{d:["R",32,17,24,1,"g"]},{d:["R",34,22,20,1,"g"]},
+["E",42,36,5,4.5,"d"],["E",44,31,4.5,4,"b"],["E",44,26,4.2,3.8,"d"],
+{s:["P",[[44,10],[37,12],[35,19],[39,26],[44,28]],"b"]},
+{s:["P",[[44,13],[36,14],[36,17],[44,16]],"d"]},
+{s:["P",[[44,22],[40,22],[41,27],[44,27]],"l"]},
+{sd:["P",[[40,26],[41.5,26],[40.5,31]],"w"]},
+{d:["R",40,26,8,1,"g"]}],
+am:[[39,17,"e"],[40,17,"e"],[42,23,"k"],[43,32,"y"],[42,34,"y"]],
+a:[[43,29,"y"],[44,29,"y"],[11,38,"l"],[16,38,"l"],[22,40,"l"],[28,39,"l"],[34,37,"l"],[40,38,"l"],[45,29,"l"]]};
+const SAND_WORM={n:"砂ワーム",w:BOSS_SPRITE_W,h:BOSS_SPRITE_H,facing:"right",bodyDir:"left",
+o:[
+["P",[[1,47],[8,41],[26,38],[44,40],[62,47]],"y"],
+["E",14,41,7,6,"b"],["E",18,34,7.5,7,"d"],["E",24,27,8,7.5,"b"],["E",31,21,8.5,8,"d"],["E",39,17,9,8.5,"b"],["E",46,16,9.5,9,"d"],
+["E",52,17,10,12,"b"],["E",55,17,7.5,10,"g"],["E",56,17,4.5,7,"k"],
+["P",[[44,8],[46,3],[49,8]],"c"],["P",[[50,6],[52,1],[55,6]],"c"],["P",[[38,9],[39,4],[42,9]],"c"],
+{d:["P",[[53,7.5],[57,7.5],[55,12]],"w"]},{d:["P",[[48.5,10],[52,8.5],[52.5,13.5]],"w"]},{d:["P",[[47.5,14.5],[47.5,19.5],[52,17]],"w"]},
+{d:["P",[[48.5,24],[52,25.5],[52.5,20.5]],"w"]},{d:["P",[[53,26.5],[57,26.5],[55,22]],"w"]},
+{d:["P",[[60,9.5],[62,12],[58.5,13.5]],"w"]},{d:["P",[[60,24.5],[62,22],[58.5,20.5]],"w"]}],
+a:[[47,12,"e"],[47,22,"e"],[16,31,"l"],[22,24,"l"],[29,18,"l"],[37,13,"l"],[44,11,"l"]]};
 const BOSS_SPRITES = {
   raptorChief:  { def: RAPTOR_CHIEF,  tone: "raptor" },
   raptorMinion: { def: RAPTOR_MINION, tone: "raptorMinion" },
   guardian:     { def: TRICERA,       tone: "guardian" },
+  cobraKing:    { def: COBRA_KING,    pal: { k: K_OUT, ...METAL2, ...TONES_DESERT.cobra } },
+  sandWorm:     { def: SAND_WORM,     pal: { k: K_OUT, ...METAL2, ...TONES_DESERT.worm } },
 };
 // 群れの描写（見た目だけ。HPも当たり判定も持たない）
 const MINION_COUNT_BY_WIDTH = [[360, 3], [260, 2], [200, 1]];   // 敵の領域の幅（px）ごとの手下の数。200未満は0
@@ -1058,18 +1108,76 @@ const MINION_STOMP_PX = 2, MINION_STOMP_MS = 1000;   // 「力を溜めている
 
 // ボス（階の補正はかけない）。name＝ボスの名前（画面・メッセージ・クリア画面・絵の一覧は、すべてここから）。sprite＝絵（BOSS_SPRITES）、spriteSize＝絵の大きさ、minions＝群れの手下の絵（見た目だけ）
 const BOSSES = {
-  5:  { name: "クレストラプター", hp: 200, atk: 16, acc: 85, exp: 40, sprite: "raptorChief", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H }, minions: { sprite: "raptorMinion" } },
-  10: { name: "ガードホーン",     hp: 300, atk: 26, acc: 85, exp: 0, doubleBelowHalf: true, sprite: "guardian", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H } },
+  5:  { name: "クレストラプター", hp: 200, atk: 16, acc: 85, exp: 40, sprite: "raptorChief", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H }, minions: { sprite: "raptorMinion" },
+        drop: [0, 0.65, 0.25, 0.10] },
+  10: { name: "ガードホーン",     hp: 300, atk: 26, acc: 85, exp: 0, doubleBelowHalf: true, sprite: "guardian", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H },
+        drop: [0, 0, 0.70, 0.30] },
+};
+// 砂漠の洞窟のボス。enrageBelowHalf＝HPが半分以下で攻撃力の倍率（1回だけメッセージ）、doubleBelowHalf＝HPが半分以下で2回攻撃
+const DESERT_BOSSES = {
+  5:  { name: "コブラ王", hp: 380, atk: 32, acc: 85, exp: 100, enrageBelowHalf: 1.25, enrageText: "頭巾を広げて威嚇した！",
+        sprite: "cobraKing", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H }, drop: [0, 0.65, 0.25, 0.10] },
+  10: { name: "砂ワーム", hp: 560, atk: 44, acc: 85, exp: 160, doubleBelowHalf: true,
+        sprite: "sandWorm", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H }, drop: [0, 0, 0.70, 0.30] },
 };
 const FINAL_FLOOR = 10;
 // ダンジョンのデータ（1か所にまとめる）。今は1つ目の遺跡だけ。将来はここに足す（仕掛け、前庭、出る動物の系統など）
 // direction＝向き（"down" 降りる／"up" 登る／"dive" 潜る）、floorPrefix＝階の表記の頭（降りるなら "B"）
 // 階の数字は内部では 1, 2, … のまま。表記は floorLabel(dungeon, n) で作る
-const DUNGEONS = [
-  { key: "ruins", name: "ロボット遺跡", floors: FINAL_FLOOR, bosses: BOSSES, enemyTypes: ENEMY_TYPES,
-    hpScale: ENEMY_HP_SCALE, atkScale: ENEMY_ATK_SCALE, gimmick: null, frontYard: null,
-    direction: "down", floorPrefix: "B", hasRare: true },
+// 敵の構成（階の範囲ごと）：count＝敵の数（[最小,最大] はその間でランダム）、weights＝大きさの重み、heatBoost＝耐熱の動物の重みの倍率
+// animals＝出る動物（null＝大きさの表の動物から、バトルに入るときに選ぶ。機械遺跡の今までの作り）
+const RUINS_BANDS = [
+  { from: 1, to: 2,  count: [2, 3], weights: { small: 5 } },
+  { from: 3, to: 3,  count: 5,      weights: { small: 5, mid: 3 } },
+  { from: 4, to: 4,  count: 6,      weights: { small: 5, mid: 3 } },
+  { from: 5, to: 5,  count: 4,      weights: { small: 5, mid: 3 } },
+  { from: 6, to: 6,  count: 5,      weights: { small: 5, mid: 3, large: 2 } },
+  { from: 7, to: 10, count: 6,      weights: { small: 5, mid: 3, large: 2 } },
 ];
+const DESERT_BANDS = [
+  { from: 0, to: 0,  count: 4, weights: { small: 60, mid: 40, large: 0 },  heatBoost: 2 },   // 前庭
+  { from: 1, to: 2,  count: 5, weights: { small: 50, mid: 45, large: 5 },  heatBoost: 2 },
+  { from: 3, to: 4,  count: 6, weights: { small: 25, mid: 55, large: 20 }, heatBoost: 2 },
+  { from: 5, to: 7,  count: 6, weights: { small: 10, mid: 50, large: 40 } },
+  { from: 8, to: 10, count: 6, weights: { small: 0, mid: 40, large: 60 } },
+];
+// 砂漠専用の調整値（通常の敵のHPと攻撃に、さらに掛ける）
+const DESERT_HP_MULT = 1.0, DESERT_ATK_MULT = 1.0;
+// 動物（敵・仲間）。size＝大きさ（ENEMY_TYPES の key）、spriteId＝絵（差し替えはここだけ）、abilities＝能力、
+// hpMult・atkMult＝敵のときの倍率、unique＝仲間になったときの固有技。機械遺跡の動物は、絵の名前がそのまま動物の名前（animalDef で作る）
+const ANIMAL_DEFS = {
+  dustSnake:   { name: "ダストスネーク",     size: "small", abilities: ["heatproof"], hpMult: 0.9, atkMult: 1.1, spriteId: "dango",  unique: "coil" },
+  lizaron:     { name: "リザロン",           size: "small", abilities: [],            hpMult: 0.8, atkMult: 1.0, spriteId: "turtle", unique: "tailSweep" },
+  fenex:       { name: "フェネクス",         size: "small", abilities: [],            hpMult: 0.8, atkMult: 1.1, spriteId: "wolf",   unique: "keenEar" },
+  scarabot:    { name: "スカラボット",       size: "small", abilities: [],            hpMult: 1.1, atkMult: 0.9, spriteId: "dango",  unique: "rollAttack" },
+  sandScorpio: { name: "サンドスコーピオ",   size: "mid",   abilities: ["heatproof"], hpMult: 1.0, atkMult: 1.2, spriteId: "lion",   unique: "venom" },
+  strideBird:  { name: "ストライドバード",   size: "mid",   abilities: [],            hpMult: 0.9, atkMult: 1.1, spriteId: "bird",   unique: "strideKick" },
+  sandFish:    { name: "サンドフィッシュ",   size: "mid",   abilities: [],            hpMult: 1.0, atkMult: 1.2, spriteId: "ptera",  unique: "sandDive" },
+  sandRhino:   { name: "サンドライノ",       size: "large", abilities: [],            hpMult: 1.2, atkMult: 1.1, spriteId: "rex",    unique: "hornRush" },
+  sandCamel:   { name: "サンドキャメル",     size: "large", abilities: ["heatproof"], hpMult: 1.4, atkMult: 0.9, spriteId: "rex",    unique: "brace" },
+};
+// 能力（機体が持つ。動物の abilities、または能力パーツで持つ）
+const ABILITIES = { heatproof: { name: "耐熱" } };
+// 仕掛け：ability＝無効にする能力。熱気は洞窟の通常階だけ（前庭・準備部屋・ボス部屋・ボス戦の直後は効かない）
+const GIMMICKS = { heat: { name: "熱気", ability: "heatproof" } };
+const HEAT_DAMAGE_RATE = 0.03;     // 戦闘が終わるたびに、最大HPのこの割合（切り上げ、最低1）
+const HEAT_STAIR_EN = 15;          // 熱気の中の階段での EN 回復（通常は STAIRS_ENERGY_BONUS）
+const GIMMICK_JOIN_CHANCE = 0.40;  // 仕掛けに必要な能力の仲間がいない間、その能力の動物が仲間になる確率
+const GIMMICK_PITY = 3;            // その条件で、続けてこの回数仲間にならなかったら、次は必ず仲間になる
+// ダンジョン。floorOffset＝敵の強さの階の補正の下駄（実効の階 ef ＝ 階 ＋ floorOffset。前庭は courtyardOffset）、
+// courtyard＝前庭（内部の階 0）があるか、place＝世界マップの場所、clearTitle・clearPlace・exitText＝クリアの画面と文
+const DUNGEONS = [
+  { key: "ruins", name: "機械遺跡", floors: FINAL_FLOOR, bosses: BOSSES, enemyBands: RUINS_BANDS, animals: null,
+    hpScale: ENEMY_HP_SCALE, atkScale: ENEMY_ATK_SCALE, hpMult: 1, atkMult: 1, gimmick: null, courtyard: false, floorOffset: 0, courtyardOffset: 0,
+    direction: "down", floorPrefix: "B", hasRare: true, dropBands: DROP_RARITY,
+    clearTitle: "遺跡踏破！", clearPlace: "遺跡の最深部", exitText: "遺跡の最深部から地上へ戻った。" },
+  { key: "desert", name: "砂漠の洞窟", floors: FINAL_FLOOR, bosses: DESERT_BOSSES, enemyBands: DESERT_BANDS, animals: Object.keys(ANIMAL_DEFS),
+    hpScale: ENEMY_HP_SCALE, atkScale: ENEMY_ATK_SCALE, hpMult: DESERT_HP_MULT, atkMult: DESERT_ATK_MULT, gimmick: "heat", courtyard: true, floorOffset: 5, courtyardOffset: 4,
+    direction: "down", floorPrefix: "B", hasRare: true, dropBands: DROP_RARITY,
+    clearTitle: "砂漠の洞窟を踏破！", clearPlace: "砂漠の洞窟の最深部", exitText: "砂漠の洞窟の最深部から地上へ戻った。",
+    caveEnterText: "洞窟に入った。", heatNote: "熱気：耐熱の力が必要。前庭で、耐熱の仲間を探そう" },
+];
+const dungeonByKey = key => DUNGEONS.find(d => d.key === key);
 // ---- 世界マップ ----
 // 場所：x,y＝地図（680×460）の上の位置、base＝目安の基準値（仮の値。あとで調整）、icon＝目印の絵、
 // unlock＝解放の条件（clears＝これらのダンジョンを1回以上クリア）、dungeon＝遊べるダンジョン（DUNGEONS の key。null＝準備中）
@@ -1077,7 +1185,7 @@ const DUNGEONS = [
 const WORLD_PLACES = [
   { id: 0, key: "village", name: "はじめの村",   x: 78,  y: 390, icon: "house",   village: true, gimmick: "—", base: null, unlock: { always: true }, dungeon: null, entry: "" },
   { id: 1, key: "ruins",   name: "機械遺跡",     x: 150, y: 310, icon: "gear",    gimmick: "なし（入門用）",       base: 2,  unlock: { always: true },        dungeon: "ruins", entry: "B1Fから入る" },
-  { id: 2, key: "desert",  name: "砂漠の洞窟",   x: 275, y: 380, icon: "pyramid", gimmick: "熱気：耐熱の力が必要", base: 4,  unlock: { clears: ["ruins"] },  dungeon: null, entry: "前庭から入る" },
+  { id: 2, key: "desert",  name: "砂漠の洞窟",   x: 275, y: 380, icon: "pyramid", gimmick: "熱気：耐熱の力が必要", base: 4,  unlock: { clears: ["ruins"] },  dungeon: "desert", entry: "前庭から入る" },
   { id: 3, key: "forest",  name: "森の洞窟",     x: 195, y: 215, icon: "tree",    gimmick: "岩：怪力の力が必要",   base: 6,  unlock: { clears: ["desert"] }, dungeon: null, entry: "前庭から入る" },
   { id: 4, key: "sky",     name: "天空遺跡",     x: 340, y: 105, icon: "cloud",   gimmick: "段差：浮遊の力が必要", base: 8,  unlock: { clears: ["forest"] }, dungeon: null, entry: "前庭から入る" },
   { id: 5, key: "lake",    name: "地底湖",       x: 455, y: 255, icon: "wave",    gimmick: "水路：水中の力が必要", base: 9,  unlock: { clears: ["sky"] },    dungeon: null, entry: "前庭から入る" },
@@ -1107,7 +1215,10 @@ const DUNGEON_DIRECTIONS = {
 };
 const FLOOR_SUFFIX = "F";
 let dungeon = DUNGEONS[0];         // いま潜っているダンジョン（今は1つだけ）
-const floorLabel = (d, n) => `${d.floorPrefix || ""}${n}${FLOOR_SUFFIX}`;
+const COURTYARD_LABEL = "前庭";
+const floorLabel = (d, n) => n === 0 && d.courtyard ? COURTYARD_LABEL : `${d.floorPrefix || ""}${n}${FLOOR_SUFFIX}`;
+// 実効の階（敵の強さ・経験値・パーツのレア度の表で使う）
+const effFloor = (f = floorNo, d = dungeon) => f + (f === 0 ? d.courtyardOffset : d.floorOffset);
 const curFloorLabel = (n = floorNo) => floorLabel(dungeon, n);
 const BOSS_CHARGE_EVERY = 3;       // 3ターンに1回「力を溜める」→ 次のターンに強攻撃
 const BOSS_HEAVY_MULT = 2;
@@ -1147,6 +1258,16 @@ const MOVES = {
   dive:    { id: "dive",    name: "空から急降下", kind: "unique", en: 8, target: "enemy", effect: "damage", lv1: 1.8, lv10: 2.4, sure: true, element: null, flash: "attack" },
   hawkeye: { id: "hawkeye", name: "鷹の目",       kind: "unique", en: 5, target: "allyAll", effect: "accUp", lv1: 25, lv10: 40, element: null, flash: "guard" },
   bite:    { id: "bite",    name: "大かみつき",   kind: "unique", en: 9, target: "enemy", effect: "damage", lv1: 2.2, lv10: 3.0, accMod: -15, stun: true, bossBonus: 1.2, element: null, flash: "attack" },
+  // 砂漠の動物（formula: "tackle"＝たいあたりの威力（レベル倍率込み）× 倍率。hits 回に分けて、それぞれ命中判定）
+  coil:       { id: "coil",       name: "巻きつき",   kind: "unique", en: 5, target: "enemy", effect: "damage", formula: "tackle", lv1: 1.2, lv10: 1.7, accMod: -10, stun: true, bossBonus: 1.15, element: null, flash: "attack" },
+  tailSweep:  { id: "tailSweep",  name: "しっぽ払い", kind: "unique", en: 4, target: "enemy", effect: "damage", formula: "tackle", lv1: 1.5, lv10: 2.1, accMod: 10, element: null, flash: "attack" },
+  keenEar:    { id: "keenEar",    name: "聞き耳",     kind: "unique", en: 5, target: "allyAll", effect: "earCut", lv1: 20, lv10: 35, element: null, flash: "guard" },
+  rollAttack: { id: "rollAttack", name: "ころがり",   kind: "unique", en: 5, target: "enemy", effect: "damage", formula: "tackle", lv1: 1.7, lv10: 2.4, accMod: -5, element: null, flash: "attack" },
+  venom:      { id: "venom",      name: "毒針",       kind: "unique", en: 6, target: "enemy", effect: "damage", formula: "tackle", lv1: 1.9, lv10: 2.6, accMod: 0, element: null, flash: "attack" },
+  strideKick: { id: "strideKick", name: "疾走蹴り",   kind: "unique", en: 5, target: "enemy", effect: "damage", formula: "tackle", hits: 2, lv1: 1.8, lv10: 2.5, accMod: 5, element: null, flash: "attack" },
+  sandDive:   { id: "sandDive",   name: "砂ばくしん", kind: "unique", en: 7, target: "enemy", effect: "damage", formula: "tackle", lv1: 2.1, lv10: 2.9, accMod: -15, element: null, flash: "attack" },
+  hornRush:   { id: "hornRush",   name: "角つき突進", kind: "unique", en: 8, target: "enemy", effect: "damage", formula: "tackle", lv1: 2.4, lv10: 3.3, accMod: -10, element: null, flash: "attack" },
+  brace:      { id: "brace",      name: "ふんばり",   kind: "unique", en: 6, target: "self", effect: "brace", count: 2, lv1: 50, lv10: 70, element: null, flash: "guard" },
 };
 const ANIMAL_UNIQUE = { dango: "curl", turtle: "cover", lion: "roar", wolf: "claws", ptera: "dive", bird: "hawkeye", rex: "bite" };
 const FLASH_THEME_KEYS = { heal: "flashHeal", guard: "flashGuard", attack: "flashAttack" };   // 色は THEME から
@@ -1352,9 +1473,12 @@ boss:{p:{k:"#2b2b2b",q:"#e0443a",b:"#5c1f3a",d:"#ffd23a",e:"#ff3b30"},o:ENEMY_OP
 repair:{p:{k:"#2b2b2b",w:"#f3f3f3",r:"#e0443a"},o:[["R",2,3,8,6,"w"],["R",5,4,2,4,"r"],["R",4,5,4,2,"r"]],a:[]},
 energy:{p:{k:"#2b2b2b",y:"#ffd23a",o:"#c0701a",c:"#8a8f98"},o:[["R",5,1,2,1,"c"],["R",3,2,6,8,"y"],["P",[[6,3],[4,6],[6,6],[5,9],[8,5],[6,5]],"o"]],a:[]},
 parts:{p:{k:"#2b2b2b",c:"#8a8f98",d:"#5c6068"},o:[["E",6,6,3.5,3.5,"c"],["R",5,1,2,2,"c"],["R",5,9,2,2,"c"],["R",1,5,2,2,"c"],["R",9,5,2,2,"c"],["E",6,6,1.3,1.3,"d"]],a:[]},
-stairs:{p:{k:"#2b2b2b",l:"#b8bcc8",b:"#8a90a0",d:"#5c6272"},o:[["R",1,1,10,3,"l"],["R",1,4,8,3,"b"],["R",1,7,6,3,"d"]],a:[]},
-heal:{p:{k:"#2b2b2b",g:"#1f8f45",h:"#3fcf6e",w:"#ffffff"},o:[["E",6,6,5,5,"g"],["E",6,6,3.8,3.8,"h"],["R",5,3,2,6,"w"],["R",3,5,6,2,"w"]],a:[]}
+stairs:{p:{k:"#2b2b2b",l:"#b8bcc8",b:"#8a90a0",d:"#5c6272"},o:[["R",1,1,10,3,"l"],["R",1,4,8,3,"b"],["R",1,7,6,3,"d"]],a:[]}
 };
+// 準備部屋の整備員（マップ用 12×12）
+const MAPICON_MECH={p:{k:K_OUT,h:"#d98a3d",s:"#e8c8a0",b:"#4a6a9a",d:"#2f4668",c:"#aab0ba"},
+ o:[["R",3,1,6,2,"h"],["R",4,3,4,3,"s"],["R",3,6,6,4,"b"],["R",2,6,1,3,"b"],["R",9,6,1,3,"b"],["R",3,10,2,1,"d"],["R",7,10,2,1,"d"],["R",10,4,1,5,"c"],["R",9,3,3,1,"c"]],
+ a:[[5,4,"k"],[7,4,"k"],[5,8,"d"],[6,8,"d"]]};
 
 // 主人公のマップ用の絵（タイプごとの全身の動物。足元の輪は水色）。輪郭の色は、ほかのマップ用の絵と同じ
 const MAP_OUTLINE = "#2b2b2b";
@@ -1369,7 +1493,7 @@ dino:{p:{k:MAP_OUTLINE,q:"#4fe0ff",b:"#5f9e5a",d:"#3f7a3c",l:"#8cc884",c:"#aab0b
  o:[RING,["R",1,6,3,2,"d"],["P",[[3,5],[7,4],[8,8],[3,8]],"b"],["R",3,8,2,2,"d"],["R",6,8,2,2,"d"],["R",4,3,3,1,"c"],["R",7,2,4,3,"b"],["R",8,4,3,1,"d"]],
  a:[[9,3,"e"],[9,4,"w"],[10,4,"w"],[8,6,"d"]]}
 };
-for (const d of [...Object.values(MAPICON), ...Object.values(MAPICON_HERO)]) d.inner = false;   // マップ用の絵は、内側の黒線を使わない（今のまま）
+for (const d of [...Object.values(MAPICON), ...Object.values(MAPICON_HERO), MAPICON_MECH]) d.inner = false;   // マップ用の絵は、内側の黒線を使わない（今のまま）
 // 床・壁（輪郭なしのタイル）
 function tileGrid(fill, marks) {
   const g = Array.from({ length: MAP_N }, () => Array(MAP_N).fill(fill));
@@ -1392,7 +1516,7 @@ function prepareSprites() {
   // ボス（と群れの手下）：大きさと向きは絵のデータから
   for (const [key, bs] of Object.entries(BOSS_SPRITES)) {
     const d = bs.def;
-    SPR[key] = { g: buildSprite(d, d.w, d.h), p: bossTonePalette(bs.tone), w: d.w, h: d.h, facing: d.facing, bodyDir: d.bodyDir };
+    SPR[key] = { g: buildSprite(d, d.w, d.h), p: bs.pal || bossTonePalette(bs.tone), w: d.w, h: d.h, facing: d.facing, bodyDir: d.bodyDir };
   }
   // 敵として使う反転した版も、ここで1回だけ作る
   for (const k of [...Object.keys(BATTLE), ...Object.keys(BOSS_SPRITES)]) SPR[k].gf = flipGrid(SPR[k].g);
@@ -1403,6 +1527,7 @@ function prepareSprites() {
   }
   for (const [k, d] of Object.entries(MAPICON)) SPR["m_" + k] = { g: buildSprite(d, MAP_N, MAP_N), p: d.p, w: MAP_N, h: MAP_N };
   for (const [k, d] of Object.entries(MAPICON_HERO)) SPR["m_hero_" + k] = { g: buildSprite(d, MAP_N, MAP_N), p: d.p, w: MAP_N, h: MAP_N };
+  SPR.m_mech = { g: buildSprite(MAPICON_MECH, MAP_N, MAP_N), p: MAPICON_MECH.p, w: MAP_N, h: MAP_N };
   for (const [k, t] of Object.entries(TILES)) SPR["t_" + k] = { g: t.g, p: t.p, w: MAP_N, h: MAP_N };
   const re = buildRareSprite(MAPICON.enemy, MAP_N, MAP_N);
   SPR.m_rare = { g: re.grid, p: re.pal, w: MAP_N + 2 * RARE_PAD, h: MAP_N + 2 * RARE_PAD };
@@ -1524,13 +1649,13 @@ function drawRare(c2, key, sparks, x, y, s, flip) {
 // ================================================================
 //  状態
 // ================================================================
-const WALL = 0, FLOOR = 1, STAIRS = 2, HEAL = 3, BOSSFLOOR = 4, GATE = 5;
+const WALL = 0, FLOOR = 1, STAIRS = 2, BOSSFLOOR = 4, GATE = 5;   // 3 は、なくした回復ポイント
 let map, seen, visible, enemies, groundItems, floorNo;
 let logLines = [];         // 直近の全メッセージ（テストと記録用）
 let mapLines = [], battleLines = [];   // マップ（と村）のメッセージ欄、バトルのメッセージ欄
 let team, inv, pos, bestLevel, partUid = 0;
 let typeKey = null;
-let progress = null;     // { maxFloor, bossDefeated: {5, 10}, cleared }
+let progress = null;     // { dungeons: { [key]: { clears, reached, boss5, boss10, pity } } }（makeProgress で作る）
 let saveFailed = false;
 // 設定（セーブに含める）：演出、確認なしで即実行、仲間のおまかせ、ひとうち、ミニマップの常時表示、一括回復の確認なし
 const DEFAULT_SETTINGS = { fx: true, instant: false, allyAuto: true, oneHit: true, miniMap: true, bulkNoConfirm: false, recruitConfirm: "ask", theme: "calm", mapTexture: true };   // theme は使わない（1J の名残。古いセーブとの互換のため残す）
@@ -1553,10 +1678,17 @@ const rnd = n => Math.floor(Math.random() * n);
 const rndRange = (a, b) => a + rnd(b - a + 1);
 const roll = pct => Math.random() * 100 < pct;
 const partById = id => PARTS.find(p => p.id === id);
-const isBossFloor = f => !!BOSSES[f];
+const isBossFloor = f => !!dungeon.bosses[f];
 const leader = () => team[0];
 const alive = () => team.filter(u => u.hp > 0);
-const animalName = sprite => BATTLE[sprite].n;
+// 動物の定義：砂漠の動物は表から、機械遺跡の動物は絵の名前から作る
+function animalDef(id) {
+  if (ANIMAL_DEFS[id]) return ANIMAL_DEFS[id];
+  if (!BATTLE[id]) return null;
+  const t = ENEMY_TYPES.find(x => x.animals.some(a => a.sprite === id));
+  return { name: BATTLE[id].n, size: t ? t.key : "small", abilities: [], hpMult: 1, atkMult: 1, spriteId: id, unique: ANIMAL_UNIQUE[id] };
+}
+const animalName = id => animalDef(id).name;
 function pickWeighted(rates) {
   let r = Math.random();
   for (let i = 0; i < rates.length; i++) { if ((r -= rates[i]) < 0) return i; }
@@ -1567,11 +1699,11 @@ function pickWeighted(rates) {
 // ================================================================
 //  機体
 // ================================================================
-const maxHpOf = u => u.baseHp + LEVEL_HP_GROWTH * (u.lv - 1) + (DEBUG ? DEBUG_HP_BONUS : 0);
+const maxHpOf = u => u.baseHp + LEVEL_HP_GROWTH * (u.lv - 1) + (DEBUG_HP ? DEBUG_HP_BONUS : 0);
 const maxEnOf = u => u.baseEn + (u.enGrowth || LEVEL_EN_GROWTH) * (u.lv - 1);
 const typeOf = u => u.isLeader ? START_TYPES.find(t => t.key === u.kind) : null;
 // 戦闘中だけの状態（戦闘ごとにリセット）
-const freshBattleState = () => ({ guard: 0, critUp: 0, barrage: 0, blind: 0, curl: 0, cover: 0, accUp: 0, missStreak: 0, evadeStreak: 0 });
+const freshBattleState = () => ({ guard: 0, critUp: 0, barrage: 0, blind: 0, curl: 0, cover: 0, accUp: 0, missStreak: 0, evadeStreak: 0, ear: 0, brace: 0, braceLeft: 0 });
 const tackleOf = u => u.baseTackle + Math.floor((u.lv - 1) * TACKLE_GROWTH);
 
 function createUnit(o) {
@@ -1584,6 +1716,7 @@ function createUnit(o) {
     fixed: !o.isLeader && o.part ? fixedPart(o.part, o.plus) : null,
     free: new Array(o.isLeader ? HERO_FREE_SLOTS : ALLY_FREE_SLOTS).fill(null),
     manual: false,   // 手動で付け替えた機体は、自動の入れ替え対象にしない
+    animal: o.animal || null, abilities: (o.abilities || []).slice(),   // 動物と、持っている能力（heatproof など）
     skills: { guard: 1, unique: 1 },   // 防御と固有技のスキルレベル
     bs: freshBattleState(),
   };
@@ -1596,8 +1729,12 @@ function createUnit(o) {
 const fixedPart = (id, plus = 0) => ({ id, uid: ++partUid, plus });
 // 仲間の機体を作る（仲間にする画面、読み込み、テスト）。def=大きさ、part=固定パーツのid
 function createAlly(def, sprite, o = {}) {
-  return createUnit({ name: o.name || animalName(sprite), sprite, kind: def.key, hp: def.ally.hp, en: def.ally.en, tackle: def.ally.tackle,
-    lv: o.lv || 1, unique: ANIMAL_UNIQUE[sprite], part: o.part || def.ally.part, plus: o.plus || 0 });
+  const animal = o.animal || sprite, a = animalDef(animal);
+  const u = createUnit({ name: o.name || a.name, sprite, kind: def.key, hp: def.ally.hp, en: def.ally.en, tackle: def.ally.tackle,
+    lv: o.lv || 1, unique: a.unique || ANIMAL_UNIQUE[sprite], part: o.part || def.ally.part, plus: o.plus || 0 });
+  u.animal = animal;
+  u.abilities = (a.abilities || []).slice();
+  return u;
 }
 const allUnits = () => team.concat(stock);
 function uniqueName(base) {
@@ -1619,11 +1756,14 @@ const itemName = item => partOf(item).name + plusText(item);                 // 
 const itemText = item => itemName(item) + RARITY[partOf(item).rarity].stars;  // ★付き
 const itemPower = item => partOf(item).power * (1 + PLUS_COEF * (item.plus || 0));   // 強化値の威力（小数のまま）
 const itemExpected = item => itemPower(item) * partOf(item).acc / 100;            // 自動装備で比べる期待ダメージ
+const isAbilityItem = item => !!item && !!partOf(item).ability;                   // 能力パーツ（放熱ユニット）
+const ownsPart = id => inv.parts.some(i => i.id === id);                         // 持ち物（装備中も含む）にあるか
 const levelMult = u => 1 + LEVEL_DAMAGE_COEF * (u.lv - 1);
 
 // パーツを手に入れる。同じ名前のパーツを持っていれば（持ち物＋全員の自由枠。仲間の固定パーツは含めない）、それを+1強化する。
 // noMerge=強化しないで新しく入れる（初期パーツ）
 function gainPart(id, opts = {}) {
+  if (partById(id).ability) { const item = { id, uid: ++partUid, plus: 0 }; inv.parts.push(item); return { item, unit: null, swapped: null, discarded: trimInventory() }; }
   if (!opts.noMerge) {
     const same = inv.parts.filter(i => i.id === id && (i.plus || 0) < PLUS_MAX);
     if (same.length) {
@@ -1664,7 +1804,7 @@ function addPart(id, plus = 0) {
 // 手動の印がなければ、空いている自由枠へ、持ち物の未装備パーツを期待ダメージの高い順に入れる（メッセージなし）
 function fillFreeSlots(u) {
   if (u.manual) return;
-  const spare = inv.parts.filter(i => !isEquipped(i)).sort((a, b) => itemExpected(b) - itemExpected(a) || partOf(a).en - partOf(b).en);
+  const spare = inv.parts.filter(i => !isEquipped(i) && !isAbilityItem(i)).sort((a, b) => itemExpected(b) - itemExpected(a) || partOf(a).en - partOf(b).en);
   u.free.forEach((e, slot) => { if (!e && spare.length) u.free[slot] = spare.shift(); });
 }
 // チームから外すとき（ストックへ、入れ替え）：自由枠のパーツは持ち物に戻る（持ち物の中にあるので、外すだけ）
@@ -1673,7 +1813,7 @@ function clearFreeSlots(u) { u.free.fill(null); }
 function trimInventory() {
   const out = [];
   while (inv.parts.length > INVENTORY_MAX) {
-    const free = inv.parts.filter(i => !isEquipped(i));
+    const free = inv.parts.filter(i => !isEquipped(i) && !isAbilityItem(i));
     if (!free.length) break;
     free.sort((a, b) => itemExpected(a) - itemExpected(b));
     const drop = free[0];
@@ -1696,11 +1836,12 @@ function logPartGain(res, verb, out = (t, c) => log(t, c, null, "part")) {
 // おまかせ装備：持ち物（自由枠に付いているものも含む）を期待ダメージの高い順（同じなら消費ENの低い順）に、
 // 主人公機の枠 → 仲間1の枠 → 仲間2の枠 の順に配る。固定パーツは動かさない。手動の印は全員クリア
 function autoEquipAll() {
-  const sorted = inv.parts.slice().sort((a, b) => itemExpected(b) - itemExpected(a) || partOf(a).en - partOf(b).en);
+  // 能力パーツは配らない（付けている枠は、そのまま残す）
+  const sorted = inv.parts.filter(i => !isAbilityItem(i)).sort((a, b) => itemExpected(b) - itemExpected(a) || partOf(a).en - partOf(b).en);
   let k = 0;
   for (const u of team) {
     u.manual = false;
-    for (let s = 0; s < u.free.length; s++) u.free[s] = sorted[k++] || null;
+    for (let s = 0; s < u.free.length; s++) if (!isAbilityItem(u.free[s])) u.free[s] = sorted[k++] || null;
   }
 }
 
@@ -1777,23 +1918,28 @@ function freeCellIn(r) {
   return null;
 }
 
-function scaled(base, s) { return Math.max(1, Math.ceil(base * (s.base + s.perFloor * (floorNo - 1)))); }
-// 動物（絵と名前）はバトルに入るときに決める
-function makeEnemy(def, x, y) {
-  const hp = scaled(def.hp, ENEMY_HP_SCALE);
-  return { def, sprite: null, name: def.label + "の敵", x, y, size: 1,
-           hp, maxHp: hp, atk: scaled(def.atk, ENEMY_ATK_SCALE),
-           acc: def.acc - (floorNo <= EARLY_FLOORS ? EARLY_ACC_PENALTY : 0),
-           exp: Math.ceil(def.exp * (1 + EXP_FLOOR_SCALE * (floorNo - 1))),
+// 階による補正（実効の階 ef）。mult＝動物とダンジョンの倍率（機械遺跡は 1）
+function scaled(base, s, mult = 1, ef = effFloor()) { return Math.max(1, Math.ceil(base * (s.base + s.perFloor * (ef - 1)) * mult)); }
+// 動物（絵と名前）：機械遺跡はバトルに入るときに決める。animal を渡したとき（砂漠）は、その動物
+function makeEnemy(def, x, y, animal = null) {
+  const ef = effFloor(), a = animal ? animalDef(animal) : null;
+  const hm = a ? a.hpMult * dungeon.hpMult : 1, am = a ? a.atkMult * dungeon.atkMult : 1;
+  const hp = scaled(def.hp, ENEMY_HP_SCALE, hm, ef);
+  const e = { def, sprite: null, name: def.label + "の敵", x, y, size: 1,
+           hp, maxHp: hp, atk: scaled(def.atk, ENEMY_ATK_SCALE, am, ef),
+           acc: def.acc - (ef <= EARLY_FLOORS ? EARLY_ACC_PENALTY : 0),
+           exp: Math.ceil(def.exp * (1 + EXP_FLOOR_SCALE * (ef - 1))),
            boss: false, awake: false, stun: 0 };
+  if (a) { e.animal = animal; e.sprite = a.spriteId; e.name = a.name; }
+  return e;
 }
 function makeBoss(def, x, y) {
   return { def, sprite: def.sprite, name: def.name, x, y, size: 2,
            hp: def.hp, maxHp: def.hp, atk: def.atk, acc: def.acc, exp: def.exp,
            boss: true, awake: true, stun: 0 };
 }
-function makeRare(def, x, y) {
-  const e = makeEnemy(def, x, y);
+function makeRare(def, x, y, animal = null) {
+  const e = makeEnemy(def, x, y, animal);
   e.hp = e.maxHp = Math.ceil(e.hp * RARE_STAT_MULT);
   e.atk = Math.ceil(e.atk * RARE_STAT_MULT);
   e.exp *= RARE_EXP_MULT;
@@ -1803,14 +1949,15 @@ function makeRare(def, x, y) {
 }
 function chooseAnimal(e) {
   if (e.sprite) return;
-  const list = e.def.animals.filter(a => floorNo >= a.minFloor);
+  const list = e.def.animals.filter(a => effFloor() >= a.minFloor);
   e.sprite = list[rnd(list.length)].sprite;
   e.name = (e.rare ? "レア" : "") + animalName(e.sprite);
 }
 // レア個体を置くか（階に入るたびに判定）。置く場所は階段から遠いところ
 function rareChance() {
   if (RARE_PARAM !== null) return RARE_PARAM ? 1 : 0;
-  const bosses = Object.values(progress.bossDefeated).filter(Boolean).length;
+  // そのダンジョン自身の、倒したボスの数（0〜2）
+  const r = recOf(), bosses = (r.boss5 ? 1 : 0) + (r.boss10 ? 1 : 0);
   return RARE_BASE_CHANCE + RARE_PER_BOSS * bosses;
 }
 function placeRare(stairs) {
@@ -1824,20 +1971,39 @@ function placeRare(stairs) {
   if (!cells.length) return;
   const far = cells.filter(c => c.d >= RARE_MIN_DIST_FROM_STAIRS);
   const p = far.length ? far[rnd(far.length)] : cells.reduce((a, b) => b.d > a.d ? b : a);
-  enemies.push(makeRare(pickEnemyType(), p.x, p.y));
+  const t = pickEnemyType();
+  enemies.push(makeRare(t, p.x, p.y, pickAnimal(t)));
 }
 
-function pickEnemyType() {
-  const pool = ENEMY_TYPES.filter(t => floorNo >= t.minFloor);
-  let r = Math.random() * pool.reduce((s, t) => s + t.weight, 0);
-  for (const t of pool) { if ((r -= t.weight) < 0) return t; }
+// いまの階の敵の構成（ダンジョンの表から）
+function floorBand(f = floorNo, d = dungeon) {
+  return d.enemyBands.find(b => f >= b.from && f <= b.to) || d.enemyBands[d.enemyBands.length - 1];
+}
+const bandCount = b => Array.isArray(b.count) ? rndRange(b.count[0], b.count[1]) : b.count;
+// 大きさを重みで選ぶ（重み0の大きさは出ない）
+function pickEnemyType(b = floorBand()) {
+  const pool = ENEMY_TYPES.filter(t => (b.weights[t.key] || 0) > 0);
+  let r = Math.random() * pool.reduce((s, t) => s + b.weights[t.key], 0);
+  for (const t of pool) { if ((r -= b.weights[t.key]) < 0) return t; }
+  return pool[0];
+}
+// 動物を選ぶ（ダンジョンに動物の表があるときだけ。同じ重み、仕掛けの能力を持つ動物は heatBoost 倍）。null＝バトルで選ぶ
+function pickAnimal(t, b = floorBand(), d = dungeon) {
+  if (!d.animals) return null;
+  const need = d.gimmick && GIMMICKS[d.gimmick].ability;
+  const pool = d.animals.filter(id => ANIMAL_DEFS[id].size === t.key);
+  if (!pool.length) return null;
+  const w = id => (need && b.heatBoost && ANIMAL_DEFS[id].abilities.includes(need)) ? b.heatBoost : 1;
+  let r = Math.random() * pool.reduce((n, id) => n + w(id), 0);
+  for (const id of pool) { if ((r -= w(id)) < 0) return id; }
   return pool[0];
 }
 
 function newFloor() {
-  enemies = []; groundItems = [];
+  enemies = []; groundItems = []; npcs = [];
   floorDone = false; autoWalking = false;
   if (isBossFloor(floorNo)) { bossFloor(); return; }
+  if (floorNo === 0) { courtyardFloor(); return; }
 
   // スタート地点を決めてから、階段を選ぶ。階段を置ける部屋がない地形は作り直す
   let rooms, start, plan;
@@ -1853,10 +2019,10 @@ function newFloor() {
   const s = plan ? plan.cell : freeCellIn(rooms[rooms.length - 1]);   // 念のための逃げ道（作り直しても置けないとき）
   map[s.y][s.x] = STAIRS;
 
-  const count = floorNo <= EARLY_FLOORS ? rndRange(...EARLY_ENEMY_COUNT) : enemyCountFor(floorNo);
+  const band = floorBand(), count = bandCount(band);
   for (let i = 0; i < count; i++) {
     const p = freeCellIn(rooms[1 + rnd(rooms.length - 1)]);
-    if (p) enemies.push(makeEnemy(pickEnemyType(), p.x, p.y));
+    if (p) { const t = pickEnemyType(band); enemies.push(makeEnemy(t, p.x, p.y, pickAnimal(t, band))); }
   }
   const itemCount = rndRange(MAP_ITEM_MIN, MAP_ITEM_MAX);
   for (let i = 0; i < itemCount; i++) {
@@ -1873,6 +2039,51 @@ function newFloor() {
   }
   ensurePathLoot(rooms, start, s);
   placeRare(s);
+  updateFov();
+}
+
+// ---- 前庭（内部の階 0）：大きな開けた部屋に、岩（壁のマス）を点々と。スタートの反対側の端に階段 ----
+// 階段の置き場所の規則は当てはめない。パーツ（床の1個）とレア個体は置かない。熱気は効かない
+const COURTYARD = { room: { x: 1, y: 2, w: 34, h: 24 }, rocks: [90, 110], startX: 2, stairsX: 33, enemyMinDist: 6 };
+const COURTYARD_ITEMS = { repair: 2, cell: 2 };
+const RADIATOR_ID = "a1";
+function courtyardFloor() {
+  const C = COURTYARD, R = C.room;
+  let start, stairs;
+  for (let t = 0; ; t++) {
+    blankMap();
+    fillRect(R.x, R.y, R.w, R.h, FLOOR);
+    start = { x: C.startX, y: R.y + rndRange(4, R.h - 5) };
+    stairs = { x: C.stairsX, y: R.y + rndRange(2, R.h - 3) };
+    // 岩：1マスか、2マスのかたまり。スタートと階段のまわりには置かない
+    const n = rndRange(C.rocks[0], C.rocks[1]);
+    for (let i = 0; i < n; i++) {
+      const x = rndRange(R.x + 1, R.x + R.w - 2), y = rndRange(R.y + 1, R.y + R.h - 2);
+      const cells = Math.random() < 0.4 ? [[x, y], Math.random() < 0.5 ? [x + 1, y] : [x, y + 1]] : [[x, y]];
+      for (const [cx, cy] of cells) {
+        if (cx >= R.x + R.w - 1 || cy >= R.y + R.h - 1) continue;
+        if (Math.abs(cx - start.x) + Math.abs(cy - start.y) <= 2 || Math.abs(cx - stairs.x) + Math.abs(cy - stairs.y) <= 2) continue;
+        map[cy][cx] = WALL;
+      }
+    }
+    // 床が全部つながっているか（つながっていなければ作り直す）
+    const d = walkDist([[start.x, start.y]]);
+    let floors = 0, reach = 0;
+    for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) if (map[y][x] !== WALL) { floors++; if (d[y][x] !== Infinity) reach++; }
+    if (reach === floors || t >= 20) break;
+  }
+  pos = { ...start };
+  floorRooms = [R];
+  map[stairs.y][stairs.x] = STAIRS;
+  const band = floorBand(), count = bandCount(band);
+  const far = () => { for (let i = 0; i < 80; i++) { const p = freeCellIn(R); if (p && Math.abs(p.x - start.x) + Math.abs(p.y - start.y) >= C.enemyMinDist) return p; } return null; };
+  for (let i = 0; i < count; i++) {
+    const p = far();
+    if (p) { const t = pickEnemyType(band); enemies.push(makeEnemy(t, p.x, p.y, pickAnimal(t, band))); }
+  }
+  const put = (key, part) => { const p = freeCellIn(R); if (p) groundItems.push(part ? { x: p.x, y: p.y, key, part } : { x: p.x, y: p.y, key }); };
+  if (!ownsPart(RADIATOR_ID)) put("part", RADIATOR_ID);   // 持っていなければ、放熱ユニットを1個
+  for (const [k, n] of Object.entries(COURTYARD_ITEMS)) for (let i = 0; i < n; i++) put(k);
   updateFov();
 }
 
@@ -1984,7 +2195,7 @@ const BOSS_LAYOUT = {
   boss: { x: 22, y: 12 },                 // ボス（2×2）
   stairs: { x: 25, y: 13 },               // ボスの真後ろ。(24,13) はボスの横からしか入れない
   start: { x: 3, y: 13 },
-  heal: { x: 5, y: 13 },
+  mech: { x: 5, y: 10 },                  // 整備員（準備部屋の上の壁の脇。通路への道をふさがない）
   items: [[3, 11], [7, 11], [3, 15], [7, 15]],
 };
 function bossFloor() {
@@ -1996,9 +2207,9 @@ function bossFloor() {
   fillRect(L.room.x, L.room.y, L.room.w, L.room.h, BOSSFLOOR);
   map[L.stairs.y][L.stairs.x - 1] = BOSSFLOOR;
   map[L.stairs.y][L.stairs.x] = STAIRS;
-  map[L.heal.y][L.heal.x] = HEAL;
+  npcs.push({ x: L.mech.x, y: L.mech.y, kind: "mech" });
   pos = { ...L.start };
-  if (!progress.bossDefeated[floorNo]) enemies.push(makeBoss(BOSSES[floorNo], L.boss.x, L.boss.y));
+  if (!bossDone(floorNo)) enemies.push(makeBoss(dungeon.bosses[floorNo], L.boss.x, L.boss.y));
   const keys = [];
   for (const [k, n] of Object.entries(BOSS_PREP_ITEMS)) for (let i = 0; i < n; i++) keys.push(k);
   keys.forEach((k, i) => { const [x, y] = L.items[i % L.items.length]; groundItems.push({ x, y, key: k }); });
@@ -2099,13 +2310,13 @@ function playerMove(dir) {
       return;
     }
     if (map[ny][nx] === WALL) return;
+    if (npcAt(nx, ny)) { talkMech(); renderMap(); return; }   // 整備員：体当たりで話しかける（通れない）
     const wasBossRoom = map[pos.y][pos.x] === BOSSFLOOR;
     pos.x = nx; pos.y = ny;
     pickUpGround();
     const t = map[ny][nx];
     if (t === STAIRS) { descend(); return; }
-    if (t === HEAL) healAll();
-    if (t === GATE && dx > 0) mapLog("この先はボス部屋。準備はいいか？", "", "gate");
+        if (t === GATE && dx > 0) mapLog("この先はボス部屋。準備はいいか？", "", "gate");
     if (t === BOSSFLOOR && !wasBossRoom && enemies.some(e => e.boss)) {
       mapLog(`強敵の気配がする…「${enemies.find(e => e.boss).name}」がいる！`, "", "boss-room");
     }
@@ -2117,7 +2328,66 @@ function playerMove(dir) {
 
 function healAll() {
   for (const u of team) { u.hp = u.maxHp; u.en = u.maxEn; }
-  mapLog("回復ポイント：全員のHPとENが全回復した。", "", "heal");
+}
+// ---- 準備部屋の整備員（体当たりで話しかける） ----
+let npcs = [];   // マップの人（通れない）。{x, y, kind}
+const npcAt = (x, y) => npcs.find(n => n.x === x && n.y === y);
+function talkMech() {
+  showDialog("整備員", "整備するかい？", [
+    { label: "整備する", primary: true, act: () => { healAll(); mapLog("整備完了。いってらっしゃい", "", "mech"); renderMap(); } },
+    { label: "仲間を入れ替える", act: openMechParty },
+    { label: "やめる", act: () => {} }]);
+}
+// 村の「仲間」タブと同じ画面（解体はできない。主人公機は外せない）
+let mechParty = false;
+function openMechParty() {
+  if (mode !== "map") return;
+  openMenu();
+  mechParty = true;
+  menuState = { unit: 0, pending: null, tab: "party" };
+  renderMenu();
+}
+const canSwapParty = () => menuFrom === "village" || (menuFrom === "map" && mechParty);
+
+// ---- 能力と仕掛け（熱気） ----
+// 能力を持つか：動物の能力、または付けている能力パーツ（放熱ユニット）
+const unitHasAbility = (u, ab) => (u.abilities || []).includes(ab) || slotItems(u).some(it => it && partOf(it).ability === ab);
+const teamHasAbility = ab => team.some(u => unitHasAbility(u, ab));   // HP0の機体も含む
+// 機体が持つ能力の一覧（動物の能力 → 付けている能力パーツの能力。重なりなし）
+const unitAbilities = u => [...new Set([...(u.abilities || []), ...slotItems(u).filter(isAbilityItem).map(it => partOf(it).ability)])];
+// 名前の横の小さなタグ（「耐熱」など）。能力がなければ何も足さない
+function appendAbilityTags(node, u) { for (const ab of unitAbilities(u)) node.append(el("span", "abTag", ABILITIES[ab].name)); return node; }
+const gimmickOf = (d = dungeon) => d && d.gimmick ? GIMMICKS[d.gimmick] : null;
+const isCaveNormalFloor = (f = floorNo) => f >= 1 && !isBossFloor(f);
+// 熱気が効いているか（仕掛けのあるダンジョンの、洞窟の通常階で、チームに耐熱がいない）
+function heatActive(f = floorNo) {
+  const g = gimmickOf();
+  return !!g && isCaveNormalFloor(f) && !teamHasAbility(g.ability);
+}
+let heatHintShown = false;   // 「耐熱の力があれば、防げる」は出発ごとに初回だけ
+// バトルのあと（ひとうちも）：HP1以上の全員が少し消耗する（HPは1未満にならない）
+function applyHeatAfterFight() {
+  if (!heatActive()) return;
+  let hit = false;
+  for (const u of team) {
+    if (u.hp < 1) continue;
+    const d = Math.max(1, Math.ceil(u.maxHp * HEAT_DAMAGE_RATE));
+    const nh = Math.max(1, u.hp - d);
+    if (nh < u.hp) hit = true;
+    u.hp = nh;
+  }
+  heatStats.total++;
+  mapLog("熱気で全員が消耗した…", "", "heat");
+  if (!heatHintShown) { heatHintShown = true; mapLog("耐熱の力があれば、防げる", "", "heat"); }
+  return hit;
+}
+const heatStats = { total: 0 };   // テスト・計測用（熱気で消耗した回数）
+// 洞窟に入る前の確認（前庭→B1F、または洞窟の階へ直接出発）。耐熱があれば確認は出さない
+function confirmGimmick(floor, go, cancel) {
+  const g = gimmickOf();
+  if (!g || floor < 1 || teamHasAbility(g.ability)) { go(); return; }
+  showDialog(g.name, `この先は熱気がこもっている。${ABILITIES[g.ability].name}の力が必要だ。（今のチーム：${ABILITIES[g.ability].name}なし）`,
+    [{ label: "進む", primary: true, act: go }, { label: "やめる", act: cancel }]);
 }
 
 function pickUpGround() {
@@ -2134,17 +2404,26 @@ function pickUpGround() {
 
 function descend() {
   // 10階（最深部）の階段は村へ戻る道
-  if (floorNo >= FINAL_FLOOR) { goVillage(["遺跡の最深部から地上へ戻った。"]); return; }
+  if (floorNo >= dungeon.floors) { goVillage([dungeon.exitText]); return; }
+  // 前庭→B1F：洞窟に入る前の確認（耐熱がなければ）
+  if (floorNo === 0) { confirmGimmick(1, goDown, () => renderMap()); return; }
+  goDown();
+}
+function goDown() {
+  const fromCourtyard = floorNo === 0;
   floorNo++;
-  progress.maxFloor = Math.max(progress.maxFloor, floorNo);
-  for (const u of team) u.en = Math.min(u.maxEn, u.en + STAIRS_ENERGY_BONUS);
-  if (DEBUG) for (const u of team) u.hp = u.maxHp;   // テスト用：階を降りるたびにHP全回復
+  recOf().reached = Math.max(recOf().reached, floorNo);
+  const bonus = heatActive() ? HEAT_STAIR_EN : STAIRS_ENERGY_BONUS;
+  for (const u of team) u.en = Math.min(u.maxEn, u.en + bonus);
+  if (DEBUG_HP) for (const u of team) u.hp = u.maxHp;   // テスト用：階を降りるたびにHP全回復
   newFloor();
   if (isBossFloor(floorNo)) {
-    mapLog(`${curFloorLabel()}。空気が変わった…（全員EN+${STAIRS_ENERGY_BONUS}）`, "", "stairs");
-    mapLog("準備部屋だ。回復ポイントで全回復できる。", "", "stairs");
+    mapLog(`${curFloorLabel()}。空気が変わった…（全員EN+${bonus}）`, "", "stairs");
+    mapLog("準備部屋だ。整備員に話しかけると整備できる。", "", "stairs");
+  } else if (fromCourtyard) {
+    mapLog(`${dungeon.caveEnterText || "洞窟に入った。"}（${curFloorLabel()}）`, "", "stairs");
   } else {
-    mapLog(`${curFloorLabel()}に${DUNGEON_DIRECTIONS[dungeon.direction].verb}。（全員EN+${STAIRS_ENERGY_BONUS}）`, "", "stairs");
+    mapLog(`${curFloorLabel()}に${DUNGEON_DIRECTIONS[dungeon.direction].verb}。（全員EN+${bonus}）`, "", "stairs");
   }
   renderMap();
 }
@@ -2174,7 +2453,7 @@ function enemiesAct() {
   }
 }
 function canEnemyMove(x, y) {
-  if (map[y][x] !== FLOOR) return false;
+  if (map[y][x] !== FLOOR || npcAt(x, y)) return false;
   if (pos.x === x && pos.y === y) return false;
   return !enemyAt(x, y);
 }
@@ -2385,6 +2664,7 @@ function paintRareEl(c) {
 
 // バトル終了後の後片付け（勝ち・逃げ共通）
 function afterBattle() {
+  applyHeatAfterFight();
   for (const u of team) {
     u.bs = freshBattleState();
     if (u.hp <= 0) { u.hp = Math.max(1, Math.floor(u.maxHp * REVIVE_HP_RATE)); mapLog(`${u.name}が再起動した。（HP${u.hp}）`, "", "revive"); }
@@ -2453,7 +2733,7 @@ const lerpMul = (a, b, lv) => Math.floor(lerp(a, b, lv) * 100 + 1e-9) / 100;
 // その機体が使えるわざ（一覧の順：たいあたり、防御、固有技、自由枠1、自由枠2）
 function moveKeys(u) {
   const keys = ["tackle", "guard", "unique"];
-  slotItems(u).forEach((it, i) => { if (it) keys.push("part" + i); });
+  slotItems(u).forEach((it, i) => { if (it && !isAbilityItem(it)) keys.push("part" + i); });   // 能力パーツは、わざにならない
   return keys;
 }
 function moveDef(u, key) {
@@ -2504,6 +2784,17 @@ function moveInfo(u, key) {
       desc: `${PART_TYPE_LABEL[p.type]}（${RARITY[p.rarity].name}）。${p.type === "gun" ? "外れにくい堅実な武器。" : p.type === "missile" ? "当たれば大きい一発逆転の武器。" : "強いがENを多く使う武器。"}${u.bs.barrage ? `集中砲火で威力×${u.bs.barrage}、EN半分。` : ""}` });
   } else {
     info.en = d.en;
+    if (d.formula === "tackle") {
+      // 砂漠の動物の攻撃の固有技：たいあたり（レベル倍率込み）× 倍率を hits 回に分ける
+      const m = lerpMul(d.lv1, d.lv10, lv), hits = d.hits || 1;
+      const tl = Math.max(1, Math.round(tk * levelMult(u)));
+      let pw = Math.max(1, Math.round(tl * m / hits));
+      if (vsBoss && d.bossBonus) pw = Math.max(1, Math.round(pw * d.bossBonus));
+      const parts = [hits > 1 ? `${hits}回攻撃。1回ごとに命中判定（合計はたいあたりの×${m}）` : `たいあたりの×${m}`];
+      if (d.accMod) parts.push(`命中${d.accMod > 0 ? "+" : ""}${d.accMod}%`);
+      if (d.stun) parts.push(`当たると敵は次のターン動けない（ボスには効かず、代わりにダメージ+${Math.round((d.bossBonus - 1) * 100)}%）`);
+      Object.assign(info, { damaging: true, hits, power: pw, levelDone: true, acc: hitChance(u, TACKLE_ACC, { mod: d.accMod || 0 }), desc: parts.join("、") + "。" });
+    }
     switch (d.id) {
       case "crit": { const v = lerpInt(d.lv1, d.lv10, lv); info.value = v; info.short = `会心+${v}%`; info.desc = `次の攻撃の会心率が+${v}%（1回限り）。`; break; }
       case "barrage": { const m = lerpMul(d.lv1, d.lv10, lv); info.value = m; info.short = `次の武器×${m}`; info.desc = `次のパーツのわざの消費ENが半分、威力×${m}（1回限り）。`; break; }
@@ -2516,6 +2807,8 @@ function moveInfo(u, key) {
         const tl = Math.max(1, Math.round(tk * levelMult(u)));   // たいあたりの威力（レベル倍率をかけたあと）
         Object.assign(info, { damaging: true, hits: d.hits, power: Math.max(1, Math.round(tl * m / d.hits)), levelDone: true, acc: hitChance(u, TACKLE_ACC, { mod: d.accMod }),
           desc: `${d.hits}回攻撃。1回ごとに命中判定（合計はたいあたりの×${m}、命中+${d.accMod}%）。` }); break; }
+      case "keenEar": { const v = lerpInt(d.lv1, d.lv10, lv); info.value = v; info.short = `全員の被ダメ−${v}%`; info.desc = `味方全員が、次に受ける攻撃のダメージ−${v}%（各機体1回。受けるまで有効）。`; break; }
+      case "brace": { const v = lerpInt(d.lv1, d.lv10, lv); info.value = v; info.short = `被ダメ−${v}%×${d.count}`; info.desc = `自分が次に受ける${d.count}回の攻撃のダメージ−${v}%。`; break; }
       case "dive": { const m = lerpMul(d.lv1, d.lv10, lv); const pw = Math.max(1, Math.floor(tk * m));
         Object.assign(info, { damaging: true, power: pw, sure: true, acc: 100, desc: `たいあたりの×${m}。必ず当たる。` }); break; }
       case "bite": { const m = lerpMul(d.lv1, d.lv10, lv); let pw = Math.max(1, Math.floor(tk * m)); if (vsBoss) pw = Math.floor(pw * d.bossBonus);
@@ -2590,6 +2883,8 @@ function executeMove(u, key) {
       case "cover": u.bs.cover = info.value; log(`${u.name}は仲間をかばう構え。`, "", null, "unique"); break;
       case "roar": battle.roarTurns = d.turns; battle.roarRate = info.value; log(`${u.name}のほえる！ ${battle.enemy.name}の攻撃力が${d.turns}ターン−${info.value}%。`, "", null, "unique"); break;
       case "hawkeye": for (const a of alive()) a.bs.accUp = info.value; log(`${u.name}の鷹の目！ 味方全員の次の攻撃の命中+${info.value}%。`, "", null, "unique"); break;
+      case "keenEar": for (const a of alive()) a.bs.ear = info.value; log(`${u.name}の聞き耳！ 味方全員が次に受けるダメージ−${info.value}%。`, "", null, "unique"); break;
+      case "brace": u.bs.brace = info.value; u.bs.braceLeft = d.count; log(`${u.name}はふんばった。次の${d.count}回、受けるダメージ−${info.value}%。`, "", null, "unique"); break;
     }
   }
   levelUpSkill(u, key === "guard" ? "guard" : d.kind === "unique" ? "unique" : null);
@@ -2683,6 +2978,8 @@ function enemyStrike(e, target, power, acc, label, heavy = false) {
   if (u.bs.guard) { dmg *= u.bs.guard; u.bs.guard = 0; cut.push("防御"); }
   if (u.bs.curl) { dmg *= 1 - u.bs.curl / 100; u.bs.curl = 0; cut.push("まるまる"); }
   if (coverCut) { dmg *= 1 - coverCut / 100; cut.push("かくれがえし"); }
+  if (u.bs.ear) { dmg *= 1 - u.bs.ear / 100; u.bs.ear = 0; cut.push("聞き耳"); }
+  if (u.bs.braceLeft > 0) { dmg *= 1 - u.bs.brace / 100; u.bs.braceLeft--; cut.push("ふんばり"); }
   dmg = Math.max(1, Math.round(dmg));
   u.hp = Math.max(0, u.hp - dmg);
   log(`${label}！ ${u.name}に${dmg}ダメージ${cut.length ? `（${cut.join("・")}）` : ""}。`, "", null, "enemy");
@@ -2693,7 +2990,7 @@ function enemyStrike(e, target, power, acc, label, heavy = false) {
 
 // ほえるで下がった攻撃力
 function enemyPower(e, mult = 1) {
-  let p = e.atk * mult;
+  let p = e.atk * mult * (e.enraged ? e.def.enrageBelowHalf : 1);   // 威嚇（コブラ王）のあとは攻撃力の倍率
   if (battle.roarTurns > 0) p = p * (1 - battle.roarRate / 100);
   return Math.max(1, Math.round(p));
 }
@@ -2716,6 +3013,14 @@ async function enemyPhase() {
     return;
   }
   battle.bossTurn++;
+  // HPが半分以下になったら、1回だけ威嚇する（以降、攻撃力が上がる）
+  if (e.def.enrageBelowHalf && !e.enraged && e.hp <= e.maxHp / 2) {
+    e.enraged = true;
+    log(`${e.name}は${e.def.enrageText}`, "", null, "enemy");
+    popNumber("威嚇", tc("chargeBg"), "center");
+    renderBattle();
+    await pause();
+  }
   if (battle.heavyReady) {
     battle.heavyReady = false;
     const t = randomAlive();
@@ -2749,7 +3054,8 @@ async function enemyPhase() {
 
 // 落とすパーツを決める（系統とレア度）。通常の敵は救済つき：続けて DROP_PITY_AFTER 体落とさなかったら、次は必ず落とす
 function floorRarityPart(type) {
-  const band = DROP_RARITY.find(b => floorNo <= b.maxFloor) || DROP_RARITY[DROP_RARITY.length - 1];
+  const bands = dungeon.dropBands, ef = effFloor();
+  const band = bands.find(b => ef <= b.maxFloor) || bands[bands.length - 1];
   const rarity = pickWeighted(band.rates);
   return PARTS.find(p => p.type === type && p.rarity === rarity).id;
 }
@@ -2764,7 +3070,7 @@ function rollRareDrop(e) {
   return PARTS.find(p => p.type === e.def.drop && p.rarity === rarity).id;
 }
 function rollBossDrop(f) {
-  const rarity = pickWeighted(BOSS_DROP_RARITY[f]);
+  const rarity = pickWeighted(dungeon.bosses[f].drop);
   const types = Object.keys(PART_TYPE_LABEL);
   const type = types[rnd(types.length)];
   return PARTS.find(p => p.type === type && p.rarity === rarity).id;
@@ -2785,15 +3091,11 @@ function winBattle() {
   if ($("minions")) $("minions").hidden = true;   // 手下は親分と同時に消える
 
   if (e.boss) {
-    progress.bossDefeated[floorNo] = true;
-    if (floorNo >= FINAL_FLOOR) {   // ダンジョンのクリア：回数を数える（周回のたびに増える）
-      progress.cleared = true;
-      progress.clears = progress.clears || {};
-      progress.clears[dungeon.key] = (progress.clears[dungeon.key] || 0) + 1;
-    }
+    recOf()["boss" + floorNo] = true;
+    if (floorNo >= dungeon.floors) recOf().clears++;   // ダンジョンのクリア：回数を数える（周回のたびに増える）
     saveGame();   // ボスを倒したら自動保存
   }
-  if (e.boss && floorNo >= FINAL_FLOOR) {
+  if (e.boss && floorNo >= dungeon.floors) {
     const loot = rollBossDrop(floorNo);
     lastBattle.loot = loot;
     renderBattle();
@@ -2850,6 +3152,7 @@ function oneHit(e) {
   fs.oneHit++;
   mapLog(`ひとうちで倒した！（経験値 +${e.exp}）`, "", "onehit");
   normalSpoils(e, (t, c) => mapLog(t, c, "onehit-drop"));
+  applyHeatAfterFight();
   processLevelUps();
 }
 
@@ -2862,16 +3165,32 @@ const RECRUIT_MAX_RARITY = 2;
 function makeRecruit(e) {
   let id = floorRarityPart(e.def.drop);
   if (partById(id).rarity > RECRUIT_MAX_RARITY) id = PARTS.find(p => p.type === e.def.drop && p.rarity === RECRUIT_MAX_RARITY).id;
-  return createAlly(e.def, e.sprite, { lv: leader().lv, part: id });
+  return createAlly(e.def, e.sprite, { lv: leader().lv, part: id, animal: e.animal });
 }
 function rollRecruit(e) {
   if (e.boss || e.rare || !e.def.recruit) return null;
+  // ギミックの仲間の入手保証：確率 GIMMICK_JOIN_CHANCE、続けて GIMMICK_PITY 回仲間にならなければ、次は必ず
+  if (gimmickJoinCase(e)) {
+    const r = recOf();
+    if (r.pity < GIMMICK_PITY && Math.random() >= GIMMICK_JOIN_CHANCE) { r.pity++; return null; }
+    const u = makeRecruit(e);
+    u.gimmickJoin = true;
+    return u;
+  }
   if (Math.random() >= e.def.recruit) return null;
   chooseAnimal(e);
   return makeRecruit(e);
 }
+// 条件：仕掛けのあるダンジョンで、倒した敵がその能力を持つ動物、チームとストックにその能力の動物が1体もいない（パーツは数えない）
+function gimmickJoinCase(e) {
+  const g = gimmickOf();
+  if (!g || !e.animal) return false;
+  const has = id => ((ANIMAL_DEFS[id] || {}).abilities || []).includes(g.ability);
+  return has(e.animal) && !allUnits().some(u => (u.abilities || []).includes(g.ability));
+}
 // 仲間にする（チームに空きがなければストックへ。ストックの空きは呼ぶ側で確かめる）
 function joinUnit(u, out = (t, c) => log(t, c, null, "recruit"), showPart = false) {
+  if (u.gimmickJoin) { recOf().pity = 0; delete u.gimmickJoin; }   // 保証の数えを0に戻す
   u.name = uniqueName(u.name);
   u.hp = u.maxHp; u.en = u.maxEn; u.bs = freshBattleState();
   const tail = showPart && u.fixed ? `（パーツ『${itemText(u.fixed)}』）` : "";
@@ -2887,7 +3206,7 @@ const hasRoom = () => team.length < TEAM_MAX || stock.length < STOCK_MAX;
 let recruitState = null, recruitQueue = [];
 function offerRecruit(cand, out, then = () => {}) {
   const m = settings.recruitConfirm;
-  if (m === "never") { then(); return; }
+  if (m === "never" && !cand.gimmickJoin) { then(); return; }   // 保証の仲間は「いつもあきらめる」でも画面を出す
   if (m === "always" && hasRoom()) { then(); joinUnit(cand, out, true); return; }
   if (recruitState) { recruitQueue.push({ cand, out, then }); return; }
   recruitState = { cand, out, then, view: hasRoom() ? "offer" : "full", pick: null };
@@ -2902,7 +3221,7 @@ function recruitDecide(yes) {
   closeRecruit();
   st.then();
   if (yes) joinUnit(st.cand, st.out, settings.recruitConfirm === "always");
-  else st.out(`${st.cand.name}は去っていった。`);
+  else { if (st.cand.gimmickJoin) recOf().pity++; st.out(`${st.cand.name}は去っていった。`); }   // 見送りも「仲間にならなかった」に数える
   afterRecruit();
 }
 function closeRecruit() {
@@ -2939,7 +3258,9 @@ function unitLine(u, opts = {}) {
   // 1行目：名前・レベル・HP・固有技、2行目：パーツ（仲間は🔒固定）
   const t = el("div", "rcuText");
   const l1 = el("div", "rcuL");
-  l1.append(el("b", "", u.name), ` Lv${u.lv}`);
+  l1.append(el("b", "", u.name));
+  appendAbilityTags(l1, u);
+  l1.append(` Lv${u.lv}`);
   if (opts.hp !== false) l1.append(`　HP${u.maxHp}`);
   if (opts.unique) l1.append(`　${MOVES[u.unique].name}`);
   if (u.isLeader) l1.append(el("span", "junk", "　主人公機"));
@@ -2974,10 +3295,13 @@ function renderRecruit() {
     return;
   }
   body.append(el("h2", "", "仲間になりたそうにしている！"));
+  // 仕掛けに必要な能力を持つ動物は、目立つ表示
+  const gm = gimmickOf();
+  if (gm && unitAbilities(u).includes(gm.ability)) { const hi = el("div", "rcGimmick", `${gm.name}に対応できる仲間（能力：${ABILITIES[gm.ability].name}）`); hi.id = "rcGimmick"; body.append(hi); }
   const top = el("div", "rcTop");
   top.append(spriteEl(u.sprite, 3, flipFor(u.sprite, "ally")));
   const nm = el("div");
-  nm.append(el("div", "rcName", u.name), el("div", "", `Lv${u.lv}`));
+  nm.append(appendAbilityTags(el("div", "rcName", u.name), u), el("div", "", `Lv${u.lv}`));
   const g = el("div", "rcStats");
   const stat = (k, v) => { const d = el("div", "", k + " "); d.append(el("b", "", v)); g.append(d); };
   stat("HP", String(u.maxHp)); stat("EN", String(u.maxEn)); stat("たいあたり", String(Math.max(1, Math.round(tackleOf(u) * levelMult(u)))));
@@ -3081,6 +3405,8 @@ function autoChoose(u) {
     if (id === "curl" && !u.bs.curl && u.hp <= u.maxHp * 0.5) return "unique";
     if (id === "cover" && !u.bs.cover && a.some(x => x !== u && x.hp <= x.maxHp * 0.4)) return "unique";
     if (id === "roar" && battle.roarTurns === 0 && (e.boss || e.hp > tackleMin)) return "unique";
+    if (id === "keenEar" && battle.round === 1 && a.some(x => !x.bs.ear)) return "unique";   // 戦闘の最初のターン
+    if (id === "brace" && e.boss && battle.heavyReady && !u.bs.braceLeft) return "unique";    // ボスの溜めの直後
     if (id === "hawkeye" && a.length > 1 && (battle.round === 1 && !u.hawkRound || u.hawkRound != null && battle.round - u.hawkRound >= 3)) { u.hawkRound = battle.round; return "unique"; }
   }
   // 5. 使える攻撃のわざ（パーツ、攻撃系の固有技）で、期待ダメージが一番高いもの
@@ -3295,6 +3621,8 @@ const STATUS_DEFS = [
   { on: u => u.bs.critUp,    cls: "t-atk", tag: u => `会+${u.bs.critUp}`, text: u => `次の攻撃の会心+${u.bs.critUp}%` },
   { on: u => u.bs.barrage,   cls: "t-atk", tag: u => `砲×${u.bs.barrage}`, text: u => `集中砲火（次のパーツ×${u.bs.barrage}、EN半分）` },
   { on: u => u.bs.accUp,     cls: "t-acc", tag: u => `命+${u.bs.accUp}`, text: u => `鷹の目（次の攻撃の命中+${u.bs.accUp}%）` },
+  { on: u => u.bs.ear,       cls: "t-def", tag: u => `耳${u.bs.ear}`, text: u => `聞き耳（次の被ダメージ−${u.bs.ear}%）` },
+  { on: u => u.bs.braceLeft, cls: "t-def", tag: u => `踏${u.bs.braceLeft}`, text: u => `ふんばり（あと${u.bs.braceLeft}回、被ダメージ−${u.bs.brace}%）` },
   { on: u => u.bs.missStreak, cls: "t-acc", tag: u => `命+${missBonus(u)}`, text: u => `外した分、次の命中+${missBonus(u)}%` },
 ];
 const missBonus = u => Math.min(MISS_STREAK_CAP, u.bs.missStreak * MISS_STREAK_BONUS);
@@ -3413,6 +3741,7 @@ function openMenu() {
 function closeMenu() {
   if (mode !== "menu") return;
   $("menu").hidden = true;
+  mechParty = false;
   mode = menuFrom;
   if (mode === "village") renderVillage(); else renderMap();
 }
@@ -3428,9 +3757,10 @@ function partInfo(item, extra) {
   const name = el("div");
   const nm = el("span", "pname", itemText(item));
   nm.style.color = RARITY[p.rarity].color;
-  name.append(el("span", "tag " + p.type, PART_TYPE_LABEL[p.type]), nm);
+  name.append(el("span", "tag " + p.type, PART_KIND_LABEL[p.type]), nm);
   if (extra) name.append(el("span", "eq", extra));
-  info.append(name, el("small", "", `威力${Math.round(itemPower(item))}　命中${p.acc}%　EN${p.en}　期待${itemExpected(item).toFixed(1)}`));
+  info.append(name, el("small", "", p.ability ? `能力：${ABILITIES[p.ability].name}（わざなし。手動でだけ装備できる）`
+    : `威力${Math.round(itemPower(item))}　命中${p.acc}%　EN${p.en}　期待${itemExpected(item).toFixed(1)}`));
   return info;
 }
 // 機体の名前・HPバー・ENバー（メニューと「その他」の固定ヘッダー）。preview={kind:"hp"|"en", from, to} で変化を見せる
@@ -3459,17 +3789,17 @@ function rowButton(label, fn, disabled, cls) {
 function renderMenu() {
   const ms = menuState;
   const inVillage = menuFrom === "village";
-  if (ms.tab === "party" && !inVillage) ms.tab = null;
+  if (ms.tab === "party" && !canSwapParty()) ms.tab = null;
   if (ms.unit >= team.length) ms.unit = 0;
   const u = team[ms.unit];
 
   const tabs = $("menuTabs");
   tabs.textContent = "";
   team.forEach((t, i) => {
-    tabs.append(rowButton(`${t.name} Lv${t.lv}`, () => { menuState = { unit: i, pending: null }; renderMenu(); }, false, i === ms.unit && ms.tab !== "party" ? "on" : ""));
+    tabs.append(appendAbilityTags(rowButton(`${t.name} Lv${t.lv}`, () => { menuState = { unit: i, pending: null }; renderMenu(); }, false, i === ms.unit && ms.tab !== "party" ? "on" : ""), t));
   });
   // 「仲間」タブ（チームとストックの入れ替え、解体）は村のメニューだけ
-  if (inVillage) {
+  if (canSwapParty()) {
     const pt = rowButton(`仲間（ストック${stock.length}）`, () => { menuState = { unit: 0, pending: null, tab: "party" }; renderMenu(); }, false, ms.tab === "party" ? "on" : "");
     pt.id = "tab-party";
     tabs.append(pt);
@@ -3497,7 +3827,7 @@ function renderMenu() {
   }
   bulkBox.append(bulk);
   if (inVillage) body.append(el("div", "mnote", "村では自動で全回復します"));
-  else if (inPrepRoom()) body.append(el("div", "mnote", "回復ポイントで無料で全回復できます"));
+  else if (inPrepRoom()) body.append(el("div", "mnote", "整備員に話しかけると、無料で全回復できます"));
   if (ms.note) body.append(el("div", "mnote", ms.note));
   if (ms.result) { const r = el("div", "mresult"); for (const line of ms.result) r.append(el("div", "", line)); body.append(r); }
 
@@ -3512,6 +3842,7 @@ function renderMenu() {
   stat("EN", `${u.en}/${u.maxEn}`);
   stat("たいあたり", `威力${tackleOf(u)}`);
   stat("特性", traitTextOf(u));
+  if (unitAbilities(u).length) stat("能力", unitAbilities(u).map(ab => ABILITIES[ab].name).join("・"));
   head.append(g);
   body.append(head);
 
@@ -3644,7 +3975,8 @@ function renderParty() {
       { label: "やめる", act: () => {} }]);
   }, ms.swap ? false : !inStock, ms.swap ? "" : "danger");
   b3.id = "pt-dismantle";
-  bb.append(b1, b2, b3);
+  bb.append(b1, b2);
+  if (menuFrom === "village" || ms.swap) bb.append(b3);   // 整備員の画面では解体しない（「やめる」だけ出す）
   bar.append(bb);
   head.append(bar);
 
@@ -3663,7 +3995,8 @@ function renderParty() {
   if (!stock.length) sl.append(el("div", "mrow empty", "ストックは空です。チームが満員のときに仲間にした機体が、ここに入ります"));
   for (const x of stock) sl.append(unitLine(x, { pick: true, on: sel === x, unique: true, hp: false, onClick: () => { menuState.sel = x; menuState.swap = null; menuState.note = null; renderMenu(); } }));
   body.append(sl);
-  body.append(el("div", "mnote", "仲間のパーツは固定（🔒）です。ストックの機体には経験値が入りません。入れ替えはこの村でだけできます。"));
+  body.append(el("div", "mnote", menuFrom === "village" ? "仲間のパーツは固定（🔒）です。ストックの機体には経験値が入りません。入れ替えはこの村でだけできます。"
+    : "仲間のパーツは固定（🔒）です。ストックの機体には経験値が入りません。入れ替えは、村と、準備部屋の整備員でできます。"));
 }
 function partyPickTeam(x) {
   const ms = menuState;
@@ -3672,7 +4005,7 @@ function partyPickTeam(x) {
 }
 // ストックの機体をチームへ（空きがなければ、入れ替える相手を選ぶ）
 function partyToTeam(u) {
-  if (menuFrom !== "village" || !stock.includes(u)) return;
+  if (!canSwapParty() || !stock.includes(u)) return;
   if (team.length >= TEAM_MAX) { menuState.swap = u; menuState.note = null; renderMenu(); return; }
   stock = stock.filter(x => x !== u);
   u.hp = u.maxHp; u.en = u.maxEn; u.bs = freshBattleState();
@@ -3683,7 +4016,7 @@ function partyToTeam(u) {
   saveGame(); renderMenu(); renderVillage();
 }
 function partyToStock(u) {
-  if (menuFrom !== "village" || !u || u.isLeader || !team.includes(u) || stock.length >= STOCK_MAX) return;
+  if (!canSwapParty() || !u || u.isLeader || !team.includes(u) || stock.length >= STOCK_MAX) return;
   clearFreeSlots(u);
   team = team.filter(x => x !== u);
   u.hp = u.maxHp; u.en = u.maxEn;
@@ -3693,7 +4026,7 @@ function partyToStock(u) {
   saveGame(); renderMenu(); renderVillage();
 }
 function partySwap(inU, outU) {
-  if (menuFrom !== "village" || !stock.includes(inU) || !team.includes(outU) || outU.isLeader) return;
+  if (!canSwapParty() || !stock.includes(inU) || !team.includes(outU) || outU.isLeader) return;
   const i = team.indexOf(outU), j = stock.indexOf(inU);
   inU.hp = inU.maxHp; inU.en = inU.maxEn; inU.bs = freshBattleState();
   outU.hp = outU.maxHp; outU.en = outU.maxEn;
@@ -3843,9 +4176,9 @@ function renderMap() {
       else if (t === GATE) draw("t_gate", x, y);
       else draw("t_floor", x, y);
       if (t === STAIRS) draw("m_stairs", x, y);
-      if (t === HEAL) draw("m_heal", x, y);
     }
   }
+  for (const n of npcs) if (seen[n.y][n.x]) draw("m_" + n.kind, n.x, n.y);
   for (const it of groundItems) {
     if (!seen[it.y][it.x]) continue;
     draw(it.key === "part" ? "m_parts" : "m_" + ITEMS[it.key].icon, it.x, it.y);
@@ -3945,7 +4278,7 @@ const rareShown = e => visible[e.y][e.x] || rareGlintShown(e);
 // ================================================================
 //  ミニマップ：探索済みの範囲だけ。点滅する点（未探索の出口、レア個体）は上から重ねる
 // ================================================================
-const MINI_COLORS = { floor: "#cfcab0", wall: "#4b4a5c", player: "#4fe0ff", stairs: "#ffffff", heal: "#3fcf6e", item: "#ffd23a", enemy: "#e0443a", rare: "#ffd23a", frontier: "#ffffff" };
+const MINI_COLORS = { floor: "#cfcab0", wall: "#4b4a5c", player: "#4fe0ff", stairs: "#ffffff", npc: "#ffd23a", item: "#ffd23a", enemy: "#e0443a", rare: "#ffd23a", frontier: "#ffffff" };
 const miniBase = document.createElement("canvas");   // 点滅しない部分（マップが変わったときだけ描き直す）
 let miniBaseCell = 0, miniOpen = false;
 const isWide = () => window.innerWidth >= MINI_WIDE_MIN;
@@ -3965,9 +4298,10 @@ function paintMiniBase(c) {
   for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
     if (!seen[y][x]) continue;
     const t = map[y][x];
-    dot(x, y, t === WALL ? MINI_COLORS.wall : t === STAIRS ? MINI_COLORS.stairs : t === HEAL ? MINI_COLORS.heal : MINI_COLORS.floor);
+    dot(x, y, t === WALL ? MINI_COLORS.wall : t === STAIRS ? MINI_COLORS.stairs : MINI_COLORS.floor);
   }
   for (const it of groundItems) if (seen[it.y][it.x]) dot(it.x, it.y, MINI_COLORS.item);
+  for (const n of npcs) if (seen[n.y][n.x]) dot(n.x, n.y, MINI_COLORS.npc);
   for (const e of enemies) {
     if (e.rare || !visible[e.y][e.x]) continue;
     dot(e.x, e.y, MINI_COLORS.enemy, e.size);
@@ -4035,6 +4369,14 @@ function updateStatus() {
   const fl = $("floorLabel");
   fl.textContent = isBossFloor(floorNo) ? `${curFloorLabel()} ボスフロア` : curFloorLabel();
   fl.classList.toggle("bossfl", isBossFloor(floorNo));
+  // 仕掛けのタグ（洞窟の通常階だけ。前庭・ボス階には出さない）
+  const g = gimmickOf();
+  if (g && isCaveNormalFloor()) {
+    const on = heatActive();
+    const tag = el("span", "heatTag " + (on ? "ng" : "ok"), `${g.name}：${on ? "あり" : "無効"}`);
+    tag.id = "heatTag";
+    fl.append(tag);
+  }
   const rows = $("teamRows");
   rows.textContent = "";
   for (const u of team) {
@@ -4100,12 +4442,24 @@ function startGame(key) {
   team = [];
   inv = { parts: [], items: { ...STARTING_ITEMS }, junk: 0 };
   stock = [];
-  progress = { maxFloor: 0, bossDefeated: { 5: false, 10: false }, cleared: false, clears: {} };
+  progress = makeProgress();
+  dungeon = DUNGEONS[0];
   team.push(createUnit({ name: t.name, sprite: t.sprite, isLeader: true, kind: t.key,
     hp: t.hp, en: t.en, tackle: t.tackle, accBonus: t.traits.accBonus, evade: t.traits.evade, enGrowth: t.enGrowth, unique: t.unique }));
   gainPart(t.part, { noMerge: true });
   bestLevel = 1;
+  if (DESERT_PARAM) debugDesertStart();
   goVillage([`${t.label}「${t.name}」で冒険を始める。`]);
+}
+
+// テスト用：機械遺跡をクリアした状態にする
+function debugDesertStart() {
+  const D = DESERT_DEBUG_START, r = recOf(DUNGEONS[0].key), hero = leader();
+  Object.assign(r, { clears: 1, reached: DUNGEONS[0].floors, boss5: true, boss10: true });
+  hero.lv = D.lv; hero.exp = 0; hero.maxHp = maxHpOf(hero); hero.maxEn = maxEnOf(hero); hero.hp = hero.maxHp; hero.en = hero.maxEn;
+  bestLevel = D.lv;
+  for (const id of D.parts) gainPart(id, { noMerge: true });
+  autoEquipAll();
 }
 
 // 村に着く：全員全回復（HP0も復活）して自動保存
@@ -4132,9 +4486,14 @@ function renderVillage() {
     r.append(nm, bar, el("span", "num", `${u.hp}/${u.maxHp}`), el("span", "num", `EN${u.en}`));
     rows.append(r);
   }
-  const rec = [progress.maxFloor ? `到達 ${curFloorLabel(progress.maxFloor)}` : "まだ潜っていない"];
-  if (progress.bossDefeated[5]) rec.push(`${BOSSES[5].name}撃破`);
-  if (progress.cleared) rec.push("踏破済み");
+  const ruins = DUNGEONS[0], rr = recOf(ruins.key);
+  const rec = [rr.reached ? `到達 ${floorLabel(ruins, rr.reached)}` : "まだ潜っていない"];
+  if (rr.boss5) rec.push(`${ruins.bosses[5].name}撃破`);
+  if (rr.clears) rec.push("踏破済み");
+  for (const d of DUNGEONS.slice(1)) {   // ほかのダンジョン（潜ったことがあれば）
+    const r = recOf(d.key);
+    if (r.reached || r.clears) rec.push(`${d.name} 到達 ${floorLabel(d, r.reached)}${r.clears ? "（踏破済み）" : ""}`);
+  }
   $("villageInv").textContent = `パーツ ${inv.parts.length}個　修理キット ${inv.items.repair}　エネルギーセル ${inv.items.cell}　ストック ${stock.length}/${STOCK_MAX}体　／　${rec.join("・")}`;
   $("villageJunk").textContent = `ジャンク ×${inv.junk || 0}（使い道は今後追加）`;
   $("saveNote").hidden = !saveFailed;
@@ -4166,23 +4525,30 @@ function renderVillageScene() {
 // 出発する階を選ぶ
 function openDepart() {
   if (mode !== "village") return;
-  const btns = DEPARTURES.filter(d => d.ok(progress)).map(d => ({ label: d.label(curFloorLabel(d.floor)), primary: d.floor === 1, act: () => depart(d.floor) }));
+  const list = DEPARTURES.filter(d => d.ok(recOf(), dungeon));
+  const btns = list.map((d, i) => ({ label: d.label(curFloorLabel(d.floor)), primary: i === 0, act: () => departChecked(d.floor) }));
   btns.push({ label: "やめる", act: () => {} });
   showDialog("出発", "どこから潜る？", btns);
 }
 
 function depart(floor) {
   dropMiss = 0;
+  heatHintShown = false;
   hideAllScreens();
   $("mapScreen").hidden = false;
   mode = "map";
   floorNo = floor;
-  progress.maxFloor = Math.max(progress.maxFloor, floorNo);
+  recOf().reached = Math.max(recOf().reached, floorNo);
   decideDungeonEasy();   // 入ったときの目安で、ひとうちの条件を決める（いる間は変えない）
   for (const u of team) u.bs = freshBattleState();
   newFloor();
   log(isBossFloor(floorNo) ? `${curFloorLabel()} ボスフロアの準備部屋から出発した。` : `${curFloorLabel()}から出発した。階段を探せ。`, "", null, "depart");
   resize();
+}
+
+// 出発（洞窟の階から始めるとき、仕掛けの確認を出す）
+function departChecked(floor) {
+  confirmGimmick(floor, () => depart(floor), () => {});
 }
 
 // 全滅したときの処理はここだけ。GAME_MODE で切り替える
@@ -4215,9 +4581,9 @@ function gameClear(lootId) {
   $("battle").hidden = false;
   processLevelUps();
   bestLevel = Math.max(bestLevel, ...team.map(u => u.lv));
-  $("endTitle").textContent = "遺跡踏破！";
+  $("endTitle").textContent = dungeon.clearTitle;
   $("endTitle").style.color = tc("accent");
-  $("endText").textContent = `${curFloorLabel()}の${BOSSES[FINAL_FLOOR].name}を倒し、遺跡の最深部にたどり着いた！　到達階：${curFloorLabel(progress.maxFloor)}　最高機体レベル：Lv${bestLevel}`;
+  $("endText").textContent = `${curFloorLabel()}の${dungeon.bosses[dungeon.floors].name}を倒し、${dungeon.clearPlace}にたどり着いた！　到達階：${curFloorLabel(recOf().reached)}　最高機体レベル：Lv${bestLevel}`;
   const loot = $("endLoot");
   loot.textContent = "";
   if (lootId) {
@@ -4272,6 +4638,7 @@ function unitToSave(u, idx) {
     name: u.name, sprite: u.sprite, isLeader: u.isLeader, kind: u.kind,
     baseHp: u.baseHp, baseEn: u.baseEn, baseTackle: u.baseTackle, accBonus: u.accBonus, evade: u.evade,
     lv: u.lv, exp: u.exp, hp: u.hp, en: u.en, skills: { guard: u.skills.guard, unique: u.skills.unique }, unique: u.unique, manual: u.manual,
+    animal: u.animal || null,
   };
   // 版5：固定パーツ（仲間）はパーツそのもの、自由枠は持ち物の番号
   o.fixed = u.fixed ? { id: u.fixed.id, plus: u.fixed.plus || 0 } : null;
@@ -4313,12 +4680,15 @@ function readSave() {
   try {
     const d = JSON.parse(raw);
     const okNum = v => typeof v === "number" && isFinite(v);
-    if (!d || ![1, 2, 3, 4, 5, SAVE_VERSION].includes(d.version)) throw 0;   // 1〜5 は移行して読む
+    if (!d || ![1, 2, 3, 4, 5, 6, SAVE_VERSION].includes(d.version)) throw 0;   // 1〜6 は移行して読む
     if (d.version >= 3 && (!Array.isArray(d.plus) || d.plus.length !== d.parts.length || !d.plus.every(v => Number.isInteger(v) && v >= 0 && v <= PLUS_MAX))) throw 0;
     if (!START_TYPES.some(t => t.key === d.typeKey)) throw 0;
     if (!Array.isArray(d.parts) || !d.parts.every(id => partById(id))) throw 0;
     if (!d.items || !okNum(d.items.repair) || !okNum(d.items.cell)) throw 0;
-    if (!d.progress || !okNum(d.progress.maxFloor) || !d.progress.bossDefeated) throw 0;
+    if (d.version >= 7) {
+      if (!d.progress || !d.progress.dungeons || typeof d.progress.dungeons !== "object") throw 0;
+      for (const r of Object.values(d.progress.dungeons)) if (!r || !okNum(r.clears) || !okNum(r.reached) || !okNum(r.pity)) throw 0;
+    } else if (!d.progress || !okNum(d.progress.maxFloor) || !d.progress.bossDefeated) throw 0;
     if (!Array.isArray(d.team) || d.team.length < 1 || d.team.length > TEAM_MAX || !d.team[0].isLeader) throw 0;
     if (d.version >= 4) {
       if (!okNum(d.junk) || !Array.isArray(d.stock) || d.stock.length > STOCK_MAX) throw 0;
@@ -4328,6 +4698,7 @@ function readSave() {
     const okPart = q => q === null || !!(q && partById(q.id) && Number.isInteger(q.plus) && q.plus >= 0 && q.plus <= PLUS_MAX);
     const usedIdx = new Set();
     for (const u of d.team.concat(d.version >= 4 ? d.stock : [])) {
+      if (u.animal != null && !animalDef(u.animal)) throw 0;
       if (!SPR[u.sprite] || !okNum(u.lv) || !okNum(u.exp) || !okNum(u.baseHp) || !okNum(u.baseEn) || !okNum(u.baseTackle)) throw 0;
       if (d.version >= 5) {
         const n = u.isLeader ? HERO_FREE_SLOTS : ALLY_FREE_SLOTS;
@@ -4364,10 +4735,18 @@ function applySave(d) {
   }
   partUid = d.partUid || 0;
   resetLogs();
-  progress = { maxFloor: d.progress.maxFloor, bossDefeated: { 5: !!d.progress.bossDefeated[5], 10: !!d.progress.bossDefeated[10] }, cleared: !!d.progress.cleared, clears: {} };
-  // ダンジョンごとのクリア回数。版5までは、最深部のボスを倒した記録があれば機械遺跡を1回クリア
-  if (d.version >= 6 && d.progress.clears) { for (const [k, v] of Object.entries(d.progress.clears)) if (okNum(v) && v >= 0) progress.clears[k] = Math.floor(v); }
-  else progress.clears[DUNGEONS[0].key] = d.progress.bossDefeated[FINAL_FLOOR] ? 1 : 0;
+  // ダンジョンごとの記録。版6までは、機械遺跡の記録を今までの項目から作る（ほかのダンジョンはすべて 0 / false）
+  const int0 = v => okNum(v) && v >= 0 ? Math.floor(v) : 0;
+  if (d.version >= 7) {
+    const recs = {};
+    for (const [k, r] of Object.entries(d.progress.dungeons)) recs[k] = { clears: int0(r.clears), reached: int0(r.reached), boss5: !!r.boss5, boss10: !!r.boss10, pity: int0(r.pity) };
+    progress = makeProgress(recs);
+  } else {
+    const o = d.progress, ruinsKey = DUNGEONS[0].key;
+    const clears = d.version >= 6 && o.clears ? int0(o.clears[ruinsKey]) : (o.bossDefeated[FINAL_FLOOR] ? 1 : 0);
+    progress = makeProgress({ [ruinsKey]: { clears, reached: int0(o.maxFloor), boss5: !!o.bossDefeated[5], boss10: !!o.bossDefeated[10], pity: 0 } });
+  }
+  dungeon = DUNGEONS[0];
   const all = d.parts.map((id, i) => ({ id, uid: ++partUid, plus: d.version >= 3 ? d.plus[i] : 0 }));
   const moved = new Set();   // 古い仲間の固定パーツになったもの（持ち物から外す）
   inv = { parts: all, items: { repair: d.items.repair, cell: d.items.cell }, junk: d.version >= 4 ? Math.min(JUNK_MAX, Math.max(0, Math.floor(d.junk))) : 0 };
@@ -4380,7 +4759,7 @@ function applySave(d) {
       u.free = (d.version >= 5 ? s.free : s.equip).map(i => i === null ? null : all[i]);
     } else {
       const def = baseOfAlly(s);
-      u = createAlly(def, s.sprite, { name: s.name, lv: s.lv });
+      u = createAlly(def, s.sprite, { name: s.name, lv: s.lv, animal: s.animal || s.sprite });
       if (d.version >= 5) {
         u.fixed = s.fixed ? fixedPart(s.fixed.id, s.fixed.plus) : fixedPart(def.ally.part);
         u.free = s.free.map(i => i === null ? null : all[i]);
@@ -4411,6 +4790,29 @@ function applySave(d) {
   return migrated;
 }
 const okNum = v => typeof v === "number" && isFinite(v);
+
+// ---- 進み具合（ダンジョンごとの記録）。reached＝到達した最も深い階（前庭＝0）、boss5・boss10＝そのボスを倒した、pity＝仲間の入手保証の数え ----
+const freshDungeonRec = () => ({ clears: 0, reached: 0, boss5: false, boss10: false, pity: 0 });
+function makeProgress(recs = {}) {
+  const p = { dungeons: {} };
+  for (const d of DUNGEONS) p.dungeons[d.key] = { ...freshDungeonRec(), ...(recs[d.key] || {}) };
+  for (const [k, r] of Object.entries(recs)) if (!p.dungeons[k]) p.dungeons[k] = { ...freshDungeonRec(), ...r };
+  const ruins = () => p.dungeons[DUNGEONS[0].key];
+  // 1J までの項目名（機械遺跡の記録）でも読み書きできる（保存はしない）
+  Object.defineProperties(p, {
+    maxFloor: { get: () => ruins().reached, set: v => { ruins().reached = v; } },
+    bossDefeated: { get: () => { const r = ruins(); return Object.defineProperties({}, {
+      5: { get: () => r.boss5, set: v => { r.boss5 = !!v; }, enumerable: true },
+      10: { get: () => r.boss10, set: v => { r.boss10 = !!v; }, enumerable: true } }); },
+      set: o => { const r = ruins(); r.boss5 = !!(o && o[5]); r.boss10 = !!(o && o[10]); } },
+    cleared: { get: () => ruins().clears > 0, set: v => { if (v && !ruins().clears) ruins().clears = 1; } },
+    clears: { get: () => Object.fromEntries(Object.entries(p.dungeons).map(([k, r]) => [k, r.clears])),
+      set: o => { for (const r of Object.values(p.dungeons)) r.clears = 0; for (const [k, v] of Object.entries(o || {})) recOf(k).clears = v; } },
+  });
+  return p;
+}
+const recOf = (key = dungeon.key) => progress.dungeons[key] || (progress.dungeons[key] = freshDungeonRec());
+const bossDone = (f, key) => !!recOf(key)["boss" + f];
 
 // ================================================================
 //  最初の説明（あそびかた）。項目を足せば枚数が増える
@@ -4524,7 +4926,7 @@ function partyPower(units = team) {
   if (!units || !units.length) return 0;
   const L = units.reduce((n, u) => n + u.lv, 0) / units.length;
   // 機体ごとに、装備パーツ（固定パーツと自由枠）の期待ダメージの平均。パーツがない機体は 0
-  const per = units.map(u => { const its = slotItems(u).filter(Boolean); return its.length ? its.reduce((n, it) => n + itemExpected(it), 0) / its.length : 0; });
+  const per = units.map(u => { const its = slotItems(u).filter(it => it && !isAbilityItem(it)); return its.length ? its.reduce((n, it) => n + itemExpected(it), 0) / its.length : 0; });
   const A = per.reduce((n, v) => n + v, 0) / units.length;
   return round1(L / POWER_LEVEL_DIV + A / POWER_ATTACK_DIV);
 }
@@ -4535,7 +4937,7 @@ function placeVerdict(pl, power = partyPower()) {
   return verdictOf(round1(power - pl.base));
 }
 const placeStars = pl => Math.max(1, Math.min(WORLD_STAR_MAX, Math.round(pl.base / 2)));
-const clearsOf = key => (progress && progress.clears && progress.clears[key]) || 0;
+const clearsOf = key => (progress && progress.dungeons && progress.dungeons[key] && progress.dungeons[key].clears) || 0;
 function placeUnlocked(pl) {
   const u = pl.unlock || {};
   return !!u.always || (u.clears || []).every(k => clearsOf(k) > 0);
@@ -4710,6 +5112,7 @@ function renderWorldInfo(power) {
     row("入り口", pl.entry);
     const d = pl.dungeon && DUNGEONS.find(x => x.key === pl.dungeon);
     if (d && d.hasRare) box.append(el("div", "wiLurk", WORLD_LURK_TEXT));
+    if (d && d.heatNote) { const hn = el("div", "wiRow", d.heatNote); hn.id = "wiGimmick"; box.append(hn); }
     if (st === "soon") box.append(el("div", "wiRow", "この場所は、まだ準備中。"));
   }
   if (!pl.village) {
@@ -4809,15 +5212,17 @@ function renderGallery() {
   sec(`動物（${sc.enemy}倍）`, Object.entries(BATTLE).map(([k, d]) => card(d.n, spriteEl(k, sc.enemy, flipFor(k, view)), dirNote(k))));
   const rareCard = (k, d) => { const wrap = el("div"); wrap.style.padding = `${RARE_PAD * sc.enemy}px`; wrap.append(rareEl({ sprite: k }, sc.enemy, flipFor(k, view))); return card("金色の" + d.n, wrap, dirNote(k)); };
   sec("レア個体（金色）", Object.entries(BATTLE).map(([k, d]) => rareCard(k, d)));
+  // 砂漠の動物（仮の絵：spriteId の絵。名前は動物のもの）
+  sec("砂漠の動物（仮の絵）", Object.entries(ANIMAL_DEFS).map(([id, a]) => card(a.name + (a.abilities.length ? `（${a.abilities.map(x => ABILITIES[x].name).join("・")}）` : ""), spriteEl(a.spriteId, sc.enemy, flipFor(a.spriteId, view)), `spriteId:${a.spriteId}・${ENEMY_TYPES.find(t => t.key === a.size).label}`)));
   g.append(el("h2", "galSize", `${BOSS_SPRITE_W}×${BOSS_SPRITE_H}（ボス）`));
   sec("ボス（バトルでの表示と同じ倍率）", Object.entries(BOSS_SPRITES).map(([k, bs]) => {
-    const d = bs.def, chief = Object.values(BOSSES).find(b => b.sprite === k), owner = Object.values(BOSSES).find(b => b.minions && b.minions.sprite === k);
+    const d = bs.def, chief = DUNGEONS.flatMap(dg => Object.values(dg.bosses)).find(b => b.sprite === k), owner = Object.values(BOSSES).find(b => b.minions && b.minions.sprite === k);
     const s0 = bossScaleFor(d.w, d.h), s = owner ? Math.max(1, s0 - 1) : s0;
     const name = chief ? chief.name : owner ? `${d.n}（${owner.name}の手下）` : d.n;
     return card(name, spriteEl(k, s, flipFor(k, view)), `${d.w}×${d.h}・${s}倍・${dirNote(k)}`, true);
   }));
   g.append(el("h2", "galSize", `${MAP_N}×${MAP_N}（マップ用）`));
-  sec(`マップ用の絵（${GALLERY_MAP_SCALE}倍）`, [...Object.keys(MAPICON).map(k => card(k, spriteEl("m_" + k, GALLERY_MAP_SCALE, false))),
+  sec(`マップ用の絵（${GALLERY_MAP_SCALE}倍）`, [...Object.keys(MAPICON).map(k => card(k, spriteEl("m_" + k, GALLERY_MAP_SCALE, false))), card("mech（整備員）", spriteEl("m_mech", GALLERY_MAP_SCALE, false)),
     card("rare", spriteEl("m_rare", GALLERY_MAP_SCALE, false)), card("glint", spriteEl("m_glint", GALLERY_MAP_SCALE, false))]);
   g.append(el("h2", "galSize", `${SAMPLE_GORILLA.w}×${SAMPLE_GORILLA.h}（見本）`));
   const gs = bossScaleFor(SAMPLE_GORILLA.w, SAMPLE_GORILLA.h);
