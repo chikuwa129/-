@@ -76,6 +76,9 @@
   #floorLabel { font-size: 15px; font-weight: bold; }
   #teamRows { display: grid; gap: 3px; min-height: calc(3 * 19px + 6px); align-content: start; }
   #floorLabel.bossfl { color: var(--t-boss); }
+  #edgeFlash { position: fixed; inset: 0; pointer-events: none; z-index: 60; opacity: 0; }
+  #edgeFlash.show { animation: edgeFade 300ms ease-out 1 forwards; }
+  @keyframes edgeFade { from { opacity: 1; } to { opacity: 0; } }
   .heatTag { margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 11px; line-height: 15px; vertical-align: 2px; border: 1px solid; font-weight: bold; }
   .heatTag.ok { color: var(--t-heatOk); border-color: var(--t-heatOk); }
   .heatTag.ng { color: var(--t-heatNg); border-color: var(--t-heatNg); }
@@ -244,22 +247,29 @@
   /* 世界マップ */
   .wmHead { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .wmTitle { font-size: 15px; font-weight: bold; }
-  #wmBack { min-height: 40px; padding: 6px 14px; font-size: 14px; border-radius: 8px; background: var(--t-returnBg); border: 1px solid var(--t-returnLine); }
-  #world > * { flex-shrink: 0; }   /* 低い画面では、地図を縮めずに画面ごとスクロール */
-  #wmMap { width: 100%; border: 1px solid var(--t-line); border-radius: 6px; overflow: hidden; line-height: 0; }
-  #wmMap svg { width: 100%; height: auto; display: block; }
+  #wmBack { min-height: 46px; padding: 6px 8px; font-size: 14px; white-space: nowrap; border-radius: 8px; background: var(--t-returnBg); border: 1px solid var(--t-returnLine); }
+  /* 画面の高さ（上のバーを避ける余白と下端の余白を除く）に収める：見出し → 地図（残りの高さ。下限は元の大きさの WORLD_MAP_MIN_RATE）→ 説明の欄（最大 35%、中でスクロール）→ 下端のボタン */
+  #world.screen { height: calc(100vh - var(--safe-top) - var(--safe-bottom)); height: calc(100dvh - var(--safe-top) - var(--safe-bottom)); overflow: hidden; flex: none; }
+  #world > .wmHead, #wmFoot { flex-shrink: 0; }
+  #wmMap { flex: 1 1 0; min-height: var(--wm-min-h, 0px); width: 100%; display: flex; justify-content: center; align-items: flex-start; line-height: 0; }
+  #wmMap { overflow: hidden; }
+  #wmMap svg { display: block; width: var(--wm-w, 100%); height: auto; border: 1px solid var(--t-line); border-radius: 6px; }
+  #wmFoot { width: 100%; display: grid; gap: 4px; }
+  #wmReason { font-size: 12px; color: var(--t-textDim); text-align: center; min-height: 0; }
+  #wmReason:empty { display: none; }
+  .wmBtns { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; }
   #wmMap [data-place] { cursor: pointer; }
   #wmMap .wmGlow { animation: wmGlow 1.6s ease-in-out infinite; }
   @keyframes wmGlow { 0%, 100% { opacity: .15; } 50% { opacity: .75; } }
   @media (prefers-reduced-motion: reduce) { #wmMap .wmGlow { animation: none; } }
-  #wmInfo { width: 100%; background: var(--t-panel); border: 1px solid var(--t-line); border-radius: 8px; padding: 8px 12px; font-size: 13px; display: grid; gap: 4px; }
+  #wmInfo { flex: 0 1 auto; min-height: 0; max-height: 35vh; max-height: 35dvh; overflow-y: auto; width: 100%; background: var(--t-panel); border: 1px solid var(--t-line); border-radius: 8px; padding: 8px 12px; font-size: 13px; display: grid; gap: 4px; }
   #wmInfo .wiHead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   #wmInfo .wiName { font-size: 17px; font-weight: bold; }
   #wmInfo .wiBadge { font-size: 11px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--t-line); color: var(--t-textDim); }
   #wmInfo .wiRow { color: var(--t-textDim); }
   #wmInfo .wiRow b { color: var(--t-text); font-weight: normal; }
   #wmInfo .wiLurk { color: var(--t-textSub); font-style: italic; }
-  #wmGo { min-height: 46px; margin-top: 4px; font-size: 16px; font-weight: bold; border-radius: 8px; background: var(--t-good); color: var(--t-goodText); border: none; }
+  #wmGo { min-height: 46px; font-size: 16px; font-weight: bold; border-radius: 8px; background: var(--t-good); color: var(--t-goodText); border: none; }
   #wmGo:disabled { background: var(--t-barBg); color: var(--t-textDim); }
   /* 絵の一覧（?sprites=1） */
   #gallery { max-width: 520px; margin: 0 auto; padding: var(--safe-top) 12px calc(var(--safe-bottom) + 16px); }
@@ -282,6 +292,8 @@
   .rcBody { overflow-y: auto; min-height: 0; flex: 1; }
   .rcBtns { display: flex; gap: 8px; padding-top: 10px; border-top: 1px solid var(--t-line); margin-top: 8px; }
   .rcBtns button { flex: 1; min-height: 46px; font-size: 15px; border-radius: 8px; }
+  .rcBtns.stack { flex-direction: column; gap: 6px; }
+  .rcBtns.stack button { min-height: 42px; }
   .rcBtns button.primary { background: var(--t-good); color: var(--t-goodText); border: none; }
   .rcTop { display: flex; gap: 12px; align-items: center; }
   .rcTop canvas { flex-shrink: 0; }
@@ -519,9 +531,10 @@
 
   <!-- 世界マップ（村の「出発」から） -->
   <section id="world" class="screen" hidden>
-    <div class="wmHead"><span class="wmTitle">行き先を選ぶ</span><button id="wmBack">村にもどる</button></div>
+    <div class="wmHead"><span class="wmTitle">行き先を選ぶ</span></div>
     <div id="wmMap"></div>
     <div id="wmInfo"></div>
+    <div id="wmFoot"><div id="wmReason"></div><div class="wmBtns"><button id="wmBack">村にもどる</button><button id="wmGo">出発</button></div></div>
   </section>
 
   <!-- タイプ選択画面 -->
@@ -656,7 +669,7 @@
 //  調整用の定数・データ
 // ================================================================
 // 版の目印（作業のたびに更新）。タイトル画面の隅、設定欄、?layout=1 の診断に出す
-const BUILD_ID = "1K-20261017-0134";
+const BUILD_ID = "1K-20261017-0745";
 // ================================================================
 //  色調（画面の色はすべてここから。ドット絵のパレット、ボスの色、レア度の色、世界地図の固定色は除く）
 //  THEME＝全画面の標準の色（1J の前の版の色）、THEME_MAP＝世界マップの画面だけの色（古地図）。地図の画面に入るときと出るときに切り替える
@@ -722,6 +735,7 @@ const THEME = {
   goodBg2: "#1f3328", toastNgLine: "#a85a3a", overlayMini: "rgba(0,0,0,.88)", overlayDiag: "rgba(0,0,0,.72)",
   textHint: "#aaa", diagLine: "#888", buildText: "#5a5c66", debugText: "#f5d", fadeBg: "rgba(16,17,20,.95)",
   // 1K：熱気のタグ（無効＝緑、あり＝赤）、耐熱のタグ、仲間にする画面の強調
+  edgeHeat: "rgba(200,40,20,.45)",   // 熱気のダメージの、画面の縁の赤い光
   heatOk: "#5fe07a", heatNg: "#ff6b6b", heatTagBg: "#3a2414", heatTagText: "#ffb07a", gimmickHi: "#ffb02e",
 };
 let activeTheme = THEME;   // いま画面に使っている色の表（世界マップの画面だけ THEME_MAP）
@@ -1146,10 +1160,10 @@ const DESERT_HP_MULT = 1.0, DESERT_ATK_MULT = 1.0;
 // 動物（敵・仲間）。size＝大きさ（ENEMY_TYPES の key）、spriteId＝絵（差し替えはここだけ）、abilities＝能力、
 // hpMult・atkMult＝敵のときの倍率、unique＝仲間になったときの固有技。機械遺跡の動物は、絵の名前がそのまま動物の名前（animalDef で作る）
 const ANIMAL_DEFS = {
-  dustSnake:   { name: "ダストスネーク",     size: "small", abilities: ["heatproof"], hpMult: 0.9, atkMult: 1.1, spriteId: "dango",  unique: "coil" },
-  lizaron:     { name: "リザロン",           size: "small", abilities: [],            hpMult: 0.8, atkMult: 1.0, spriteId: "turtle", unique: "tailSweep" },
+  dustSnake:   { name: "ダストスネーク",     size: "small", abilities: ["heatproof"], hpMult: 0.9, atkMult: 1.1, spriteId: "turtle", unique: "coil" },
+  lizaron:     { name: "リザロン",           size: "small", abilities: [],            hpMult: 0.8, atkMult: 1.0, spriteId: "dango",  unique: "tailSweep" },
   fenex:       { name: "フェネクス",         size: "small", abilities: [],            hpMult: 0.8, atkMult: 1.1, spriteId: "wolf",   unique: "keenEar" },
-  scarabot:    { name: "スカラボット",       size: "small", abilities: [],            hpMult: 1.1, atkMult: 0.9, spriteId: "dango",  unique: "rollAttack" },
+  scarabot:    { name: "スカラボット",       size: "small", abilities: [],            hpMult: 1.1, atkMult: 0.9, spriteId: "bird",   unique: "rollAttack" },
   sandScorpio: { name: "サンドスコーピオ",   size: "mid",   abilities: ["heatproof"], hpMult: 1.0, atkMult: 1.2, spriteId: "lion",   unique: "venom" },
   strideBird:  { name: "ストライドバード",   size: "mid",   abilities: [],            hpMult: 0.9, atkMult: 1.1, spriteId: "bird",   unique: "strideKick" },
   sandFish:    { name: "サンドフィッシュ",   size: "mid",   abilities: [],            hpMult: 1.0, atkMult: 1.2, spriteId: "ptera",  unique: "sandDive" },
@@ -1160,8 +1174,13 @@ const ANIMAL_DEFS = {
 const ABILITIES = { heatproof: { name: "耐熱" } };
 // 仕掛け：ability＝無効にする能力。熱気は洞窟の通常階だけ（前庭・準備部屋・ボス部屋・ボス戦の直後は効かない）
 const GIMMICKS = { heat: { name: "熱気", ability: "heatproof" } };
+// 仲間の人数による、通常の敵（レア個体を含む）のHPと攻撃の補正（チームの人数。主人公機を含み、HP0の機体も数える）。ボスには掛けない
+const PARTY_SIZE_ENEMY_MULT = { 1: 0.85, 2: 0.93, 3: 1.0 };
 const HEAT_DAMAGE_RATE = 0.03;     // 戦闘が終わるたびに、最大HPのこの割合（切り上げ、最低1）
 const HEAT_STAIR_EN = 15;          // 熱気の中の階段での EN 回復（通常は STAIRS_ENERGY_BONUS）
+// 放熱ユニットの入手（砂漠の洞窟の中だけ。1個以上持っていれば出さない）：床のパーツ・通常の敵の落とし物（パーツが落ちるとき）・コブラ王の落とし物
+const HEATSINK_FLOOR_CHANCE = 0.05, HEATSINK_DROP_CHANCE = 0.02, HEATSINK_BOSS_CHANCE = 0.10;
+const HEATSINK_BOSS_FLOORS = [5];
 const GIMMICK_JOIN_CHANCE = 0.40;  // 仕掛けに必要な能力の仲間がいない間、その能力の動物が仲間になる確率
 const GIMMICK_PITY = 3;            // その条件で、続けてこの回数仲間にならなかったら、次は必ず仲間になる
 // ダンジョン。floorOffset＝敵の強さの階の補正の下駄（実効の階 ef ＝ 階 ＋ floorOffset。前庭は courtyardOffset）、
@@ -1184,13 +1203,15 @@ const dungeonByKey = key => DUNGEONS.find(d => d.key === key);
 // entry＝入り口の説明、gimmick＝仕掛けの説明
 const WORLD_PLACES = [
   { id: 0, key: "village", name: "はじめの村",   x: 78,  y: 390, icon: "house",   village: true, gimmick: "—", base: null, unlock: { always: true }, dungeon: null, entry: "" },
-  { id: 1, key: "ruins",   name: "機械遺跡",     x: 150, y: 310, icon: "gear",    gimmick: "なし（入門用）",       base: 2,  unlock: { always: true },        dungeon: "ruins", entry: "B1Fから入る" },
-  { id: 2, key: "desert",  name: "砂漠の洞窟",   x: 275, y: 380, icon: "pyramid", gimmick: "熱気：耐熱の力が必要", base: 4,  unlock: { clears: ["ruins"] },  dungeon: "desert", entry: "前庭から入る" },
-  { id: 3, key: "forest",  name: "森の洞窟",     x: 195, y: 215, icon: "tree",    gimmick: "岩：怪力の力が必要",   base: 6,  unlock: { clears: ["desert"] }, dungeon: null, entry: "前庭から入る" },
-  { id: 4, key: "sky",     name: "天空遺跡",     x: 340, y: 105, icon: "cloud",   gimmick: "段差：浮遊の力が必要", base: 8,  unlock: { clears: ["forest"] }, dungeon: null, entry: "前庭から入る" },
-  { id: 5, key: "lake",    name: "地底湖",       x: 455, y: 255, icon: "wave",    gimmick: "水路：水中の力が必要", base: 9,  unlock: { clears: ["sky"] },    dungeon: null, entry: "前庭から入る" },
-  { id: 6, key: "tower",   name: "ラスボスの塔", x: 590, y: 125, icon: "tower",   gimmick: "なし（最後の戦い）",   base: 10, unlock: { clears: ["desert", "forest", "sky", "lake"] }, dungeon: null, entry: "入り口から登る" },
+  { id: 1, key: "ruins",   name: "機械遺跡",     x: 150, y: 310, icon: "gear",    gimmick: "なし（入門用）",       base: 3,  unlock: { always: true },        dungeon: "ruins", entry: "B1Fから入る" },
+  { id: 2, key: "desert",  name: "砂漠の洞窟",   x: 275, y: 380, icon: "pyramid", gimmick: "熱気：耐熱の力が必要", base: 7,  unlock: { clears: ["ruins"] },  dungeon: "desert", entry: "前庭から入る" },
+  { id: 3, key: "forest",  name: "森の洞窟",     x: 195, y: 215, icon: "tree",    gimmick: "岩：怪力の力が必要",   base: 9,  unlock: { clears: ["desert"] }, dungeon: null, entry: "前庭から入る" },
+  { id: 4, key: "sky",     name: "天空遺跡",     x: 340, y: 105, icon: "cloud",   gimmick: "段差：浮遊の力が必要", base: 11,  unlock: { clears: ["forest"] }, dungeon: null, entry: "前庭から入る" },
+  { id: 5, key: "lake",    name: "地底湖",       x: 455, y: 255, icon: "wave",    gimmick: "水路：水中の力が必要", base: 13,  unlock: { clears: ["sky"] },    dungeon: null, entry: "前庭から入る" },
+  { id: 6, key: "tower",   name: "ラスボスの塔", x: 590, y: 125, icon: "tower",   gimmick: "なし（最後の戦い）",   base: 15, unlock: { clears: ["desert", "forest", "sky", "lake"] }, dungeon: null, entry: "入り口から登る" },
 ];
+const WORLD_NOGO_TEXT = { village: "村は出発地点です。行き先を選んでください", locked: "未解放のため、出発できません", soon: "準備中のため、出発できません" };   // 「出発」が押せない理由
+const WORLD_MAP_MIN_RATE = 0.55;   // 世界地図を縮める下限（元の大きさに対する割合）
 const WORLD_ROADS = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6]];   // 道（場所の id の組）
 const WORLD_UNLOCK_TEXT = { ruins: "機械遺跡のボスを倒す", desert: "砂漠の洞窟のボスを倒す", forest: "森の洞窟のボスを倒す", sky: "天空遺跡のボスを倒す", lake: "地底湖のボスを倒す" };
 // パーティーの強さ：power ＝ 機体レベルの平均 ÷ POWER_LEVEL_DIV ＋ パーツの期待ダメージの平均 ÷ POWER_ATTACK_DIV（仮の係数）
@@ -1526,7 +1547,7 @@ function prepareSprites() {
     SPR[cropKey(b.minions.sprite)] = { ...src, g, gf: flipGrid(g), w: g[0].length, h: g.length };
   }
   for (const [k, d] of Object.entries(MAPICON)) SPR["m_" + k] = { g: buildSprite(d, MAP_N, MAP_N), p: d.p, w: MAP_N, h: MAP_N };
-  for (const [k, d] of Object.entries(MAPICON_HERO)) SPR["m_hero_" + k] = { g: buildSprite(d, MAP_N, MAP_N), p: d.p, w: MAP_N, h: MAP_N };
+  for (const [k, d] of Object.entries(MAPICON_HERO)) { const g = buildSprite(d, MAP_N, MAP_N); SPR["m_hero_" + k] = { g, gf: flipGrid(g), p: d.p, w: MAP_N, h: MAP_N }; }   // 左向きの版も、起動時に1回だけ作る
   SPR.m_mech = { g: buildSprite(MAPICON_MECH, MAP_N, MAP_N), p: MAPICON_MECH.p, w: MAP_N, h: MAP_N };
   for (const [k, t] of Object.entries(TILES)) SPR["t_" + k] = { g: t.g, p: t.p, w: MAP_N, h: MAP_N };
   const re = buildRareSprite(MAPICON.enemy, MAP_N, MAP_N);
@@ -1554,6 +1575,7 @@ function spriteImage(key, s, flip) {
   return c;
 }
 // マップの「自分」の絵：最初に選んだタイプの動物（タイプがわからないときは今までの絵）
+let heroFacingLeft = false;   // マップの主人公の向き（初期は右向き＝絵の向き。階が変わると右向きに戻る）
 function heroMapKey() {
   const t = START_TYPES.find(x => x.key === typeKey);
   return t && SPR["m_hero_" + t.mapIcon] ? "m_hero_" + t.mapIcon : "m_player";
@@ -1730,6 +1752,7 @@ const fixedPart = (id, plus = 0) => ({ id, uid: ++partUid, plus });
 // 仲間の機体を作る（仲間にする画面、読み込み、テスト）。def=大きさ、part=固定パーツのid
 function createAlly(def, sprite, o = {}) {
   const animal = o.animal || sprite, a = animalDef(animal);
+  if (ANIMAL_DEFS[animal]) sprite = ANIMAL_DEFS[animal].spriteId;   // 砂漠の動物：絵は動物のデータから（差し替えはデータだけ）
   const u = createUnit({ name: o.name || a.name, sprite, kind: def.key, hp: def.ally.hp, en: def.ally.en, tackle: def.ally.tackle,
     lv: o.lv || 1, unique: a.unique || ANIMAL_UNIQUE[sprite], part: o.part || def.ally.part, plus: o.plus || 0 });
   u.animal = animal;
@@ -2000,7 +2023,7 @@ function pickAnimal(t, b = floorBand(), d = dungeon) {
 }
 
 function newFloor() {
-  enemies = []; groundItems = []; npcs = [];
+  enemies = []; groundItems = []; npcs = []; heroFacingLeft = false;
   floorDone = false; autoWalking = false;
   if (isBossFloor(floorNo)) { bossFloor(); return; }
   if (floorNo === 0) { courtyardFloor(); return; }
@@ -2034,7 +2057,8 @@ function newFloor() {
     const p = freeCellIn(rooms[rnd(rooms.length)]);
     if (!p || Math.abs(p.x - s.x) + Math.abs(p.y - s.y) <= 2) continue;
     const types = Object.keys(PART_TYPE_LABEL);
-    groundItems.push({ x: p.x, y: p.y, key: "part", part: floorRarityPart(types[rnd(types.length)]) });
+    const fid = floorRarityPart(types[rnd(types.length)]);
+    groundItems.push({ x: p.x, y: p.y, key: "part", part: heatsinkRoll(HEATSINK_FLOOR_CHANCE) ? RADIATOR_ID : fid });
     placed++;
   }
   ensurePathLoot(rooms, start, s);
@@ -2047,6 +2071,9 @@ function newFloor() {
 const COURTYARD = { room: { x: 1, y: 2, w: 34, h: 24 }, rocks: [90, 110], startX: 2, stairsX: 33, enemyMinDist: 6 };
 const COURTYARD_ITEMS = { repair: 2, cell: 2 };
 const RADIATOR_ID = "a1";
+// 放熱ユニットの抽選ができるか（熱気のダンジョンの洞窟の中、まだ1個も持っていない）
+const heatsinkEligible = () => { const g = gimmickOf(); return !!g && g.ability === partById(RADIATOR_ID).ability && floorNo >= 1 && floorNo < dungeon.floors && !ownsPart(RADIATOR_ID); };
+const heatsinkRoll = chance => heatsinkEligible() && Math.random() < chance;
 function courtyardFloor() {
   const C = COURTYARD, R = C.room;
   let start, stairs;
@@ -2082,7 +2109,6 @@ function courtyardFloor() {
     if (p) { const t = pickEnemyType(band); enemies.push(makeEnemy(t, p.x, p.y, pickAnimal(t, band))); }
   }
   const put = (key, part) => { const p = freeCellIn(R); if (p) groundItems.push(part ? { x: p.x, y: p.y, key, part } : { x: p.x, y: p.y, key }); };
-  if (!ownsPart(RADIATOR_ID)) put("part", RADIATOR_ID);   // 持っていなければ、放熱ユニットを1個
   for (const [k, n] of Object.entries(COURTYARD_ITEMS)) for (let i = 0; i < n; i++) put(k);
   updateFov();
 }
@@ -2298,6 +2324,7 @@ function playerMove(dir) {
   if (mode !== "map" || miniOpen || recruitState) return;
   const [dx, dy] = DIRS[dir];
   const nx = pos.x + dx, ny = pos.y + dy;
+  if (dx) heroFacingLeft = dx < 0;   // 左右に進んだら向きを変える（上下では変えない。敵に触れるときも同じ）
 
   if (dx || dy) {
     const target = enemyAt(nx, ny);
@@ -2364,6 +2391,19 @@ function heatActive(f = floorNo) {
   const g = gimmickOf();
   return !!g && isCaveNormalFloor(f) && !teamHasAbility(g.ability);
 }
+// 画面の縁の光（熱気など、仕掛けのダメージ）。縁が濃く中央は透明、1回だけ ms で消える。操作は邪魔しない。演出オフでは出さない
+const EDGE_FLASH_MS = 300;
+function flashEdge(color, ms = EDGE_FLASH_MS) {
+  if (!settings.fx) return false;
+  let f = $("edgeFlash");
+  if (!f) { f = el("div"); f.id = "edgeFlash"; document.body.append(f); }
+  f.style.background = `radial-gradient(ellipse at center, transparent 55%, ${color} 100%)`;
+  f.style.animationDuration = `${ms}ms`;
+  restartAnim(f, "show");
+  edgeFlashCount++;
+  return true;
+}
+let edgeFlashCount = 0;   // テスト用
 let heatHintShown = false;   // 「耐熱の力があれば、防げる」は出発ごとに初回だけ
 // バトルのあと（ひとうちも）：HP1以上の全員が少し消耗する（HPは1未満にならない）
 function applyHeatAfterFight() {
@@ -2378,6 +2418,7 @@ function applyHeatAfterFight() {
   }
   heatStats.total++;
   mapLog("熱気で全員が消耗した…", "", "heat");
+  if (hit) flashEdge(tc("edgeHeat"), EDGE_FLASH_MS);
   if (!heatHintShown) { heatHintShown = true; mapLog("耐熱の力があれば、防げる", "", "heat"); }
   return hit;
 }
@@ -2532,12 +2573,24 @@ function applyLayoutVars() {
   px("--stomp-px", MINION_STOMP_PX); r.setProperty("--stomp-ms", MINION_STOMP_MS + "ms");
 }
 
+// 仲間の人数の補正（バトルを始めるときの人数で決める。倍率の計算の最後に掛ける：切り上げ、最低1）
+const partySizeMult = (n = team.length) => PARTY_SIZE_ENEMY_MULT[Math.max(1, Math.min(TEAM_MAX, n))];
+function partySized(e, n = team.length) {
+  if (e.boss) return { maxHp: e.maxHp, hp: e.hp, atk: e.atk };
+  if (e.baseMaxHp == null) { e.baseMaxHp = e.maxHp; e.baseAtk = e.atk; }   // 補正をかける前の値（マップに置いたときの値）
+  const m = partySizeMult(n), maxHp = Math.max(1, Math.ceil(e.baseMaxHp * m));
+  // 逃げたあとなどで減っているHPは、割合を保つ
+  const hp = e.hp === e.maxHp ? maxHp : Math.max(1, Math.ceil(e.hp * maxHp / e.maxHp));
+  return { maxHp, hp, atk: Math.max(1, Math.ceil(e.baseAtk * m)) };
+}
+function applyPartySize(e) { if (!e.boss) Object.assign(e, partySized(e)); }
 function startBattle(e) {
   toggleMini(false);
   battleStartedAt = performance.now();
   mode = "battle";
   e.awake = true;
   chooseAnimal(e);
+  applyPartySize(e);
   if (!e.boss && !e.rare) { const fs = fightStats[floorNo] || (fightStats[floorNo] = { oneHit: 0, battle: 0 }); fs.battle++; }
   for (const u of team) u.bs = freshBattleState();
   battle = { enemy: e, menu: "moves", busy: false, actor: team.findIndex(u => u.hp > 0),
@@ -3063,13 +3116,15 @@ function rollNormalDrop(e) {
   const sure = dropMiss >= DROP_PITY_AFTER;
   if (!sure && Math.random() >= DROP_CHANCE) { dropMiss++; return null; }
   dropMiss = 0;
-  return floorRarityPart(e.def.drop);
+  const id = floorRarityPart(e.def.drop);
+  return heatsinkRoll(HEATSINK_DROP_CHANCE) ? RADIATOR_ID : id;   // 砂漠の洞窟：まれに放熱ユニット（系統のパーツの代わり）
 }
 function rollRareDrop(e) {
   const rarity = Math.random() < RARE_DROP_LEGEND ? 3 : 2;
   return PARTS.find(p => p.type === e.def.drop && p.rarity === rarity).id;
 }
 function rollBossDrop(f) {
+  if (HEATSINK_BOSS_FLOORS.includes(f) && heatsinkRoll(HEATSINK_BOSS_CHANCE)) return RADIATOR_ID;   // コブラ王：10%で放熱ユニット
   const rarity = pickWeighted(dungeon.bosses[f].drop);
   const types = Object.keys(PART_TYPE_LABEL);
   const type = types[rnd(types.length)];
@@ -3142,7 +3197,7 @@ function canOneHit(e) {
   if (!e || e.boss || e.rare || !settings.oneHit) return false;
   if (dungeonEasy) return true;   // 目安が「余裕」のダンジョン：通常の敵は触れるだけで倒れる
   const hero = leader();
-  return !!hero && hero.hp > 0 && tackleMinDamage(hero) >= e.hp;
+  return !!hero && hero.hp > 0 && tackleMinDamage(hero) >= partySized(e).hp;   // 仲間の人数の補正を含める
 }
 function oneHit(e) {
   chooseAnimal(e);
@@ -3189,12 +3244,22 @@ function gimmickJoinCase(e) {
   return has(e.animal) && !allUnits().some(u => (u.abilities || []).includes(g.ability));
 }
 // 仲間にする（チームに空きがなければストックへ。ストックの空きは呼ぶ側で確かめる）
-function joinUnit(u, out = (t, c) => log(t, c, null, "recruit"), showPart = false) {
+// swapOut＝チームが満員のとき、その場で入れ替えて外す機体（外した機体はストックへ。自由枠のパーツは持ち物に戻る）
+function joinUnit(u, out = (t, c) => log(t, c, null, "recruit"), showPart = false, swapOut = null) {
   if (u.gimmickJoin) { recOf().pity = 0; delete u.gimmickJoin; }   // 保証の数えを0に戻す
   u.name = uniqueName(u.name);
   u.hp = u.maxHp; u.en = u.maxEn; u.bs = freshBattleState();
   const tail = showPart && u.fixed ? `（パーツ『${itemText(u.fixed)}』）` : "";
   const color = u.fixed ? RARITY[partOf(u.fixed).rarity].color : "";
+  if (swapOut) {
+    const i = team.indexOf(swapOut);
+    clearFreeSlots(swapOut);
+    swapOut.hp = swapOut.maxHp; swapOut.en = swapOut.maxEn; swapOut.bs = freshBattleState();
+    team[i] = u; stock.push(swapOut);
+    fillFreeSlots(u);
+    out(`${u.name}が仲間になった！（${swapOut.name}をストックに送った）${tail}`, showPart ? color : "");
+    return "swap";
+  }
   if (team.length < TEAM_MAX) { team.push(u); fillFreeSlots(u); out(`${u.name}が仲間になった！${tail}`, showPart ? color : ""); return "team"; }
   stock.push(u);
   out(`${u.name}が仲間になった！（村のストックに送った）${tail}`, showPart ? color : "");
@@ -3216,13 +3281,41 @@ function offerRecruit(cand, out, then = () => {}) {
 // 決める：yes=仲間にする
 function recruitDecide(yes) {
   const st = recruitState;
-  if (!st || st.view === "pick") return;
+  if (!st || st.view === "pick" || st.view === "swap") return;
+  if (st.view === "teamFull" && yes) { recruitToStock(); return; }
+  // チームが満員：「毎回聞く」（とギミックの仲間の画面）では、入れ替えるか、ストックに送るかを選ぶ
+  if (yes && team.length >= TEAM_MAX && settings.recruitConfirm !== "always" && st.view !== "teamFull") { st.view = "teamFull"; renderRecruit(); return; }
   if (yes && !hasRoom()) { st.view = "pick"; st.pick = null; renderRecruit(); return; }
   closeRecruit();
   st.then();
   if (yes) joinUnit(st.cand, st.out, settings.recruitConfirm === "always");
   else { if (st.cand.gimmickJoin) recOf().pity++; st.out(`${st.cand.name}は去っていった。`); }   // 見送りも「仲間にならなかった」に数える
   afterRecruit();
+}
+// 「ストックに送る」：今までどおり（ストックも満員なら、ストックの機体を解体して空ける画面へ）
+function recruitToStock() {
+  const st = recruitState;
+  if (!st) return;
+  if (stock.length >= STOCK_MAX) { st.view = "pick"; st.pick = null; st.backTo = "teamFull"; renderRecruit(); return; }
+  closeRecruit(); st.then(); joinUnit(st.cand, st.out, settings.recruitConfirm === "always"); afterRecruit();
+}
+// 「チームに入れる（入れ替える）」：外す機体を選んで入れ替える
+function recruitSwapGo() {
+  const st = recruitState, outU = st && st.swapOut;
+  if (!outU || !team.includes(outU) || outU.isLeader) return;
+  const finish = () => { closeRecruit(); st.then(); joinUnit(st.cand, st.out, true, outU); afterRecruit(); };
+  if (stock.length < STOCK_MAX) { finish(); return; }
+  // ストックが満員：外した機体を解体して空けるか、入れ替えをやめる
+  showDialog("ストックが満員", `${outU.name}をストックに送れません（${stock.length}/${STOCK_MAX}体）。${outU.name}を解体して、入れ替えますか？`, [
+    { label: "解体して入れ替える", danger: true, act: () => {
+      closeRecruit(); st.then();
+      // 外した機体を、ストックに入れてから解体する（解体はストックの機体だけ）。新しい仲間は、外した機体のいた位置へ
+      const i = team.indexOf(outU); clearFreeSlots(outU); team.splice(i, 1); stock.push(outU); dismantle(outU, st.out);
+      joinUnit(st.cand, st.out, true);
+      team.splice(i, 0, team.pop());
+      afterRecruit();
+    } },
+    { label: "入れ替えをやめる", act: () => { st.view = "teamFull"; st.swapOut = null; renderRecruit(); } }]);
 }
 function closeRecruit() {
   recruitState = null;
@@ -3283,6 +3376,7 @@ function unitLine(u, opts = {}) {
 function renderRecruit() {
   const st = recruitState, u = st.cand, body = $("rcBody"), btns = $("rcBtns");
   body.textContent = ""; btns.textContent = "";
+  btns.classList.toggle("stack", st.view === "teamFull");   // 満員の選択肢は縦に並べる
   const btn = (label, fn, cls, id, dis) => { const b = rowButton(label, fn, dis, cls); b.id = id; btns.append(b); return b; };
   if (st.view === "pick") {
     body.append(el("h2", "", "解体する機体を選ぶ"));
@@ -3291,7 +3385,21 @@ function renderRecruit() {
     for (const x of stock) list.append(unitLine(x, { pick: true, on: st.pick === x, unique: true, onClick: () => { st.pick = x; renderRecruit(); } }));
     body.append(list);
     btn("解体する", recruitDismantlePicked, "danger", "rcDismantle", !st.pick);
-    btn("もどる", () => { st.view = "full"; renderRecruit(); }, "", "rcBack");
+    btn("もどる", () => { st.view = st.backTo || "full"; renderRecruit(); }, "", "rcBack");
+    return;
+  }
+  if (st.view === "swap") {
+    // 入れ替え：新しい仲間と、チームの機体（主人公機を除く）を並べて、外す機体を選ぶ
+    body.append(el("h2", "", "入れ替える機体を選ぶ"));
+    body.append(el("div", "mnote", "選んだ機体はストックに送られ、自由枠のパーツは持ち物に戻ります。"));
+    body.append(el("div", "rcLabel", "新しい仲間"));
+    const nl = el("div", "rcTeam"); nl.append(unitLine(u, { unique: true, trait: true })); body.append(nl);
+    body.append(el("div", "rcLabel", "チーム（外す機体を選ぶ）"));
+    const tl = el("div", "rcTeam"); tl.id = "rcSwapList";
+    for (const x of team) if (!x.isLeader) tl.append(unitLine(x, { pick: true, on: st.swapOut === x, unique: true, trait: true, onClick: () => { st.swapOut = x; renderRecruit(); } }));
+    body.append(tl);
+    btn("入れ替える", recruitSwapGo, "primary", "rcSwapGo", !st.swapOut);
+    btn("もどる", () => { st.view = "teamFull"; st.swapOut = null; renderRecruit(); }, "", "rcBack");
     return;
   }
   body.append(el("h2", "", "仲間になりたそうにしている！"));
@@ -3324,18 +3432,27 @@ function renderRecruit() {
   const tl = el("div", "rcTeam");
   for (const x of team) tl.append(unitLine(x, { trait: true }));
   body.append(tl);
+  if (st.view === "teamFull") {
+    const note = el("div", "rcNote", `チームが満員です（${team.length}/${TEAM_MAX}体）。どうする？`); note.id = "rcFullNote";
+    body.insertBefore(note, body.children[1]);
+    btn("チームに入れる（入れ替える）", () => { st.view = "swap"; st.swapOut = null; renderRecruit(); }, "primary", "rcSwap");
+    btn(`ストックに送る（Y）${stock.length >= STOCK_MAX ? "：満員" : ""}`, recruitToStock, "", "rcToStock");
+    btn("やめる（N）", () => recruitDecide(false), "", "rcNo");
+    return;
+  }
   if (st.view === "full") {
     body.append(el("div", "rcNote", `ストックが満員です（${stock.length}/${STOCK_MAX}体）`));
     btn("ストックの機体を解体して空ける（Y）", () => recruitDecide(true), "primary", "rcYes");
   } else {
-    if (team.length >= TEAM_MAX) body.append(el("div", "rcNote", "チームが満員なので、村のストックに送ります"));
+    if (team.length >= TEAM_MAX) body.append(el("div", "rcNote", settings.recruitConfirm === "always" ? "チームが満員なので、村のストックに送ります" : "チームが満員です。仲間にすると、入れ替えるか、ストックに送るかを選べます"));
     btn("仲間にする（Y）", () => recruitDecide(true), "primary", "rcYes");
   }
   btn("あきらめる（N）", () => recruitDecide(false), "", "rcNo");
 }
 function recruitKey(key) {
   const st = recruitState;
-  if (st.view === "pick") { if (key === "Escape" || key === "n" || key === "N") { st.view = "full"; renderRecruit(); } return true; }
+  if (st.view === "pick") { if (key === "Escape" || key === "n" || key === "N") { st.view = st.backTo || "full"; renderRecruit(); } return true; }
+  if (st.view === "swap") { if (key === "Escape" || key === "n" || key === "N") { st.view = "teamFull"; st.swapOut = null; renderRecruit(); } return true; }
   if (key === "y" || key === "Y") recruitDecide(true);
   else if (key === "n" || key === "N" || key === "Escape") recruitDecide(false);
   return true;
@@ -4156,10 +4273,10 @@ function renderMap() {
   const s = mapScale * pxRatio, T = MAP_N * s;
   const camX = Math.max(0, Math.min(MAP_W - viewCols, pos.x - (viewCols >> 1)));
   const camY = Math.max(0, Math.min(MAP_H - viewRows, pos.y - (viewRows >> 1)));
-  const draw = (key, x, y, mult = 1) => {
+  const draw = (key, x, y, mult = 1, flip = false) => {
     const px = (x - camX) * T, py = (y - camY) * T;
     if (px + T * mult <= 0 || py + T * mult <= 0 || px >= cv.width || py >= cv.height) return;
-    ctx.drawImage(spriteImage(key, s * mult, false), px, py);
+    ctx.drawImage(spriteImage(key, s * mult, flip), px, py);
   };
 
   ctx.imageSmoothingEnabled = false;
@@ -4196,7 +4313,7 @@ function renderMap() {
     // ひとうちできる敵の頭上に白い点
     if (canOneHit(e)) { ctx.fillStyle = tc("oneHitDot"); ctx.fillRect(px + 5 * s, py - s, 2 * s, 2 * s); }
   }
-  draw(heroMapKey(), pos.x, pos.y);
+  draw(heroMapKey(), pos.x, pos.y, 1, heroFacingLeft);   // 主人公は、最後に左右に進んだ向きを向く
   // 探索済みだが今見えていないマスは暗くする
   ctx.fillStyle = tc("mapDim");
   for (let vy = 0; vy < viewRows; vy++) for (let vx = 0; vx < viewCols; vx++) {
@@ -4955,7 +5072,7 @@ let dungeonEasy = false;
 function decideDungeonEasy() {
   const pl = WORLD_PLACES.find(p => p.dungeon === dungeon.key);
   const v = pl && placeVerdict(pl);
-  dungeonEasy = !!(v && v.key === "easy");
+  dungeonEasy = !!(v && v.key === "easy") && clearsOf(dungeon.key) >= 1;   // 「余裕」でも、ひとうちが無条件に効くのは、そのダンジョンを1回以上クリアしてから
 }
 
 // ================================================================
@@ -5107,7 +5224,7 @@ function renderWorldInfo(power) {
     row("仕掛け", pl.gimmick);
     const b = row("目安", "★".repeat(placeStars(pl)) + "　");
     if (v) { const sp = el("span", "", v.label); sp.style.color = v.color; sp.style.fontWeight = "bold"; b.append(sp, `（いまのパーティー ${power.toFixed(1)}／目安 ${pl.base}）`); }
-    if (v && v.key === "easy") row("ひとうち", "通常の敵は、触れるだけで倒せる（周回向き）");
+    if (v && v.key === "easy" && clearsOf(pl.dungeon) >= 1) row("ひとうち", "通常の敵は、触れるだけで倒せる（周回向き）");
     if (pl.dungeon) row("クリア回数", `${clearsOf(pl.dungeon)}回`);
     row("入り口", pl.entry);
     const d = pl.dungeon && DUNGEONS.find(x => x.key === pl.dungeon);
@@ -5115,12 +5232,11 @@ function renderWorldInfo(power) {
     if (d && d.heatNote) { const hn = el("div", "wiRow", d.heatNote); hn.id = "wiGimmick"; box.append(hn); }
     if (st === "soon") box.append(el("div", "wiRow", "この場所は、まだ準備中。"));
   }
-  if (!pl.village) {
-    const go = el("button", "", "出発"); go.id = "wmGo";
-    go.disabled = !(st === "open" || st === "cleared");
-    go.onclick = worldGo;
-    box.append(go);
-  }
+  // 下端の「出発」：出発できないときは灰色にして、理由を上に出す
+  const ok = st === "open" || st === "cleared";
+  $("wmGo").disabled = !ok;
+  $("wmReason").textContent = ok ? "" : WORLD_NOGO_TEXT[st];
+  if (mode === "world") fitWorldMap();
 }
 function openWorld() {
   if (mode !== "village") return;
@@ -5131,8 +5247,19 @@ function openWorld() {
   $("world").hidden = false;
   buildWorldMap();
   updateWorldMarks();
+  fitWorldMap();
   worldStats.lastOpenMs = performance.now() - t0;
 }
+// 地図の縮める下限：元の大きさ（幅いっぱいのときの高さ）× WORLD_MAP_MIN_RATE
+// 地図の幅：残りの高さに収まる幅（縦横比を保つ）
+function fitWorldMap() {
+  const box = $("wmMap"), w = box.clientWidth, ws = $("world").style;
+  ws.setProperty("--wm-min-h", `${Math.floor(w * 460 / 680 * WORLD_MAP_MIN_RATE)}px`);
+  ws.setProperty("--wm-w", "0px");   // 地図の分を除いて、残りの高さを測る
+  const h = box.clientHeight;
+  ws.setProperty("--wm-w", `${Math.max(0, Math.min(w, Math.floor(h * 680 / 460)))}px`);
+}
+window.addEventListener("resize", () => { if (mode === "world") fitWorldMap(); });
 function closeWorld() {
   if (mode !== "world") return;
   hideAllScreens();
@@ -5380,6 +5507,7 @@ if (LAYOUT_DIAG) setInterval(updateLayoutDiag, 1000);
 $("retry").addEventListener("click", () => goVillage());
 $("btnDepart").addEventListener("click", openWorld);
 $("wmBack").addEventListener("click", closeWorld);
+$("wmGo").addEventListener("click", worldGo);
 $("btnGo").addEventListener("click", decide);
 $("btnOther").addEventListener("click", openOther);
 $("btnGuardAll").addEventListener("click", guardAll);
