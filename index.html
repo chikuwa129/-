@@ -427,6 +427,8 @@
   .tag.missile { background: var(--t-tagMissile); }
   .tag.laser { background: var(--t-tagLaser); }
   .tag.ability { background: var(--t-heatTagText); }
+  .qTag { display: inline-block; margin-left: 4px; padding: 0 4px; border-radius: 3px; font-size: 11px; font-weight: bold; line-height: 15px; vertical-align: 1px;
+    background: var(--t-inset); color: var(--t-accent); border: 1px solid var(--t-accent); }
   .abTag { display: inline-block; margin-left: 4px; padding: 0 4px; border-radius: 3px; font-size: 11px; font-weight: bold; line-height: 15px;
     background: var(--t-heatTagBg); color: var(--t-heatTagText); border: 1px solid var(--t-heatTagText); vertical-align: 1px; }
   .eq { color: var(--t-accent); font-size: 11px; margin-left: 4px; }
@@ -693,7 +695,7 @@
 //  調整用の定数・データ
 // ================================================================
 // 版の目印（作業のたびに更新）。タイトル画面の隅、設定欄、?layout=1 の診断に出す
-const BUILD_ID = "1L-20261114-1500";
+const BUILD_ID = "1L-20261114-1800";
 // ================================================================
 //  色調（画面の色はすべてここから。ドット絵のパレット、ボスの色、レア度の色、世界地図の固定色は除く）
 //  THEME＝全画面の標準の色（1J の前の版の色）、THEME_MAP＝世界マップの画面だけの色（古地図）。地図の画面に入るときと出るときに切り替える
@@ -1148,16 +1150,16 @@ const MINION_STOMP_PX = 2, MINION_STOMP_MS = 1000;   // 「力を溜めている
 
 // ボス（階の補正はかけない）。name＝ボスの名前（画面・メッセージ・クリア画面・絵の一覧は、すべてここから）。sprite＝絵（BOSS_SPRITES）、spriteSize＝絵の大きさ、minions＝群れの手下の絵（見た目だけ）
 const BOSSES = {
-  5:  { name: "クレストラプター", ai: { sweepPrep: "群れに合図を送った…！ 次は全員への攻撃だ。", sweepName: "群れの突撃" }, hint: "力を溜めたら、次は1体に強い一撃。群れに合図を送ったら、次は全員への攻撃。溜めたら防御、合図なら全員防御で受けるといい。", hp: 200, atk: 16, acc: 85, exp: 40, sprite: "raptorChief", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H }, minions: { sprite: "raptorMinion" },
+  5:  { name: "クレストラプター", ai: { sweepPrep: "群れに合図を送った…！ 次は全員への攻撃だ。", sweepName: "群れの突撃", special: "call", weights: { special: 2 } }, hint: "力を溜めたら、次は1体に強い一撃。群れに合図を送ったら、次は全員への攻撃。溜めたら防御、合図なら全員防御で受けるといい。遠吠えで群れを呼んだら、手下が3ターン加わる。早めに倒しきろう。", hp: 200, atk: 16, acc: 85, exp: 40, sprite: "raptorChief", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H }, minions: { sprite: "raptorMinion" },
         drop: [0, 0.65, 0.25, 0.10] },
-  10: { name: "ガードホーン",     ai: { sweepPrep: "前足を高く上げた…！ 次は全員への攻撃だ。", sweepName: "踏み鳴らし" }, hint: "HPが半分を切ると、1ターンに2回攻撃してくる。半分を切る前に、HPとENを整えておこう。前足を上げたら、全員防御だよ。", hp: 300, atk: 26, acc: 85, exp: 0, doubleBelowHalf: true, sprite: "guardian", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H },
+  10: { name: "ガードホーン",     ai: { sweepPrep: "前足を高く上げた…！ 次は全員への攻撃だ。", sweepName: "踏み鳴らし", special: "shield", weights: { special: 2 } }, hint: "HPが半分を切ると、1ターンに2回攻撃してくる。半分を切る前に、HPとENを整えておこう。前足を上げたら、全員防御だよ。鉄壁の構えの番は、攻撃より回復や防御に回すといい。", hp: 300, atk: 26, acc: 85, exp: 0, doubleBelowHalf: true, sprite: "guardian", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H },
         drop: [0, 0, 0.70, 0.30] },
 };
 // 砂漠の洞窟のボス。enrageBelowHalf＝HPが半分以下で攻撃力の倍率（1回だけメッセージ）、doubleBelowHalf＝HPが半分以下で2回攻撃
 const DESERT_BOSSES = {
-  5:  { name: "コブラ王", ai: { sweepPrep: "大きく息を吸い込んだ…！ 次は全員への攻撃だ。", sweepName: "毒の息" }, hint: "HPが半分を切ると頭巾を広げて、攻撃が強くなる。そこからは、力を溜めたら必ず防御を。", hp: 570, atk: 38, acc: 85, exp: 100, enrageBelowHalf: 1.25, enrageText: "頭巾を広げて威嚇した！",
+  5:  { name: "コブラ王", ai: { sweepPrep: "大きく息を吸い込んだ…！ 次は全員への攻撃だ。", sweepName: "毒の息", special: "glare", weights: { special: 2 } }, hint: "HPが半分を切ると頭巾を広げて、攻撃が強くなる。そこからは、力を溜めたら必ず防御を。にらまれた機体は、その番に防御すれば受け流せる。", hp: 570, atk: 38, acc: 85, exp: 100, enrageBelowHalf: 1.25, enrageText: "頭巾を広げて威嚇した！",
         sprite: "cobraKing", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H }, drop: [0, 0.65, 0.25, 0.10] },
-  10: { name: "砂ワーム", ai: { sweepPrep: "砂の中に潜った…！ 次は全員への攻撃だ。", sweepName: "砂嵐" }, hint: "HPが半分を切ると、1ターンに2回攻撃してくる。修理キットを残しておいて、後半に使うといい。", hp: 720, atk: 46, acc: 85, exp: 160, doubleBelowHalf: true,
+  10: { name: "砂ワーム", ai: { sweepPrep: "砂を巻き上げた…！ 次は全員への攻撃だ。", sweepName: "砂嵐", special: "burrow", weights: { special: 2 } }, hint: "HPが半分を切ると、1ターンに2回攻撃してくる。修理キットを残しておいて、後半に使うといい。砂に潜ったら攻撃は当たらない。全員防御で奇襲に備えて。", hp: 720, atk: 46, acc: 85, exp: 160, doubleBelowHalf: true,
         sprite: "sandWorm", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H }, drop: [0, 0, 0.70, 0.30] },
 };
 const FINAL_FLOOR = 10;
@@ -1281,9 +1283,19 @@ const curFloorLabel = (n = floorNo) => floorLabel(dungeon, n);
 // ボスの行動（桜井流：選択をランダムにして、強い行動には必ず1ターン前に予告を出す）。重みで選ぶ：
 // attack＝通常攻撃、charge＝力を溜める（次のターンに1体へ強攻撃 BOSS_HEAVY_MULT 倍）、sweep＝構える（次のターンに全員へ攻撃 sweepMult 倍）。
 // firstCalm＝最初のこのターン数は通常攻撃、maxCalm＝予告なしの通常攻撃はこの回数までしか続けない。ボスの表の ai で上書きできる
-const BOSS_AI = { weights: { attack: 4, charge: 3, sweep: 2 }, firstCalm: 1, maxCalm: 3, sweepMult: 0.85,
+const BOSS_AI = { weights: { attack: 4, charge: 3, sweep: 2, special: 0 }, firstCalm: 1, maxCalm: 3, sweepMult: 0.85,
   sweepPrep: "構えた…！ 次は全員への攻撃だ。", sweepName: "なぎ払い" };
 const BOSS_HEAVY_MULT = 2;
+// ボスの必殺技（ボスの表の ai.special。BOSS_AI の重み special で選ぶ。どれも対処の仕方がはっきりしている）
+// call＝群れを呼ぶ（turns ターンのあいだ、手下が毎ターン1体を攻撃 mult 倍）、shield＝鉄壁の構え（こちらの次の番、受けるダメージ cut 倍）、
+// glare＝にらみ（予告した1体を、次のボスの番に mult 倍で攻撃して1ターン動けなくする。防御していれば受け流す）、
+// burrow＝砂に潜る（こちらの次の番は攻撃が当たらない。次のボスの番に全員へ mult 倍の奇襲）
+const BOSS_SPECIALS = {
+  call:   { name: "群れを呼ぶ", prep: "遠吠えで群れを呼んだ…！ 手下が加わってくる。", turns: 3, mult: 0.4, minionName: "ラプトレット" },
+  shield: { name: "鉄壁の構え", prep: "鉄壁の構えをとった！ 次のこちらの番は、ダメージが半分になる。", cut: 0.5 },
+  glare:  { name: "にらみ", prep: "%sをにらみつけている…！ 次のターン、動けなくされる。", mult: 0.6, resist: "%sは防御で、にらみを受け流した！", hit: "%sはにらまれて、すくんでしまった！" },
+  burrow: { name: "砂に潜る", prep: "砂の中に潜った…！ 次のこちらの番は攻撃が当たらない。そのあと奇襲がくる。", mult: 1.0, ambush: "砂の中からの奇襲" },
+};
 // 通常の敵の特徴（桜井流：一言で言える特徴に尖らせる）。動物ごとに1つ（ANIMAL_TRAIT）。バトルを始めるときに能力値へ掛ける
 // dmgCut＝受けるダメージを減らす、evade＝攻撃をかわす(%)、hpMult・atkMult、hits・hitMult＝1ターンの攻撃回数と1回の倍率、accAdd＝命中、chargeMult＝溜めて強攻撃
 const ENEMY_TRAITS = {
@@ -1294,6 +1306,32 @@ const ENEMY_TRAITS = {
   double:  { name: "れんげき", desc: "1ターンに2回攻撃する（1回は弱い）", hits: 2, hitMult: 0.6 },
   keen:    { name: "ねらう",   desc: "攻撃がよく当たる（攻撃は少し弱い）", accAdd: 20, atkMult: 0.9 },
   charger: { name: "ためる",   desc: "力を溜めて、次のターンに強攻撃。溜めている間に倒すか、防御", chargeMult: 1.8 },
+};
+// 仲間の「くせ」：仲間になった敵は、敵のときの特徴を、仲間としての長所と短所に変えて持つ（桜井流：長所を伸ばしたら短所も）。
+// dmgCut＝受けるダメージを減らす、evadeAdd＝回避、hpMult・enMult＝最大HP・EN、dmgMult＝与えるダメージ、accAdd＝命中、
+// tackleHits・tackleMult＝たいあたりの回数と1回の倍率、guardCharge＝防御した次の攻撃の倍率
+const ALLY_QUIRKS = {
+  hard:    { desc: "受けるダメージ−2。最大ENは1割少ない", dmgCut: 2, enMult: 0.9 },
+  swift:   { desc: "攻撃を15%かわす。最大HPは1割少ない", evadeAdd: 15, hpMult: 0.9 },
+  tough:   { desc: "最大HP+25%。与えるダメージは1割少ない", hpMult: 1.25, dmgMult: 0.9 },
+  fierce:  { desc: "与えるダメージ+20%。最大HPは15%少ない", dmgMult: 1.2, hpMult: 0.85 },
+  double:  { desc: "たいあたりが2回攻撃（1回は6割の威力）", tackleHits: 2, tackleMult: 0.6 },
+  keen:    { desc: "命中+10。与えるダメージは少し少ない", accAdd: 10, dmgMult: 0.95 },
+  charger: { desc: "防御した次の攻撃が1.5倍", guardCharge: 1.5 },
+};
+// 二つ名の個体（金色のレア個体の一部）：特徴がさらに尖る。title＝二つ名、desc＝説明、ほかは特徴の値を上書き・追加
+// survive＝1回だけHP1で耐える、rageBelowHalf＝HP半分以下で攻撃の倍率、sureHit＝攻撃をかわせない
+const NAMED_RARE_CHANCE = 0.3;      // レア個体のうち、二つ名を持つ割合
+const NAMED_EXP_MULT = 1.5;         // 経験値（レア個体の分に、さらに掛ける）
+const NAMED_DROP_LEGEND = 0.4;      // 落とすパーツがレジェンドになる確率（ほかはスーパーレア）
+const NAMED_BY_TRAIT = {
+  hard:    { title: "鋼の",       desc: "受けるダメージ−6。威力の大きいわざで", dmgCut: 6 },
+  swift:   { title: "疾風の",     desc: "攻撃を4割かわす。必中のわざが効く", evade: 40 },
+  tough:   { title: "不屈の",     desc: "1回だけ、倒れずにHP1で踏みとどまる", survive: true },
+  fierce:  { title: "狂乱の",     desc: "HPが半分を切ると、攻撃がさらに3割強くなる", rageBelowHalf: 1.3 },
+  double:  { title: "乱れ打ちの", desc: "1ターンに3回攻撃する", hits: 3 },
+  keen:    { title: "必中の",     desc: "攻撃をかわせない", sureHit: true },
+  charger: { title: "破壊の",     desc: "力を溜めて、次のターンに2.5倍の強攻撃", chargeMult: 2.5 },
 };
 // 動物 → 特徴（機械遺跡は絵の名前、砂漠は動物の id）
 const ANIMAL_TRAIT = {
@@ -1925,11 +1963,13 @@ function pickWeighted(rates) {
 // ================================================================
 //  機体
 // ================================================================
-const maxHpOf = u => u.baseHp + LEVEL_HP_GROWTH * (u.lv - 1) + (DEBUG_HP ? DEBUG_HP_BONUS : 0);
-const maxEnOf = u => u.baseEn + (u.enGrowth || LEVEL_EN_GROWTH) * (u.lv - 1);
+// 仲間のくせ（なければ空）
+const quirkOf = u => (u && u.quirk && ALLY_QUIRKS[u.quirk]) || {};
+const maxHpOf = u => Math.round((u.baseHp + LEVEL_HP_GROWTH * (u.lv - 1)) * (quirkOf(u).hpMult || 1)) + (DEBUG_HP ? DEBUG_HP_BONUS : 0);
+const maxEnOf = u => Math.round((u.baseEn + (u.enGrowth || LEVEL_EN_GROWTH) * (u.lv - 1)) * (quirkOf(u).enMult || 1));
 const typeOf = u => u.isLeader ? START_TYPES.find(t => t.key === u.kind) : null;
 // 戦闘中だけの状態（戦闘ごとにリセット）
-const freshBattleState = () => ({ guard: 0, critUp: 0, barrage: 0, blind: 0, curl: 0, cover: 0, accUp: 0, missStreak: 0, evadeStreak: 0, ear: 0, brace: 0, braceLeft: 0 });
+const freshBattleState = () => ({ guard: 0, critUp: 0, barrage: 0, blind: 0, curl: 0, cover: 0, accUp: 0, missStreak: 0, evadeStreak: 0, ear: 0, brace: 0, braceLeft: 0, charged: 0, frozen: 0 });
 const tackleOf = u => u.baseTackle + Math.floor((u.lv - 1) * TACKLE_GROWTH);
 
 function createUnit(o) {
@@ -1943,6 +1983,7 @@ function createUnit(o) {
     free: new Array(o.isLeader ? HERO_FREE_SLOTS : ALLY_FREE_SLOTS).fill(null),
     manual: false,   // 手動で付け替えた機体は、自動の入れ替え対象にしない
     animal: o.animal || null, abilities: (o.abilities || []).slice(),   // 動物と、持っている能力（heatproof など）
+    quirk: ALLY_QUIRKS[o.quirk] ? o.quirk : null,   // 仲間のくせ（敵のときの特徴から）
     skills: { guard: 1, unique: 1 },   // 防御と固有技のスキルレベル
     bs: freshBattleState(),
   };
@@ -1958,7 +1999,7 @@ function createAlly(def, sprite, o = {}) {
   const animal = o.animal || sprite, a = animalDef(animal);
   if (ANIMAL_DEFS[animal]) sprite = ANIMAL_DEFS[animal].spriteId;   // 砂漠の動物：絵は動物のデータから（差し替えはデータだけ）
   const u = createUnit({ name: o.name || a.name, sprite, kind: def.key, hp: def.ally.hp, en: def.ally.en, tackle: def.ally.tackle,
-    lv: o.lv || 1, unique: a.unique || ANIMAL_UNIQUE[sprite], part: o.part || def.ally.part, plus: o.plus || 0 });
+    lv: o.lv || 1, unique: a.unique || ANIMAL_UNIQUE[sprite], part: o.part || def.ally.part, plus: o.plus || 0, quirk: o.quirk });
   u.animal = animal;
   u.abilities = (a.abilities || []).slice();
   return u;
@@ -2203,7 +2244,9 @@ function placeRare(stairs) {
   const far = cells.filter(c => c.d >= RARE_MIN_DIST_FROM_STAIRS);
   const p = far.length ? far[rnd(far.length)] : cells.reduce((a, b) => b.d > a.d ? b : a);
   const t = pickEnemyType();
-  enemies.push(makeRare(t, p.x, p.y, pickAnimal(t)));
+  const e = makeRare(t, p.x, p.y, pickAnimal(t));
+  if (Math.random() < NAMED_RARE_CHANCE) e.named = true;   // 二つ名（中身は、動物が決まったときに）
+  enemies.push(e);
 }
 
 // いまの階の敵の構成（ダンジョンの表から）
@@ -2628,7 +2671,12 @@ const teamHasAbility = ab => team.some(u => unitHasAbility(u, ab));   // HP0の�
 // 機体が持つ能力の一覧（動物の能力 → 付けている能力パーツの能力。重なりなし）
 const unitAbilities = u => [...new Set([...(u.abilities || []), ...slotItems(u).filter(isAbilityItem).map(it => partOf(it).ability)])];
 // 名前の横の小さなタグ（「耐熱」など）。能力がなければ何も足さない
-function appendAbilityTags(node, u) { for (const ab of unitAbilities(u)) node.append(el("span", "abTag", ABILITIES[ab].name)); return node; }
+function appendAbilityTags(node, u) {
+  for (const ab of unitAbilities(u)) node.append(el("span", "abTag", ABILITIES[ab].name));
+  if (u.quirk) { const q = el("span", "qTag", ENEMY_TRAITS[u.quirk].name); q.title = ALLY_QUIRKS[u.quirk].desc; node.append(q); }   // くせ
+  return node;
+}
+const quirkText = u => u.quirk ? `${ENEMY_TRAITS[u.quirk].name}（${ALLY_QUIRKS[u.quirk].desc}）` : "";
 const gimmickOf = (d = dungeon) => d && d.gimmick ? GIMMICKS[d.gimmick] : null;
 const isCaveNormalFloor = (f = floorNo) => f >= 1 && !isBossFloor(f);
 // 熱気が効いているか（仕掛けのあるダンジョンの、洞窟の通常階で、チームに耐熱がいない）
@@ -2823,7 +2871,8 @@ function applyLayoutVars() {
 // 仲間の人数の補正（バトルを始めるときの人数で決める。倍率の計算の最後に掛ける：切り上げ、最低1）
 const partySizeMult = (n = team.length) => PARTY_SIZE_ENEMY_MULT[Math.max(1, Math.min(TEAM_MAX, n))];
 // 通常の敵の特徴（動物から。ボスと、動物がまだ決まっていない敵は null）
-const traitOf = e => (!e || e.boss) ? null : ENEMY_TRAITS[ANIMAL_TRAIT[e.animal || e.sprite]] || null;
+const traitKeyOf = e => (!e || e.boss) ? null : ANIMAL_TRAIT[e.animal || e.sprite] || null;
+const traitOf = e => { const k = traitKeyOf(e); if (!k) return null; return e.named ? { ...ENEMY_TRAITS[k], ...NAMED_BY_TRAIT[k], name: ENEMY_TRAITS[k].name } : ENEMY_TRAITS[k]; };
 // バトルでの能力値：人数の補正 × 特徴の倍率（切り上げ、最低1）
 function partySized(e, n = team.length) {
   if (e.boss) return { maxHp: e.maxHp, hp: e.hp, atk: e.atk };
@@ -2841,6 +2890,11 @@ function startBattle(e) {
   mode = "battle";
   e.awake = true;
   chooseAnimal(e);
+  if (e.named && !e.namedTitle && traitKeyOf(e)) {   // 二つ名：名前と経験値
+    e.namedTitle = NAMED_BY_TRAIT[traitKeyOf(e)].title;
+    e.name = e.namedTitle + e.name.replace(/^レア/, "");
+    e.exp = Math.round(e.exp * NAMED_EXP_MULT);
+  }
   applyPartySize(e);
   if (!e.boss && !e.rare) { const fs = fightStats[floorNo] || (fightStats[floorNo] = { oneHit: 0, battle: 0 }); fs.battle++; }
   for (const u of team) u.bs = freshBattleState();
@@ -2852,7 +2906,8 @@ function startBattle(e) {
   battleLines = []; renderLog();
   log(e.boss ? `ボス「${e.name}」との戦闘！` : e.rare ? `金色に輝く${e.name.replace(/^レア/, "")}が現れた！` : `${e.name}が現れた！`, e.rare ? "#ffd23a" : "", "battle", "battle-start");
   const tr = traitOf(e);
-  if (tr) log(`【${tr.name}】${tr.desc}`, tc("accent"), null, "trait");
+  if (e.named) log(`二つ名を持つ個体だ！【${e.namedTitle.replace(/の$/, "")}】${tr.desc}`, "#ffd23a", null, "trait");
+  else if (tr) log(`【${tr.name}】${tr.desc}`, tc("accent"), null, "trait");
   hideHint();
   $("mapScreen").hidden = true;
   $("battle").hidden = false;
@@ -3093,7 +3148,7 @@ function partEnCost(u, p) {
 function hitChance(u, base, opts = {}) {
   if (opts.sure) return 100;
   const t = typeOf(u);
-  let a = base + u.accBonus + (opts.mod || 0) + u.bs.accUp + Math.min(MISS_STREAK_CAP, u.bs.missStreak * MISS_STREAK_BONUS);
+  let a = base + u.accBonus + (quirkOf(u).accAdd || 0) + (opts.mod || 0) + u.bs.accUp + Math.min(MISS_STREAK_CAP, u.bs.missStreak * MISS_STREAK_BONUS);
   const ha = traitsOf(u).heavyAcc;
   if (opts.part && ha && ha.types.includes(opts.part.type)) a += ha.bonus;
   return Math.max(PLAYER_ACC_MIN, Math.min(100, a));
@@ -3158,6 +3213,9 @@ function moveInfo(u, key) {
   // レベル倍率（味方のダメージを与えるわざすべて）。四捨五入、最低1
   if (info.damaging) {
     if (!info.levelDone) info.power = Math.max(1, Math.round(info.power * levelMult(u)));
+    // れんげき（仲間のくせ）：たいあたりが2回攻撃（1回の威力は tackleMult 倍）
+    const q = quirkOf(u);
+    if (key === "tackle" && q.tackleHits) { info.hits = q.tackleHits; info.power = Math.max(1, Math.round(info.power * q.tackleMult)); }
     info.short = `威力${info.power}${info.hits > 1 ? `×${info.hits}` : ""}`;
   }
   return info;
@@ -3169,6 +3227,7 @@ function doDamage(u, info) {
   let hitAny = false;
   for (let h = 0; h < info.hits && e.hp > 0; h++) {
     const label = info.hits > 1 ? `${info.name}(${h + 1})` : info.name;
+    if (e.boss && battle.bossHidden) { log(`${u.name}の${label}！ 砂の中で、当たらない。`, "", null, "attack"); popNumber("当たらない", tc("miss"), "miss"); continue; }
     if (!info.sure && !roll(info.acc)) {
       u.bs.missStreak = Math.min(MISS_STREAK_CAP / MISS_STREAK_BONUS, u.bs.missStreak + 1);
       battle.stats.maxMissStreak = Math.max(battle.stats.maxMissStreak || 0, u.bs.missStreak);
@@ -3185,17 +3244,22 @@ function doDamage(u, info) {
       continue;
     }
     let dmg = varied(info.power);
+    const q = quirkOf(u);
+    if (q.dmgMult) dmg = Math.max(1, Math.round(dmg * q.dmgMult));
+    if (u.bs.charged) dmg = Math.round(dmg * u.bs.charged);   // ためる（仲間のくせ）：防御した次の攻撃
     const crit = roll(critRateOf(u));
     if (crit) dmg = Math.floor(dmg * ((traitsOf(u).crit || {}).mult || CRIT_MULT));
     if (tr.dmgCut) dmg = Math.max(1, dmg - tr.dmgCut);   // かたい
+    if (e.boss && battle.bossShield) dmg = Math.max(1, Math.ceil(dmg * BOSS_SPECIALS.shield.cut));   // 鉄壁の構え
     e.hp = Math.max(0, e.hp - dmg);
+    if (e.hp === 0 && tr.survive && !e.survived) { e.hp = 1; e.survived = true; log(`${e.name}は踏みとどまった！`, "", null, "attack"); }   // 不屈
     hitAny = true;
     log(`${u.name}の${label}！ ${crit ? "会心！ " : ""}${dmg}ダメージ。`, crit ? tc("crit") : "", null, "attack");
     popNumber(`-${dmg}`, crit ? tc("crit") : tc("textStrong"), "enemy", crit);
     hitFeel($("eSprite"), dmg / e.maxHp, crit, true);
   }
   // 1回限りの効果はここで使い切る
-  u.bs.critUp = 0; u.bs.accUp = 0;
+  u.bs.critUp = 0; u.bs.accUp = 0; u.bs.charged = 0;
   if (info.kind === "part") u.bs.barrage = 0;
   if (hitAny && info.def.stun && !e.boss) { battle.stunned = true; log(`${e.name}はひるんで動けない！`, "", null, "attack"); }
 }
@@ -3215,6 +3279,7 @@ function executeMove(u, key) {
   if (d.kind === "unique") flashScreen(d.flash);
   if (key === "guard") {
     u.bs.guard = GUARD_CUT;
+    if (quirkOf(u).guardCharge) u.bs.charged = quirkOf(u).guardCharge;   // ためる（仲間のくせ）
     const rec = guardRecover(u.skills.guard), before = u.en;
     u.en = Math.min(u.maxEn, u.en + rec);
     log(`${u.name}は防御の構え。EN+${u.en - before}。`, "", null, "guard");
@@ -3253,7 +3318,11 @@ const ACTIONS = {
 };
 
 function nextActor(from) {
-  for (let i = from + 1; i < team.length; i++) if (team[i].hp > 0) return i;
+  for (let i = from + 1; i < team.length; i++) {
+    if (team[i].hp <= 0) continue;
+    if (team[i].bs.frozen > 0) { team[i].bs.frozen--; log(`${team[i].name}は、すくんで動けない！`, "", null, "enemy"); continue; }   // にらみ
+    return i;
+  }
   return -1;
 }
 
@@ -3291,6 +3360,13 @@ async function runCommand(action, arg) {
   }
   battle.round++;
   battle.actor = nextActor(-1);
+  if (battle.actor < 0) {   // 生きている全員が動けない（にらみ）：そのまま敵の番
+    renderBattle(); await pause();
+    await enemyPhase();
+    if (alive().length === 0) { bigFlash("wipe"); if (battle.enemy.boss) noteBossLoss(floorNo); await pause(500); onDefeat(); return; }
+    battle.round++;
+    battle.actor = nextActor(-1);
+  }
   battle.busy = false;
   await beginTurn();
 }
@@ -3313,7 +3389,7 @@ function enemyStrike(e, target, power, acc, label, heavy = false) {
       popNumber("回避", tc("evade"), "ally");
       return;
     }
-    const ev = Math.min(EVADE_CAP, u.evade);
+    const ev = Math.min(EVADE_CAP, u.evade + (quirkOf(u).evadeAdd || 0));
     const chance = Math.max(ENEMY_ACC_MIN, acc - ev) + u.bs.evadeStreak * EVADE_STREAK_BONUS;
     if (!roll(chance)) {
       if (ev > 0) { u.bs.evadeStreak++; log(`${label}！ ${u.name}はひらりとかわした。`, "", null, "enemy"); popNumber("回避", tc("evade"), "ally"); }
@@ -3329,6 +3405,7 @@ function enemyStrike(e, target, power, acc, label, heavy = false) {
   if (coverCut) { dmg *= 1 - coverCut / 100; cut.push("かくれがえし"); }
   if (u.bs.ear) { dmg *= 1 - u.bs.ear / 100; u.bs.ear = 0; cut.push("聞き耳"); }
   if (u.bs.braceLeft > 0) { dmg *= 1 - u.bs.brace / 100; u.bs.braceLeft--; cut.push("ふんばり"); }
+  if (quirkOf(u).dmgCut) { dmg -= quirkOf(u).dmgCut; cut.push("くせ"); }   // かたい（仲間のくせ）
   dmg = Math.max(1, Math.round(dmg));
   u.hp = Math.max(0, u.hp - dmg);
   log(`${label}！ ${u.name}に${dmg}ダメージ${cut.length ? `（${cut.join("・")}）` : ""}。`, "", null, "enemy");
@@ -3340,6 +3417,8 @@ function enemyStrike(e, target, power, acc, label, heavy = false) {
 // ほえるで下がった攻撃力
 function enemyPower(e, mult = 1) {
   let p = e.atk * mult * (e.enraged ? e.def.enrageBelowHalf : 1);   // 威嚇（コブラ王）のあとは攻撃力の倍率
+  const ntr = traitOf(e);
+  if (ntr && ntr.rageBelowHalf && e.hp <= e.maxHp / 2) p *= ntr.rageBelowHalf;   // 狂乱（二つ名）
   if (battle.roarTurns > 0) p = p * (1 - battle.roarRate / 100);
   return Math.max(1, Math.round(p));
 }
@@ -3349,7 +3428,7 @@ const bossAi = e => ({ ...BOSS_AI, ...(e.def.ai || {}), weights: { ...BOSS_AI.we
 // ボスの行動を選ぶ：最初は通常攻撃。予告なしの通常攻撃が maxCalm 回続いたら、次は必ず予告（溜めるか構える）
 function chooseBossAction(e) {
   const ai = bossAi(e), w = ai.weights;
-  let acts = Object.keys(w).filter(k => w[k] > 0);
+  let acts = Object.keys(w).filter(k => w[k] > 0 && (k !== "special" || (ai.special && !(battle.minionTurns > 0))));
   if (battle.bossTurn <= ai.firstCalm) acts = ["attack"];
   else if (battle.calm >= ai.maxCalm) acts = acts.filter(k => k !== "attack");
   let act = acts[0];
@@ -3384,7 +3463,7 @@ async function enemyPhase() {
       const t = randomAlive();
       if (!t) break;
       const mult = heavy ? tr.chargeMult : i > 0 ? tr.hitMult : 1;
-      enemyStrike(e, t, enemyPower(e, mult), e.acc, heavy ? `${e.name}の強攻撃` : hits > 1 ? `${e.name}の連撃(${i + 1})` : `${e.name}の攻撃`);
+      enemyStrike(e, t, enemyPower(e, mult), e.acc, heavy ? `${e.name}の強攻撃` : hits > 1 ? `${e.name}の連撃(${i + 1})` : `${e.name}の攻撃`, !!tr.sureHit);
       renderBattle();
       await pause();
     }
@@ -3392,6 +3471,33 @@ async function enemyPhase() {
     return;
   }
   battle.bossTurn++;
+  battle.bossShield = false;   // 鉄壁の構えは、こちらの1回の番だけ
+  const sp = BOSS_SPECIALS[bossAi(e).special] || {};
+  // 呼ばれた群れ：ボスの番のはじめに、手下が1体を攻撃
+  if (battle.minionTurns > 0) {
+    battle.minionTurns--;
+    const t = randomAlive();
+    if (t) { minionsAct(false); enemyStrike(e, t, enemyPower(e, sp.mult), e.acc, `${sp.minionName}の攻撃`); renderBattle(); await pause(); }
+    if (!alive().length) { endTurn(); return; }
+  }
+  // 砂に潜ったあと：全員への奇襲
+  if (battle.bossHidden) {
+    battle.bossHidden = false;
+    for (const t of alive()) enemyStrike(e, t, enemyPower(e, sp.mult), e.acc, `${e.name}の${sp.ambush}`);
+    renderBattle(); await pause(); endTurn();
+    return;
+  }
+  // にらんだ相手：攻撃して、1ターン動けなくする（防御していれば受け流す）
+  if (battle.glareTarget) {
+    const t = battle.glareTarget; battle.glareTarget = null;
+    if (t.hp > 0) {
+      const guarded = !!t.bs.guard;
+      enemyStrike(e, t, enemyPower(e, sp.mult), e.acc, `${e.name}の${sp.name}`, true);
+      if (t.hp > 0) { if (guarded) log(sp.resist.replace("%s", t.name), "", null, "enemy"); else { t.bs.frozen = 1; log(sp.hit.replace("%s", t.name), "", null, "enemy"); } }
+    }
+    renderBattle(); await pause(); endTurn();
+    return;
+  }
   // HPが半分以下になったら、1回だけ威嚇する（以降、攻撃力が上がる）
   if (e.def.enrageBelowHalf && !e.enraged && e.hp <= e.maxHp / 2) {
     e.enraged = true;
@@ -3426,6 +3532,20 @@ async function enemyPhase() {
     battle.heavyReady = true;
     log(`${e.name}は力を溜めている…！ 次は強攻撃だ。`, "", null, "enemy");
     popNumber("力を溜めている", tc("chargeBg"), "center");
+    renderBattle();
+    await pause();
+    endTurn();
+    return;
+  }
+  if (act === "special") {
+    const k = bossAi(e).special;
+    let text = sp.prep;
+    if (k === "call") battle.minionTurns = sp.turns;
+    else if (k === "shield") battle.bossShield = true;
+    else if (k === "burrow") battle.bossHidden = true;
+    else if (k === "glare") { const t = randomAlive(); battle.glareTarget = t; text = sp.prep.replace("%s", t ? t.name : ""); }
+    log(`${e.name}は${text}`, "", null, "enemy");
+    popNumber(sp.name, tc("chargeBg"), "center");
     renderBattle();
     await pause();
     endTurn();
@@ -3467,7 +3587,7 @@ function rollNormalDrop(e) {
   return heatsinkRoll(HEATSINK_DROP_CHANCE) ? RADIATOR_ID : id;   // 砂漠の洞窟：まれに放熱ユニット（系統のパーツの代わり）
 }
 function rollRareDrop(e) {
-  const rarity = Math.random() < RARE_DROP_LEGEND ? 3 : 2;
+  const rarity = Math.random() < (e.named ? NAMED_DROP_LEGEND : RARE_DROP_LEGEND) ? 3 : 2;
   return PARTS.find(p => p.type === e.def.drop && p.rarity === rarity).id;
 }
 function rollBossDrop(f) {
@@ -3569,7 +3689,7 @@ const RECRUIT_MAX_RARITY = 2;
 function makeRecruit(e) {
   let id = floorRarityPart(e.def.drop);
   if (partById(id).rarity > RECRUIT_MAX_RARITY) id = PARTS.find(p => p.type === e.def.drop && p.rarity === RECRUIT_MAX_RARITY).id;
-  return createAlly(e.def, e.sprite, { lv: leader().lv, part: id, animal: e.animal });
+  return createAlly(e.def, e.sprite, { lv: leader().lv, part: id, animal: e.animal, quirk: ANIMAL_TRAIT[e.animal || e.sprite] });
 }
 function rollRecruit(e) {
   if (e.boss || e.rare || !e.def.recruit) return null;
@@ -3763,6 +3883,7 @@ function renderRecruit() {
   const stat = (k, v) => { const d = el("div", "", k + " "); d.append(el("b", "", v)); g.append(d); };
   stat("HP", String(u.maxHp)); stat("EN", String(u.maxEn)); stat("たいあたり", String(Math.max(1, Math.round(tackleOf(u) * levelMult(u)))));
   stat("特性", traitTextOf(u));
+  if (u.quirk) { stat("くせ", quirkText(u)); g.lastChild.style.gridColumn = "1 / -1"; }   // 説明が長いので1行全体
   nm.append(g);
   top.append(nm);
   body.append(top);
@@ -3865,6 +3986,7 @@ function autoChoose(u) {
   // 3. ボスの強攻撃の前で、受けると危ないなら防御
   if (e.boss && battle.heavyReady && u.hp <= enemyPower(e, BOSS_HEAVY_MULT) + DAMAGE_VARIANCE) return "guard";
   if (e.boss && battle.sweepReady && u.hp <= enemyPower(e, bossAi(e).sweepMult) + DAMAGE_VARIANCE) return "guard";   // 全員への攻撃の前も
+  if (e.boss && (battle.glareTarget === u || battle.bossHidden)) return "guard";   // にらまれた／砂に潜った（攻撃は当たらない）
   const ctr = traitOf(e);
   if (ctr && ctr.chargeMult && battle.eCharged && u.hp <= enemyPower(e, ctr.chargeMult) + DAMAGE_VARIANCE) return "guard";
   // 4. 固有技
@@ -3980,7 +4102,7 @@ let currentCmds = [];
 // バトルのヒント：1回のバトルで1つまで（最初のバトル → 次のバトルで敵の特徴）。予告は、初めて見たときにいつでも
 function battleHints() {
   if (!battle || !settings.hints) return;
-  if (battle.heavyReady || battle.sweepReady || battle.eCharged) { showHint("telegraph"); return; }
+  if (battle.heavyReady || battle.sweepReady || battle.eCharged || battle.bossHidden || battle.glareTarget) { showHint("telegraph"); return; }
   if (battle._hinted || battle.menu !== "moves") return;
   battle._hinted = true;
   if (!showHint("battle") && traitOf(battle.enemy)) showHint("trait");
@@ -3998,9 +4120,14 @@ function renderBattle() {
   $("eHpText").textContent = `${st.length ? st.join(" ") + "　" : ""}HP ${e.hp}/${e.maxHp}`;
   $("eHpBar").firstElementChild.style.width = (100 * e.hp / e.maxHp) + "%";
   // 予告：溜め（ボスは必中の強攻撃、通常の敵「ためる」は強攻撃）、構え（全員への攻撃）
-  $("charge").textContent = battle.sweepReady ? "⚠ 構えている！ 次のターンに全員へ攻撃（全員防御が有効）"
-    : battle.heavyReady ? "⚡ 力を溜めている！ 次のターンに強攻撃（必中）" : "⚡ 力を溜めている！ 次のターンに強攻撃";
-  $("charge").hidden = !(battle.heavyReady || battle.sweepReady || battle.eCharged);
+  $("charge").textContent = battle.bossHidden ? "⚠ 砂の中！ 攻撃は当たらない。次は全員への奇襲（全員防御が有効）"
+    : battle.glareTarget ? `👁 ${battle.glareTarget.name}をにらんでいる！ 防御すれば受け流せる`
+    : battle.sweepReady ? "⚠ 構えている！ 次のターンに全員へ攻撃（全員防御が有効）"
+    : battle.heavyReady ? "⚡ 力を溜めている！ 次のターンに強攻撃（必中）"
+    : battle.bossShield ? "🛡 鉄壁の構え！ この番はダメージが半分"
+    : battle.eCharged ? "⚡ 力を溜めている！ 次のターンに強攻撃"
+    : battle.minionTurns > 0 ? `群れが加わっている（あと${battle.minionTurns}ターン）` : "";
+  $("charge").hidden = !$("charge").textContent;
 
   team.forEach((u, i) => {
     const d = $("ally" + i);
@@ -4128,7 +4255,7 @@ const guardAllActive = () => !!battle && battle.guardAllRound === battle.round;
 function updateGuardAllBtn() {
   const b = $("btnGuardAll");
   if (!b) return;
-  const warn = !!(battle && (battle.heavyReady || battle.sweepReady || battle.eCharged));
+  const warn = !!(battle && (battle.heavyReady || battle.sweepReady || battle.eCharged || battle.bossHidden || battle.glareTarget));
   b.classList.toggle("blink", warn && settings.fx && blinkOn);
   b.classList.toggle("thick", warn && !settings.fx);
 }
@@ -4322,6 +4449,7 @@ function renderMenu() {
   stat("EN", `${u.en}/${u.maxEn}`);
   stat("たいあたり", `威力${tackleOf(u)}`);
   stat("特性", traitTextOf(u));
+  if (u.quirk) { stat("くせ", quirkText(u)); g.lastChild.style.gridColumn = "1 / -1"; }   // 説明が長いので1行全体
   if (unitAbilities(u).length) stat("能力", unitAbilities(u).map(ab => ABILITIES[ab].name).join("・"));
   head.append(g);
   body.append(head);
@@ -5126,7 +5254,7 @@ function unitToSave(u, idx) {
     name: u.name, sprite: u.sprite, isLeader: u.isLeader, kind: u.kind,
     baseHp: u.baseHp, baseEn: u.baseEn, baseTackle: u.baseTackle, accBonus: u.accBonus, evade: u.evade,
     lv: u.lv, exp: u.exp, hp: u.hp, en: u.en, skills: { guard: u.skills.guard, unique: u.skills.unique }, unique: u.unique, manual: u.manual,
-    animal: u.animal || null,
+    animal: u.animal || null, quirk: u.quirk || null,
   };
   // 版5：固定パーツ（仲間）はパーツそのもの、自由枠は持ち物の番号
   o.fixed = u.fixed ? { id: u.fixed.id, plus: u.fixed.plus || 0 } : null;
@@ -5263,7 +5391,7 @@ function applySave(d) {
       u.free = (d.version >= 5 ? s.free : s.equip).map(i => i === null ? null : all[i]);
     } else {
       const def = baseOfAlly(s);
-      u = createAlly(def, s.sprite, { name: s.name, lv: s.lv, animal: s.animal || s.sprite });
+      u = createAlly(def, s.sprite, { name: s.name, lv: s.lv, animal: s.animal || s.sprite, quirk: s.quirk });
       if (d.version >= 5) {
         u.fixed = s.fixed ? fixedPart(s.fixed.id, s.fixed.plus) : fixedPart(def.ally.part);
         u.free = s.free.map(i => i === null ? null : all[i]);
