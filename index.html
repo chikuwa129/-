@@ -181,6 +181,12 @@
   @keyframes bigFlash { 0% { opacity: 1; background: var(--t-bigFlashLight); } 35% { opacity: 1; background: var(--t-bigFlashLight); } 50% { opacity: 1; background: var(--t-bigFlashDark); } 100% { opacity: 0; background: var(--t-bigFlashDark); } }
   .bar.xp { height: 2px; } .bar.xp i { background: var(--t-xp); }
   #dlgText { white-space: pre-line; }
+  /* ヒント（初めての場面で1回だけ）：いま見えている画面の上の方に重ねる。タップで消える */
+  #hint { position: absolute; left: 8px; right: 8px; top: 8px; z-index: 6; padding: 7px 10px; border-radius: 8px; font-size: 13px; line-height: 1.45;
+    background: var(--t-infoBg); border: 1px solid var(--t-infoHi); color: var(--t-textStrong); box-shadow: 0 2px 8px var(--t-shadowSoft); animation: hintIn .25s ease-out; }
+  #hint::before { content: "💡 "; }
+  @keyframes hintIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  #villageScene { position: relative; }
   @keyframes shake2 { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-5px); } }
   @media (prefers-reduced-motion: reduce) { #fx.pop, #banner.show, .shake2, .hitstop, .hitSpark, #flash.big { animation: none; } .hitSpark { display: none; } #banner.show { opacity: 1; } }
 
@@ -687,7 +693,7 @@
 //  調整用の定数・データ
 // ================================================================
 // 版の目印（作業のたびに更新）。タイトル画面の隅、設定欄、?layout=1 の診断に出す
-const BUILD_ID = "1L-20261114-1210";
+const BUILD_ID = "1L-20261114-1500";
 // ================================================================
 //  色調（画面の色はすべてここから。ドット絵のパレット、ボスの色、レア度の色、世界地図の固定色は除く）
 //  THEME＝全画面の標準の色（1J の前の版の色）、THEME_MAP＝世界マップの画面だけの色（古地図）。地図の画面に入るときと出るときに切り替える
@@ -1142,16 +1148,16 @@ const MINION_STOMP_PX = 2, MINION_STOMP_MS = 1000;   // 「力を溜めている
 
 // ボス（階の補正はかけない）。name＝ボスの名前（画面・メッセージ・クリア画面・絵の一覧は、すべてここから）。sprite＝絵（BOSS_SPRITES）、spriteSize＝絵の大きさ、minions＝群れの手下の絵（見た目だけ）
 const BOSSES = {
-  5:  { name: "クレストラプター", hint: "3ターンごとに力を溜めて、次のターンに強い一撃を撃ってくる。溜めたのを見たら、防御で受けるといい。", hp: 200, atk: 16, acc: 85, exp: 40, sprite: "raptorChief", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H }, minions: { sprite: "raptorMinion" },
+  5:  { name: "クレストラプター", ai: { sweepPrep: "群れに合図を送った…！ 次は全員への攻撃だ。", sweepName: "群れの突撃" }, hint: "力を溜めたら、次は1体に強い一撃。群れに合図を送ったら、次は全員への攻撃。溜めたら防御、合図なら全員防御で受けるといい。", hp: 200, atk: 16, acc: 85, exp: 40, sprite: "raptorChief", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H }, minions: { sprite: "raptorMinion" },
         drop: [0, 0.65, 0.25, 0.10] },
-  10: { name: "ガードホーン",     hint: "HPが半分を切ると、1ターンに2回攻撃してくる。半分を切る前に、HPとENを整えておこう。溜めたら防御、も忘れずに。", hp: 300, atk: 26, acc: 85, exp: 0, doubleBelowHalf: true, sprite: "guardian", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H },
+  10: { name: "ガードホーン",     ai: { sweepPrep: "前足を高く上げた…！ 次は全員への攻撃だ。", sweepName: "踏み鳴らし" }, hint: "HPが半分を切ると、1ターンに2回攻撃してくる。半分を切る前に、HPとENを整えておこう。前足を上げたら、全員防御だよ。", hp: 300, atk: 26, acc: 85, exp: 0, doubleBelowHalf: true, sprite: "guardian", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H },
         drop: [0, 0, 0.70, 0.30] },
 };
 // 砂漠の洞窟のボス。enrageBelowHalf＝HPが半分以下で攻撃力の倍率（1回だけメッセージ）、doubleBelowHalf＝HPが半分以下で2回攻撃
 const DESERT_BOSSES = {
-  5:  { name: "コブラ王", hint: "HPが半分を切ると頭巾を広げて、攻撃が強くなる。そこからは、力を溜めたら必ず防御を。", hp: 570, atk: 38, acc: 85, exp: 100, enrageBelowHalf: 1.25, enrageText: "頭巾を広げて威嚇した！",
+  5:  { name: "コブラ王", ai: { sweepPrep: "大きく息を吸い込んだ…！ 次は全員への攻撃だ。", sweepName: "毒の息" }, hint: "HPが半分を切ると頭巾を広げて、攻撃が強くなる。そこからは、力を溜めたら必ず防御を。", hp: 570, atk: 38, acc: 85, exp: 100, enrageBelowHalf: 1.25, enrageText: "頭巾を広げて威嚇した！",
         sprite: "cobraKing", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H }, drop: [0, 0.65, 0.25, 0.10] },
-  10: { name: "砂ワーム", hint: "HPが半分を切ると、1ターンに2回攻撃してくる。修理キットを残しておいて、後半に使うといい。", hp: 720, atk: 46, acc: 85, exp: 160, doubleBelowHalf: true,
+  10: { name: "砂ワーム", ai: { sweepPrep: "砂の中に潜った…！ 次は全員への攻撃だ。", sweepName: "砂嵐" }, hint: "HPが半分を切ると、1ターンに2回攻撃してくる。修理キットを残しておいて、後半に使うといい。", hp: 720, atk: 46, acc: 85, exp: 160, doubleBelowHalf: true,
         sprite: "sandWorm", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H }, drop: [0, 0, 0.70, 0.30] },
 };
 const FINAL_FLOOR = 10;
@@ -1272,8 +1278,28 @@ const floorLabel = (d, n) => n === 0 && d.courtyard ? COURTYARD_LABEL : `${d.flo
 // 実効の階（敵の強さ・経験値・パーツのレア度の表で使う）
 const effFloor = (f = floorNo, d = dungeon) => f + (f === 0 ? d.courtyardOffset : d.floorOffset);
 const curFloorLabel = (n = floorNo) => floorLabel(dungeon, n);
-const BOSS_CHARGE_EVERY = 3;       // 3ターンに1回「力を溜める」→ 次のターンに強攻撃
+// ボスの行動（桜井流：選択をランダムにして、強い行動には必ず1ターン前に予告を出す）。重みで選ぶ：
+// attack＝通常攻撃、charge＝力を溜める（次のターンに1体へ強攻撃 BOSS_HEAVY_MULT 倍）、sweep＝構える（次のターンに全員へ攻撃 sweepMult 倍）。
+// firstCalm＝最初のこのターン数は通常攻撃、maxCalm＝予告なしの通常攻撃はこの回数までしか続けない。ボスの表の ai で上書きできる
+const BOSS_AI = { weights: { attack: 4, charge: 3, sweep: 2 }, firstCalm: 1, maxCalm: 3, sweepMult: 0.85,
+  sweepPrep: "構えた…！ 次は全員への攻撃だ。", sweepName: "なぎ払い" };
 const BOSS_HEAVY_MULT = 2;
+// 通常の敵の特徴（桜井流：一言で言える特徴に尖らせる）。動物ごとに1つ（ANIMAL_TRAIT）。バトルを始めるときに能力値へ掛ける
+// dmgCut＝受けるダメージを減らす、evade＝攻撃をかわす(%)、hpMult・atkMult、hits・hitMult＝1ターンの攻撃回数と1回の倍率、accAdd＝命中、chargeMult＝溜めて強攻撃
+const ENEMY_TRAITS = {
+  hard:    { name: "かたい",   desc: "受けるダメージ−3（最低1）。威力の大きいわざが効く", dmgCut: 3 },
+  swift:   { name: "すばやい", desc: "攻撃を2割かわす。HPは少し少ない", evade: 20, hpMult: 0.9 },
+  tough:   { name: "しぶとい", desc: "HPが多いが、攻撃は弱い", hpMult: 1.4, atkMult: 0.8 },
+  fierce:  { name: "あらい",   desc: "攻撃が強いが、HPは少ない。先に倒そう", hpMult: 0.8, atkMult: 1.3 },
+  double:  { name: "れんげき", desc: "1ターンに2回攻撃する（1回は弱い）", hits: 2, hitMult: 0.6 },
+  keen:    { name: "ねらう",   desc: "攻撃がよく当たる（攻撃は少し弱い）", accAdd: 20, atkMult: 0.9 },
+  charger: { name: "ためる",   desc: "力を溜めて、次のターンに強攻撃。溜めている間に倒すか、防御", chargeMult: 1.8 },
+};
+// 動物 → 特徴（機械遺跡は絵の名前、砂漠は動物の id）
+const ANIMAL_TRAIT = {
+  dango: "hard", turtle: "tough", wolf: "swift", lion: "fierce", ptera: "double", bird: "keen", rex: "charger",
+  dustSnake: "swift", fenex: "keen", scarabot: "hard", lizaron: "tough", strideBird: "double", sandFish: "fierce", sandRhino: "charger", sandCamel: "tough",
+};
 const BOSS_HEAVY_ACC_DOWN = 10;
 
 // アイテム
@@ -1331,6 +1357,9 @@ const HIT_FEEL = { minMs: 180, maxMs: 360, minAmp: 4, maxAmp: 14, strongMult: 1.
 const BIG_FLASH_MS = { bossDown: 420, wipe: 360 };
 // 同じボスに続けてこの回数負けたら、整備員がそのボスのコツを教える（ヒントの文はボスの表の hint）
 const BOSS_HINT_AFTER_LOSSES = 2;
+// 整備員の見立て（桜井流：詰む前に、屈辱感のない形で出直しを勧める）。ratio＝耐えられるターン数 ÷ 倒すのにかかるターン数。
+// good 以上＝いけそう、hard 未満＝厳しい（村に戻って出直す道を出す）、その間＝五分五分。境目はボスとの戦い（ボット360戦）の勝率から：0.55未満 ≒ 勝率1割未満、0.85以上 ≒ 9割以上。enEff＝ENの都合で毎ターン一番強いわざは撃てない分
+const BOSS_OUTLOOK = { good: 0.85, hard: 0.55, enEff: 0.8, bossAcc: 0.9, enrage: 1.12, double: 1.4, heavyAvg: 1.15 };
 
 // 画面の作り。狭い画面（幅 NARROW_MAX 以下）だけに効く値は、CSS の変数に入れて使う
 // 表示枠（Claudeなど）の浮かぶバーが、このページの上端から覆う高さ（狭い画面だけ。CSSのpx）。
@@ -1342,6 +1371,21 @@ const TOP_BAR_GAP = 6;             // バーの下から最初の内容までの
 const TOP_ADJUST_MIN = -100, TOP_ADJUST_MAX = 40, TOP_ADJUST_STEP = 4;   // 設定「上の余白の調整」（px）。初期値0
 const LAYOUT_KEY = "robotRuinsLayout";      // 調整値の保存先（セーブとは別。セーブを消しても残る）
 const TUTORIAL_KEY = "robotRuinsTutorial";  // 最初の説明を見たか（セーブとは別）
+// 遊びながら覚えるヒント（桜井流：長い説明から始めない。初めてその場面になったときに、短く1回だけ）。出したかどうかは、この端末に覚える
+const HINTS_KEY = "robotRuinsHints";
+const HINT_MS = 6000;   // 表示する時間
+const HINTS = {
+  village:  "「出発」で行き先を選ぼう。目安を見て、無理のない場所から。",
+  walk:     "十字ボタンで歩こう。赤い輪の敵に体当たりすると、戦闘だ。",
+  battle:   "わざを選んで「決定」。パーツのわざは強いがENを使う。迷ったら、たいあたり。",
+  trait:    "敵には特徴がある。【かたい】なら威力の大きいわざ、【すばやい】なら当たりやすいわざで。",
+  telegraph:"予告だ！ 次の攻撃は強い。「防御」か「全員防御」で受けよう。",
+  onehit:   "頭に白い点がある敵は、触れるだけで倒せる（ひとうち）。",
+  part:     "パーツは自動で付く。メニューで付け替えや、使う前の比べもできる。",
+  done:     "この階を取りきった。「階段へ向かう」で、まっすぐ階段へ。",
+  prep:     "準備部屋だ。整備員に体当たりすると、回復と、ボスの見立てが聞ける。",
+  wipe:     "全滅しても、強さはそのまま。村で整えて、また潜ろう。",
+};
 const LAYOUT_DIAG = /[?&]layout=1(&|$)/.test(location.search);   // ?layout=1：画面の実測値を右下に出す
 const PAD_BTN_H = 52, PAD_BTN_W = 64, PAD_GAP = 6;   // 十字ボタン（3段で約170px）
 const ARENA_MIN_H = 190, ARENA_MIN_H_LOW = 160, LOW_SCREEN_H = 700;   // バトルの絵の領域（縮めない）。低い画面は160
@@ -1840,7 +1884,7 @@ let typeKey = null;
 let progress = null;     // { dungeons: { [key]: { clears, reached, boss5, boss10, pity } } }（makeProgress で作る）
 let saveFailed = false;
 // 設定（セーブに含める）：演出、確認なしで即実行、仲間のおまかせ、ひとうち、ミニマップの常時表示、一括回復の確認なし
-const DEFAULT_SETTINGS = { fx: true, instant: false, allyAuto: true, oneHit: true, miniMap: true, bulkNoConfirm: false, recruitConfirm: "ask", theme: "calm", mapTexture: true };   // theme は使わない（1J の名残。古いセーブとの互換のため残す）
+const DEFAULT_SETTINGS = { fx: true, instant: false, allyAuto: true, oneHit: true, miniMap: true, bulkNoConfirm: false, recruitConfirm: "ask", theme: "calm", mapTexture: true, hints: true };   // theme は使わない（1J の名残。古いセーブとの互換のため残す）
 let stock = [];          // 村のストック（仲間と同じ形の機体データ。主人公機は入らない）
 let settings = { ...DEFAULT_SETTINGS };
 let blinkOn = true;        // 0.5秒ごとに反転（キラキラ、ミニマップの点）
@@ -2533,12 +2577,38 @@ function bossHintHere() {
   if (!b || !b.hint || bossDone(floorNo) || (bossLosses[bossKey(floorNo)] || 0) < BOSS_HINT_AFTER_LOSSES) return null;
   return `そうそう、${b.name}のことだけどね。\n${b.hint}`;
 }
+// この階のボスとの見込み（整備したあと＝全員HP満タンとして）。ボスがいなければ null
+function bossOutlook(f = floorNo) {
+  const b = dungeon.bosses[f];
+  if (!b || bossDone(f)) return null;
+  const O = BOSS_OUTLOOK;
+  // こちら：1ターンに与える期待ダメージ（各機体の一番強いわざ）。ボス戦の倍率は moveInfo の外なので入れない
+  const dpr = team.reduce((n, u) => n + Math.max(0, ...moveKeys(u).map(k => moveInfo(u, k)).filter(i => i.damaging).map(i => i.power * i.hits * (i.sure ? 100 : Math.min(100, i.acc || 0)) / 100)), 0) * O.enEff;
+  // ボス：1ターンに与える期待ダメージ（溜め・構えの分、半分以下での強化・2回攻撃の分をならして）
+  const bossDpr = b.atk * O.heavyAvg * O.bossAcc * (b.enrageBelowHalf ? O.enrage : 1) * (b.doubleBelowHalf ? O.double : 1);
+  const teamHp = team.reduce((n, u) => n + u.maxHp, 0);
+  const toWin = dpr > 0 ? b.hp / dpr : Infinity, toLose = teamHp / bossDpr, ratio = toLose / toWin;
+  const level = ratio >= O.good ? "good" : ratio >= O.hard ? "even" : "hard";
+  return { boss: b.name, ratio: Math.round(ratio * 100) / 100, toWin: Math.round(toWin * 10) / 10, toLose: Math.round(toLose * 10) / 10, level, solo: team.length === 1 };
+}
+// 見立ての一言
+function outlookText(o) {
+  if (!o) return "";
+  if (o.level === "good") return `今のチームなら、${o.boss}にもいけそうだ。溜めや構えを見たら、防御で受けて。`;
+  if (o.level === "even") return `${o.boss}には、勝てる見込みはあるけど、油断はできないね。${o.solo ? "仲間がいれば、ずっと楽になるよ。" : "回復アイテムと、防御を上手に使って。"}`;
+  const why = o.solo ? "仲間が一人もいないね。" : team.length < TEAM_MAX ? "仲間が足りないし、" : "";
+  return `うーん、今のチームだと${o.boss}はかなり厳しそうだ。${why}いったん村に戻って、レベルを上げたり仲間を増やしてから来るといい。B1Fから潜り直すのもありだよ。`;
+}
 function talkMech() {
-  const hint = bossHintHere();
-  showDialog("整備員", hint ? `整備するかい？\n\n${hint}` : "整備するかい？", [
+  const hint = bossHintHere(), o = bossOutlook();
+  const text = ["整備するかい？", o ? outlookText(o) : "", hint || ""].filter(Boolean).join("\n\n");
+  const btns = [
     { label: "整備する", primary: true, act: () => { healAll(); mapLog("整備完了。いってらっしゃい", "", "mech"); renderMap(); } },
-    { label: "仲間を入れ替える", act: openMechParty },
-    { label: "やめる", act: () => {} }]);
+    { label: "仲間を入れ替える", act: openMechParty }];
+  // 厳しいときは、村に戻って出直す道を出す（何度でも選べる。強制はしない）
+  if (o && o.level === "hard") btns.push({ label: "村に戻って出直す", act: () => goVillage(["整備員に見送られて、村に戻った。"]) });
+  btns.push({ label: "やめる", act: () => {} });
+  showDialog("整備員", text, btns);
 }
 // 村の「仲間」タブと同じ画面（解体はできない。主人公機は外せない）
 let mechParty = false;
@@ -2612,6 +2682,7 @@ function pickUpGround() {
   groundItems = groundItems.filter(i => i !== it);
   if (it.key === "part") {
     logPartGain(gainPart(it.part), "拾った", (t, c) => mapLog(t, c, "pickup"));
+    showHint("part");
   } else {
     inv.items[it.key]++;
     mapLog(`${ITEMS[it.key].name}を拾った。（所持${inv.items[it.key]}）`, "", "pickup");
@@ -2635,7 +2706,8 @@ function goDown() {
   newFloor();
   if (isBossFloor(floorNo)) {
     mapLog(`${curFloorLabel()}。空気が変わった…（全員EN+${bonus}）`, "", "stairs");
-    mapLog(bossHintHere() ? "準備部屋だ。整備員が、何か知っているようだ。" : "準備部屋だ。整備員に話しかけると整備できる。", "", "stairs");
+    const o = bossOutlook();
+    mapLog(bossHintHere() ? "準備部屋だ。整備員が、何か知っているようだ。" : o && o.level === "hard" ? "準備部屋だ。整備員が、心配そうにこちらを見ている。" : "準備部屋だ。整備員に話しかけると整備できる。", "", "stairs");
   } else if (fromCourtyard) {
     mapLog(`${dungeon.caveEnterText || "洞窟に入った。"}（${curFloorLabel()}）`, "", "stairs");
   } else {
@@ -2750,13 +2822,17 @@ function applyLayoutVars() {
 
 // 仲間の人数の補正（バトルを始めるときの人数で決める。倍率の計算の最後に掛ける：切り上げ、最低1）
 const partySizeMult = (n = team.length) => PARTY_SIZE_ENEMY_MULT[Math.max(1, Math.min(TEAM_MAX, n))];
+// 通常の敵の特徴（動物から。ボスと、動物がまだ決まっていない敵は null）
+const traitOf = e => (!e || e.boss) ? null : ENEMY_TRAITS[ANIMAL_TRAIT[e.animal || e.sprite]] || null;
+// バトルでの能力値：人数の補正 × 特徴の倍率（切り上げ、最低1）
 function partySized(e, n = team.length) {
   if (e.boss) return { maxHp: e.maxHp, hp: e.hp, atk: e.atk };
-  if (e.baseMaxHp == null) { e.baseMaxHp = e.maxHp; e.baseAtk = e.atk; }   // 補正をかける前の値（マップに置いたときの値）
-  const m = partySizeMult(n), maxHp = Math.max(1, Math.ceil(e.baseMaxHp * m));
+  if (e.baseMaxHp == null) { e.baseMaxHp = e.maxHp; e.baseAtk = e.atk; e.baseAcc = e.acc; }   // 補正をかける前の値（マップに置いたときの値）
+  const tr = traitOf(e) || {}, m = partySizeMult(n);
+  const maxHp = Math.max(1, Math.ceil(e.baseMaxHp * m * (tr.hpMult || 1)));
   // 逃げたあとなどで減っているHPは、割合を保つ
   const hp = e.hp === e.maxHp ? maxHp : Math.max(1, Math.ceil(e.hp * maxHp / e.maxHp));
-  return { maxHp, hp, atk: Math.max(1, Math.ceil(e.baseAtk * m)) };
+  return { maxHp, hp, atk: Math.max(1, Math.ceil(e.baseAtk * m * (tr.atkMult || 1))), acc: Math.min(100, e.baseAcc + (tr.accAdd || 0)) };
 }
 function applyPartySize(e) { if (!e.boss) Object.assign(e, partySized(e)); }
 function startBattle(e) {
@@ -2768,13 +2844,16 @@ function startBattle(e) {
   applyPartySize(e);
   if (!e.boss && !e.rare) { const fs = fightStats[floorNo] || (fightStats[floorNo] = { oneHit: 0, battle: 0 }); fs.battle++; }
   for (const u of team) u.bs = freshBattleState();
-  battle = { enemy: e, menu: "moves", busy: false, actor: team.findIndex(u => u.hp > 0),
+  battle = { enemy: e, sweepReady: false, calm: 0, eCharged: false, menu: "moves", busy: false, actor: team.findIndex(u => u.hp > 0),
              round: 1, bossTurn: 0, heavyReady: false, itemKey: null, downs: 0, selected: null,
              roarTurns: 0, roarRate: 0, stunned: false, stats: { moves: {} }, results: [] };
   for (const u of team) u.hawkRound = null;
   // 前のバトルやマップのメッセージは持ち込まない
   battleLines = []; renderLog();
   log(e.boss ? `ボス「${e.name}」との戦闘！` : e.rare ? `金色に輝く${e.name.replace(/^レア/, "")}が現れた！` : `${e.name}が現れた！`, e.rare ? "#ffd23a" : "", "battle", "battle-start");
+  const tr = traitOf(e);
+  if (tr) log(`【${tr.name}】${tr.desc}`, tc("accent"), null, "trait");
+  hideHint();
   $("mapScreen").hidden = true;
   $("battle").hidden = false;
   $("eName").className = e.boss ? "boss" : "";
@@ -3098,9 +3177,17 @@ function doDamage(u, info) {
       continue;
     }
     u.bs.missStreak = 0;
+    const tr = traitOf(e) || {};
+    // すばやい：必中でないわざは、一定の割合でかわされる
+    if (tr.evade && !info.sure && roll(tr.evade)) {
+      log(`${u.name}の${label}！ ${e.name}はすばやくかわした。`, "", null, "attack");
+      popNumber("回避", tc("evade"), "miss");
+      continue;
+    }
     let dmg = varied(info.power);
     const crit = roll(critRateOf(u));
     if (crit) dmg = Math.floor(dmg * ((traitsOf(u).crit || {}).mult || CRIT_MULT));
+    if (tr.dmgCut) dmg = Math.max(1, dmg - tr.dmgCut);   // かたい
     e.hp = Math.max(0, e.hp - dmg);
     hitAny = true;
     log(`${u.name}の${label}！ ${crit ? "会心！ " : ""}${dmg}ダメージ。`, crit ? tc("crit") : "", null, "attack");
@@ -3257,6 +3344,19 @@ function enemyPower(e, mult = 1) {
   return Math.max(1, Math.round(p));
 }
 
+// ボスの行動の表（BOSS_AI に、ボスの表の ai を重ねる）
+const bossAi = e => ({ ...BOSS_AI, ...(e.def.ai || {}), weights: { ...BOSS_AI.weights, ...((e.def.ai || {}).weights || {}) } });
+// ボスの行動を選ぶ：最初は通常攻撃。予告なしの通常攻撃が maxCalm 回続いたら、次は必ず予告（溜めるか構える）
+function chooseBossAction(e) {
+  const ai = bossAi(e), w = ai.weights;
+  let acts = Object.keys(w).filter(k => w[k] > 0);
+  if (battle.bossTurn <= ai.firstCalm) acts = ["attack"];
+  else if (battle.calm >= ai.maxCalm) acts = acts.filter(k => k !== "attack");
+  let act = acts[0];
+  if (acts.length > 1) { let r = Math.random() * acts.reduce((n, k) => n + w[k], 0); for (const k of acts) { if ((r -= w[k]) < 0) { act = k; break; } } }
+  battle.calm = act === "attack" ? battle.calm + 1 : 0;
+  return act;
+}
 async function enemyPhase() {
   const e = battle.enemy;
   const endTurn = () => { if (battle.roarTurns > 0) battle.roarTurns--; };
@@ -3267,10 +3367,27 @@ async function enemyPhase() {
     return;
   }
   if (!e.boss) {
-    const t = randomAlive();
-    if (t) enemyStrike(e, t, enemyPower(e), e.acc, `${e.name}の攻撃`);
-    renderBattle();
-    await pause();
+    const tr = traitOf(e) || {};
+    // ためる：1ターン目は力を溜める（予告）、次のターンに強攻撃
+    if (tr.chargeMult && !battle.eCharged) {
+      battle.eCharged = true;
+      log(`${e.name}は力を溜めている…！ 次は強攻撃だ。`, "", null, "enemy");
+      popNumber("力を溜めている", tc("chargeBg"), "center");
+      renderBattle(); await pause(); endTurn();
+      return;
+    }
+    const heavy = !!(tr.chargeMult && battle.eCharged);
+    battle.eCharged = false;
+    // れんげき：2回目は弱い
+    const hits = tr.hits || 1;
+    for (let i = 0; i < hits; i++) {
+      const t = randomAlive();
+      if (!t) break;
+      const mult = heavy ? tr.chargeMult : i > 0 ? tr.hitMult : 1;
+      enemyStrike(e, t, enemyPower(e, mult), e.acc, heavy ? `${e.name}の強攻撃` : hits > 1 ? `${e.name}の連撃(${i + 1})` : `${e.name}の攻撃`);
+      renderBattle();
+      await pause();
+    }
     endTurn();
     return;
   }
@@ -3293,10 +3410,31 @@ async function enemyPhase() {
     endTurn();
     return;
   }
-  if (battle.bossTurn % BOSS_CHARGE_EVERY === 0) {
+  const ai = bossAi(e);
+  // 構えたあと：全員への攻撃
+  if (battle.sweepReady) {
+    battle.sweepReady = false;
+    minionsAct(true);
+    for (const t of alive()) enemyStrike(e, t, enemyPower(e, ai.sweepMult), e.acc, `${e.name}の${ai.sweepName}`);
+    renderBattle();
+    await pause();
+    endTurn();
+    return;
+  }
+  const act = chooseBossAction(e);
+  if (act === "charge") {
     battle.heavyReady = true;
     log(`${e.name}は力を溜めている…！ 次は強攻撃だ。`, "", null, "enemy");
     popNumber("力を溜めている", tc("chargeBg"), "center");
+    renderBattle();
+    await pause();
+    endTurn();
+    return;
+  }
+  if (act === "sweep") {
+    battle.sweepReady = true;
+    log(`${e.name}は${ai.sweepPrep}`, "", null, "enemy");
+    popNumber("構えた", tc("chargeBg"), "center");
     renderBattle();
     await pause();
     endTurn();
@@ -3726,6 +3864,9 @@ function autoChoose(u) {
   if (e.hp <= tackleMin) return "tackle";
   // 3. ボスの強攻撃の前で、受けると危ないなら防御
   if (e.boss && battle.heavyReady && u.hp <= enemyPower(e, BOSS_HEAVY_MULT) + DAMAGE_VARIANCE) return "guard";
+  if (e.boss && battle.sweepReady && u.hp <= enemyPower(e, bossAi(e).sweepMult) + DAMAGE_VARIANCE) return "guard";   // 全員への攻撃の前も
+  const ctr = traitOf(e);
+  if (ctr && ctr.chargeMult && battle.eCharged && u.hp <= enemyPower(e, ctr.chargeMult) + DAMAGE_VARIANCE) return "guard";
   // 4. 固有技
   const uq = opts.find(i => i.kind === "unique");
   if (uq && uq.en <= u.en) {
@@ -3836,9 +3977,18 @@ function renderCompactInfo(box, b) {
 }
 
 let currentCmds = [];
+// バトルのヒント：1回のバトルで1つまで（最初のバトル → 次のバトルで敵の特徴）。予告は、初めて見たときにいつでも
+function battleHints() {
+  if (!battle || !settings.hints) return;
+  if (battle.heavyReady || battle.sweepReady || battle.eCharged) { showHint("telegraph"); return; }
+  if (battle._hinted || battle.menu !== "moves") return;
+  battle._hinted = true;
+  if (!showHint("battle") && traitOf(battle.enemy)) showHint("trait");
+}
 function renderBattle() {
+  battleHints();
   if (!battle) return;
-  if ($("minions")) $("minions").classList.toggle("stomp", !!(battle.heavyReady && settings.fx));   // 力を溜めている間は足踏み
+  if ($("minions")) $("minions").classList.toggle("stomp", !!((battle.heavyReady || battle.sweepReady) && settings.fx));   // 力を溜めている間は足踏み
   const e = battle.enemy;
   $("eName").textContent = (e.boss ? "BOSS " : "") + e.name;
   $("eName").classList.toggle("rareName", !!e.rare);
@@ -3847,8 +3997,10 @@ function renderBattle() {
   if (battle.stunned) st.push("ひるみ");
   $("eHpText").textContent = `${st.length ? st.join(" ") + "　" : ""}HP ${e.hp}/${e.maxHp}`;
   $("eHpBar").firstElementChild.style.width = (100 * e.hp / e.maxHp) + "%";
-  $("charge").textContent = "⚡ 力を溜めている！ 次のターンに強攻撃（必中）";
-  $("charge").hidden = !battle.heavyReady;
+  // 予告：溜め（ボスは必中の強攻撃、通常の敵「ためる」は強攻撃）、構え（全員への攻撃）
+  $("charge").textContent = battle.sweepReady ? "⚠ 構えている！ 次のターンに全員へ攻撃（全員防御が有効）"
+    : battle.heavyReady ? "⚡ 力を溜めている！ 次のターンに強攻撃（必中）" : "⚡ 力を溜めている！ 次のターンに強攻撃";
+  $("charge").hidden = !(battle.heavyReady || battle.sweepReady || battle.eCharged);
 
   team.forEach((u, i) => {
     const d = $("ally" + i);
@@ -3976,7 +4128,7 @@ const guardAllActive = () => !!battle && battle.guardAllRound === battle.round;
 function updateGuardAllBtn() {
   const b = $("btnGuardAll");
   if (!b) return;
-  const warn = !!(battle && battle.enemy.boss && battle.heavyReady);
+  const warn = !!(battle && (battle.heavyReady || battle.sweepReady || battle.eCharged));
   b.classList.toggle("blink", warn && settings.fx && blinkOn);
   b.classList.toggle("thick", warn && !settings.fx);
 }
@@ -4252,6 +4404,7 @@ function renderMenu() {
   toggle("確認なしで即実行", "instant", "わざの行をタップした瞬間に実行する");
   toggle("仲間のおまかせ", "allyAuto", "主人公機以外の仲間は、自動で行動する");
   toggle("ひとうち", "oneHit", "たいあたり1回で倒せる弱い敵は、バトルに入らず倒す");
+  toggle("ヒント", "hints", "初めての場面で、短いヒントを1回だけ出す");
   toggle("ミニマップの常時表示", "miniMap", "広い画面で、右上に小さく出す");
   toggle("一括回復の確認なし", "bulkNoConfirm", "一括回復ボタンで、確認せずに使う");
   {
@@ -4522,7 +4675,7 @@ function renderMap() {
       ctx.fillStyle = tc("mapEnemyHp"); ctx.fillRect(px + s, py + T - 2 * s, (T - 2 * s) * e.hp / e.maxHp, s);
     }
     // ひとうちできる敵の頭上に白い点
-    if (canOneHit(e)) { ctx.fillStyle = tc("oneHitDot"); ctx.fillRect(px + 5 * s, py - s, 2 * s, 2 * s); }
+    if (canOneHit(e)) { ctx.fillStyle = tc("oneHitDot"); ctx.fillRect(px + 5 * s, py - s, 2 * s, 2 * s); if (mode === "map") showHint("onehit"); }
   }
   draw(heroMapKey(), pos.x, pos.y, 1, heroFacingLeft);   // 主人公は、最後に左右に進んだ向きを向く
   // 探索済みだが今見えていないマスは暗くする
@@ -4553,6 +4706,7 @@ function checkFloorDone() {
   if (!floorDone && mode === "map" && floorEmpty()) {
     floorDone = true;
     mapLog("この階には、もう何もないようだ", "", "floor-done");
+    if (!isBossFloor(floorNo)) showHint("done");
   }
   const b = $("stairsBtn");
   b.hidden = !(floorDone && mode === "map" && !isBossFloor(floorNo));
@@ -4805,6 +4959,7 @@ function goVillage(msgs = []) {
   log("村に着いた。みんな回復した。", "", null, "village");
   saveGame();
   renderVillage();
+  showHint(msgs.some(m => (typeof m === "string" ? m : m.t).startsWith("全滅")) ? "wipe" : "village");
 }
 
 function renderVillage() {
@@ -4875,6 +5030,7 @@ function depart(floor) {
   newFloor();
   log(isBossFloor(floorNo) ? `${curFloorLabel()} ボスフロアの準備部屋から出発した。` : `${curFloorLabel()}から出発した。階段を探せ。`, "", null, "depart");
   if (bossHintHere()) log("整備員が、何か知っているようだ。", "", null, "depart");
+  showHint(isBossFloor(floorNo) ? "prep" : "walk");
   resize();
 }
 
@@ -5172,6 +5328,23 @@ const TUTORIAL_PAGES = [
   { title: "パーツと仲間", lines: ["敵がパーツを落とす。同じパーツを拾うと強くなる。", "敵がまれに仲間になる。中身を見てから選べる。"] },
   { title: "村", lines: ["全滅しても、村に戻るだけ。強さはそのまま。", "準備が足りないときは、村に戻って整えよう。", "メニューの「セーブ」で、成長を残せる。"] },
 ];
+// ---- 遊びながら覚えるヒント ----
+let hintsSeen = (() => { try { return JSON.parse(localStorage.getItem(HINTS_KEY) || "{}") || {}; } catch (e) { return {}; } })();
+let hintTimer = null;
+// 初めてその場面になったときだけ出す。地図・バトル・村の、いま見えている画面の上の方に重ねる（操作は止めない）
+function showHint(id) {
+  if (!settings.hints || hintsSeen[id] || hintsSeen.all || !HINTS[id]) return false;
+  hintsSeen[id] = 1;
+  try { localStorage.setItem(HINTS_KEY, JSON.stringify(hintsSeen)); } catch (e) {}
+  const host = mode === "battle" ? $("arena") : mode === "village" ? $("villageScene") : $("mapWrap");
+  let h = $("hint");
+  if (!h) { h = document.createElement("div"); h.id = "hint"; h.addEventListener("click", hideHint); }
+  h.textContent = HINTS[id]; h.dataset.id = id;
+  host.append(h); h.hidden = false;
+  clearTimeout(hintTimer); hintTimer = setTimeout(hideHint, HINT_MS);
+  return true;
+}
+function hideHint() { const h = $("hint"); if (h) h.hidden = true; }
 const tutorialSeen = () => { try { return localStorage.getItem(TUTORIAL_KEY) === "1"; } catch (e) { return false; } };
 let tutState = null;   // { page, done }
 function showTutorial(done = () => {}) {
@@ -5603,7 +5776,7 @@ function galleryRow(from) {
 // 起動：初めてなら説明（5枚）→ タイプ選択。セーブがあればタイトル（つづきから／はじめから）
 function boot() {
   const r = readSave();
-  if (r.status === "none") { showSelect(); if (!tutorialSeen()) showTutorial(); return; }
+  if (r.status === "none") { showSelect(); return; }   // 5枚の説明は出さない（遊びながらヒントで覚える。「あそびかた」でいつでも見られる）
   hideAllScreens();
   mode = "title";
   $("title").hidden = false;
