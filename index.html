@@ -163,8 +163,26 @@
   #flash.show { animation: flash1 .1s linear; }
   @keyframes flash1 { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
   .shake2 { animation: shake2 .2s linear; }
+  /* 手応え：止め（白く光る）→ 大→小に収まる横揺れ。長さと幅は hitFeel が --hs-ms・--hs-a で決める */
+  .hitstop { animation: hitstop var(--hs-ms, 240ms) linear; }
+  @keyframes hitstop {
+    0%, 30% { transform: translateX(0); filter: brightness(2.4); }
+    42% { transform: translateX(var(--hs-a, 8px)); filter: none; }
+    56% { transform: translateX(calc(var(--hs-a, 8px) * -0.6)); }
+    70% { transform: translateX(calc(var(--hs-a, 8px) * 0.32)); }
+    84% { transform: translateX(calc(var(--hs-a, 8px) * -0.12)); }
+    100% { transform: translateX(0); }
+  }
+  .hitSpark { position: absolute; z-index: 2; pointer-events: none; width: var(--sp, 40px); height: var(--sp, 40px); margin: calc(var(--sp, 40px) / -2) 0 0 calc(var(--sp, 40px) / -2);
+    background: radial-gradient(circle, var(--t-sparkCore) 0 22%, var(--t-sparkMid) 23% 52%, var(--t-sparkEdge) 53% 70%, transparent 71%);
+    clip-path: polygon(50% 0, 60% 38%, 100% 50%, 60% 62%, 50% 100%, 40% 62%, 0 50%, 40% 38%); animation: spark .18s ease-out forwards; }
+  @keyframes spark { 0% { transform: scale(.4) rotate(0deg); opacity: 1; } 60% { transform: scale(1.1) rotate(20deg); opacity: 1; } 100% { transform: scale(1.25) rotate(28deg); opacity: 0; } }
+  #flash.big { animation: bigFlash var(--bf-ms, 400ms) linear; }
+  @keyframes bigFlash { 0% { opacity: 1; background: var(--t-bigFlashLight); } 35% { opacity: 1; background: var(--t-bigFlashLight); } 50% { opacity: 1; background: var(--t-bigFlashDark); } 100% { opacity: 0; background: var(--t-bigFlashDark); } }
+  .bar.xp { height: 2px; } .bar.xp i { background: var(--t-xp); }
+  #dlgText { white-space: pre-line; }
   @keyframes shake2 { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-5px); } }
-  @media (prefers-reduced-motion: reduce) { #fx.pop, #banner.show, .shake2 { animation: none; } #banner.show { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { #fx.pop, #banner.show, .shake2, .hitstop, .hitSpark, #flash.big { animation: none; } .hitSpark { display: none; } #banner.show { opacity: 1; } }
 
   #party { width: 100%; display: grid; gap: 3px; font-size: 13px; font-variant-numeric: tabular-nums; }
   .prow {
@@ -669,7 +687,7 @@
 //  調整用の定数・データ
 // ================================================================
 // 版の目印（作業のたびに更新）。タイトル画面の隅、設定欄、?layout=1 の診断に出す
-const BUILD_ID = "1L-20261017-1120";
+const BUILD_ID = "1L-20261114-1210";
 // ================================================================
 //  色調（画面の色はすべてここから。ドット絵のパレット、ボスの色、レア度の色、世界地図の固定色は除く）
 //  THEME＝全画面の標準の色（1J の前の版の色）、THEME_MAP＝世界マップの画面だけの色（古地図）。地図の画面に入るときと出るときに切り替える
@@ -736,6 +754,8 @@ const THEME = {
   textHint: "#aaa", diagLine: "#888", buildText: "#5a5c66", debugText: "#f5d", fadeBg: "rgba(16,17,20,.95)",
   // 1K：熱気のタグ（無効＝緑、あり＝赤）、耐熱のタグ、仲間にする画面の強調
   edgeHeat: "rgba(200,40,20,.45)",   // 熱気のダメージの、画面の縁の赤い光
+  // 手応え：火花（白い芯 → 金 → 暗い縁。明るい背景でも見えるように暗い色も混ぜる）、ボス撃破・全滅のフラッシュ（明 → 暗）、経験値のバー
+  sparkCore: "#ffffff", sparkMid: "#ffd447", sparkEdge: "#5a2a00", bigFlashLight: "rgba(255,255,255,.85)", bigFlashDark: "rgba(0,0,0,.55)", xp: "#c9a2ff",
   heatOk: "#5fe07a", heatNg: "#ff6b6b", heatTagBg: "#3a2414", heatTagText: "#ffb07a", gimmickHi: "#ffb02e",
 };
 let activeTheme = THEME;   // いま画面に使っている色の表（世界マップの画面だけ THEME_MAP）
@@ -773,7 +793,7 @@ const ALLY_FREE_SLOTS = 1;         // 仲間の自由枠
 const JUNK_BASE = { small: 2, mid: 3, large: 5 };
 const JUNK_RARITY = [0, 1, 2, 4];
 const JUNK_MAX = 99;
-const AUTO_WALK_MS = 80;           // 「階段へ向かう」の1マスごとの待ち
+const AUTO_WALK_MS = 50;           // 「階段へ向かう」の1マスごとの待ち（桜井流「遅さは罪」：80 → 50）
 // 設定「仲間にする確認」の選択肢
 const RECRUIT_MODES = [{ key: "ask", label: "毎回聞く" }, { key: "always", label: "いつも仲間にする" }, { key: "never", label: "いつもあきらめる" }];
 
@@ -1122,16 +1142,16 @@ const MINION_STOMP_PX = 2, MINION_STOMP_MS = 1000;   // 「力を溜めている
 
 // ボス（階の補正はかけない）。name＝ボスの名前（画面・メッセージ・クリア画面・絵の一覧は、すべてここから）。sprite＝絵（BOSS_SPRITES）、spriteSize＝絵の大きさ、minions＝群れの手下の絵（見た目だけ）
 const BOSSES = {
-  5:  { name: "クレストラプター", hp: 200, atk: 16, acc: 85, exp: 40, sprite: "raptorChief", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H }, minions: { sprite: "raptorMinion" },
+  5:  { name: "クレストラプター", hint: "3ターンごとに力を溜めて、次のターンに強い一撃を撃ってくる。溜めたのを見たら、防御で受けるといい。", hp: 200, atk: 16, acc: 85, exp: 40, sprite: "raptorChief", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H }, minions: { sprite: "raptorMinion" },
         drop: [0, 0.65, 0.25, 0.10] },
-  10: { name: "ガードホーン",     hp: 300, atk: 26, acc: 85, exp: 0, doubleBelowHalf: true, sprite: "guardian", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H },
+  10: { name: "ガードホーン",     hint: "HPが半分を切ると、1ターンに2回攻撃してくる。半分を切る前に、HPとENを整えておこう。溜めたら防御、も忘れずに。", hp: 300, atk: 26, acc: 85, exp: 0, doubleBelowHalf: true, sprite: "guardian", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H },
         drop: [0, 0, 0.70, 0.30] },
 };
 // 砂漠の洞窟のボス。enrageBelowHalf＝HPが半分以下で攻撃力の倍率（1回だけメッセージ）、doubleBelowHalf＝HPが半分以下で2回攻撃
 const DESERT_BOSSES = {
-  5:  { name: "コブラ王", hp: 570, atk: 38, acc: 85, exp: 100, enrageBelowHalf: 1.25, enrageText: "頭巾を広げて威嚇した！",
+  5:  { name: "コブラ王", hint: "HPが半分を切ると頭巾を広げて、攻撃が強くなる。そこからは、力を溜めたら必ず防御を。", hp: 570, atk: 38, acc: 85, exp: 100, enrageBelowHalf: 1.25, enrageText: "頭巾を広げて威嚇した！",
         sprite: "cobraKing", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H }, drop: [0, 0.65, 0.25, 0.10] },
-  10: { name: "砂ワーム", hp: 720, atk: 46, acc: 85, exp: 160, doubleBelowHalf: true,
+  10: { name: "砂ワーム", hint: "HPが半分を切ると、1ターンに2回攻撃してくる。修理キットを残しておいて、後半に使うといい。", hp: 720, atk: 46, acc: 85, exp: 160, doubleBelowHalf: true,
         sprite: "sandWorm", spriteSize: { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H }, drop: [0, 0, 0.70, 0.30] },
 };
 const FINAL_FLOOR = 10;
@@ -1302,6 +1322,15 @@ const MOVES = {
 };
 const ANIMAL_UNIQUE = { dango: "curl", turtle: "cover", lion: "roar", wolf: "claws", ptera: "dive", bird: "hawkeye", rex: "bite" };
 const FLASH_THEME_KEYS = { heal: "flashHeal", guard: "flashGuard", attack: "flashAttack" };   // 色は THEME から
+// ---- 手応え（桜井流：当たった瞬間を止め、受けた側を大→小に揺らす。強さは与えたダメージの割合で決める） ----
+// ratio＝ダメージ ÷ 最大HP（0〜1）。stopRate＝全体のうち止める割合（白く光らせる）、amp＝揺れの幅(px)、ms＝全体の長さ。
+// 見た目だけで、待ち時間（BATTLE_WAIT）は増やさない
+// 会心と強攻撃は strongMult 倍し、さらに strongAdd を足す（小さいダメージの会心でも、はっきり強く感じるように）
+const HIT_FEEL = { minMs: 180, maxMs: 360, minAmp: 4, maxAmp: 14, strongMult: 1.4, strongAdd: 0.3, sparkPx: [36, 64] };
+// ボスを倒した瞬間／全滅した瞬間：一瞬止めて、明→暗のフラッシュ
+const BIG_FLASH_MS = { bossDown: 420, wipe: 360 };
+// 同じボスに続けてこの回数負けたら、整備員がそのボスのコツを教える（ヒントの文はボスの表の hint）
+const BOSS_HINT_AFTER_LOSSES = 2;
 
 // 画面の作り。狭い画面（幅 NARROW_MAX 以下）だけに効く値は、CSS の変数に入れて使う
 // 表示枠（Claudeなど）の浮かぶバーが、このページの上端から覆う高さ（狭い画面だけ。CSSのpx）。
@@ -2005,6 +2034,7 @@ function addExp(u, amount) {
 }
 // レベルアップはバトルが終わってから処理する
 function processLevelUps() {
+  let any = false;
   for (const u of team) {
     const before = u.lv;
     while (u.lv < LEVEL_MAX && u.exp >= expToNext(u.lv)) {
@@ -2017,10 +2047,13 @@ function processLevelUps() {
       u.maxHp += hpUp; u.maxEn += enUp;
       if (u.hp > 0) u.hp += hpUp;
       u.en += enUp;
-      mapLog(`${u.name}はLv${u.lv}になった！`, "", "levelup");
+      // 褒める：強調の色と、伸びた分（HP・EN）を見せる
+      mapLog(`${u.name}はLv${u.lv}になった！（HP+${hpUp}・EN+${enUp}）`, tc("accent"), "levelup");
       bestLevel = Math.max(bestLevel, u.lv);
+      any = true;
     }
   }
+  if (any) flashScreen("heal");   // 1回のレベルアップの処理につき1回
 }
 
 // ================================================================
@@ -2490,8 +2523,19 @@ function healAll() {
 // ---- 準備部屋の整備員（体当たりで話しかける） ----
 let npcs = [];   // マップの人（通れない）。{x, y, kind}
 const npcAt = (x, y) => npcs.find(n => n.x === x && n.y === y);
+// 同じボスに続けて負けた回数（セーブしない。勝つと0）
+const bossLosses = {};
+const bossKey = f => `${dungeon.key}:${f}`;
+function noteBossLoss(f) { bossLosses[bossKey(f)] = (bossLosses[bossKey(f)] || 0) + 1; }
+// 整備員が教えるボスのコツ（この階のボスに、続けて BOSS_HINT_AFTER_LOSSES 回負けたとき。ボスがまだいるときだけ）
+function bossHintHere() {
+  const b = dungeon.bosses[floorNo];
+  if (!b || !b.hint || bossDone(floorNo) || (bossLosses[bossKey(floorNo)] || 0) < BOSS_HINT_AFTER_LOSSES) return null;
+  return `そうそう、${b.name}のことだけどね。\n${b.hint}`;
+}
 function talkMech() {
-  showDialog("整備員", "整備するかい？", [
+  const hint = bossHintHere();
+  showDialog("整備員", hint ? `整備するかい？\n\n${hint}` : "整備するかい？", [
     { label: "整備する", primary: true, act: () => { healAll(); mapLog("整備完了。いってらっしゃい", "", "mech"); renderMap(); } },
     { label: "仲間を入れ替える", act: openMechParty },
     { label: "やめる", act: () => {} }]);
@@ -2591,7 +2635,7 @@ function goDown() {
   newFloor();
   if (isBossFloor(floorNo)) {
     mapLog(`${curFloorLabel()}。空気が変わった…（全員EN+${bonus}）`, "", "stairs");
-    mapLog("準備部屋だ。整備員に話しかけると整備できる。", "", "stairs");
+    mapLog(bossHintHere() ? "準備部屋だ。整備員が、何か知っているようだ。" : "準備部屋だ。整備員に話しかけると整備できる。", "", "stairs");
   } else if (fromCourtyard) {
     mapLog(`${dungeon.caveEnterText || "洞窟に入った。"}（${curFloorLabel()}）`, "", "stairs");
   } else {
@@ -2884,6 +2928,38 @@ function flashScreen(kind) {
   const f = $("flash"); f.style.background = tc(FLASH_THEME_KEYS[kind]); restartAnim(f, "show");
 }
 function shake(el) { if (settings.fx) restartAnim(el, "shake2"); }
+// 当たった瞬間の手応え（演出オフでは出さない）。ratio＝ダメージ÷最大HP、strong＝会心・強攻撃、spark＝火花を出す
+let hitFeelCount = 0;   // テスト用
+const el2 = (tag, cls) => { const e = document.createElement(tag); e.className = cls; return e; };
+function hitFeel(el, ratio, strong = false, spark = false) {
+  if (!settings.fx || !el) return false;
+  const k = Math.min(1, Math.max(0, ratio) * (strong ? HIT_FEEL.strongMult : 1) + (strong ? HIT_FEEL.strongAdd : 0));
+  el.style.setProperty("--hs-a", `${Math.round(HIT_FEEL.minAmp + (HIT_FEEL.maxAmp - HIT_FEEL.minAmp) * k)}px`);
+  el.style.setProperty("--hs-ms", `${Math.round(HIT_FEEL.minMs + (HIT_FEEL.maxMs - HIT_FEEL.minMs) * k)}ms`);
+  restartAnim(el, "hitstop");
+  if (spark) showSpark(el, k);
+  hitFeelCount++;
+  return true;
+}
+// 火花：当たった絵の中心に、短く（0.18秒）。大きさはダメージの割合
+function showSpark(el, k) {
+  const arena = $("arena");
+  if (!arena) return;
+  const a = arena.getBoundingClientRect(), r = el.getBoundingClientRect();
+  const sp = el2("div", "hitSpark");
+  sp.style.left = `${r.left - a.left + r.width * 0.45}px`; sp.style.top = `${r.top - a.top + r.height * 0.5}px`;
+  sp.style.setProperty("--sp", `${Math.round(HIT_FEEL.sparkPx[0] + (HIT_FEEL.sparkPx[1] - HIT_FEEL.sparkPx[0]) * k)}px`);
+  sp.addEventListener("animationend", () => sp.remove());
+  arena.querySelectorAll(".hitSpark").forEach(x => x.remove());
+  arena.append(sp);
+}
+// ボス撃破・全滅の瞬間：明 → 暗のフラッシュ（白一色にしない）
+function bigFlash(kind) {
+  if (!settings.fx) return false;
+  const f = $("flash"); f.style.background = ""; f.style.setProperty("--bf-ms", `${BIG_FLASH_MS[kind]}ms`);
+  restartAnim(f, "big");
+  return true;
+}
 function popNumber(text, color, where = "enemy", big = false) {
   const f = $("fx");
   f.textContent = text; f.style.color = color;
@@ -3029,7 +3105,7 @@ function doDamage(u, info) {
     hitAny = true;
     log(`${u.name}の${label}！ ${crit ? "会心！ " : ""}${dmg}ダメージ。`, crit ? tc("crit") : "", null, "attack");
     popNumber(`-${dmg}`, crit ? tc("crit") : tc("textStrong"), "enemy", crit);
-    shake($("eSprite"));
+    hitFeel($("eSprite"), dmg / e.maxHp, crit, true);
   }
   // 1回限りの効果はここで使い切る
   u.bs.critUp = 0; u.bs.accUp = 0;
@@ -3120,6 +3196,8 @@ async function runCommand(action, arg) {
   renderBattle();
   await enemyPhase();
   if (alive().length === 0) {
+    bigFlash("wipe");
+    if (battle.enemy.boss) noteBossLoss(floorNo);
     await pause(500);
     onDefeat();
     return;
@@ -3168,7 +3246,7 @@ function enemyStrike(e, target, power, acc, label, heavy = false) {
   u.hp = Math.max(0, u.hp - dmg);
   log(`${label}！ ${u.name}に${dmg}ダメージ${cut.length ? `（${cut.join("・")}）` : ""}。`, "", null, "enemy");
   popNumber(`-${dmg}`, tc("allyDmg"), "ally");
-  shake($("ally" + team.indexOf(u)));
+  hitFeel($("ally" + team.indexOf(u)), dmg / u.maxHp, heavy);
   if (u.hp === 0) { battle.downs++; log(`${u.name}は動けなくなった！`, "", null, "enemy"); }
 }
 
@@ -3277,6 +3355,8 @@ function winBattle() {
   if ($("minions")) $("minions").hidden = true;   // 手下は親分と同時に消える
 
   if (e.boss) {
+    bigFlash("bossDown"); hitFeel($("eSprite"), 1, true, true);   // 見せ場の一瞬を止めて、やったと分からせる
+    bossLosses[bossKey(floorNo)] = 0;
     recOf()["boss" + floorNo] = true;
     if (floorNo >= dungeon.floors) recOf().clears++;   // ダンジョンのクリア：回数を数える（周回のたびに増える）
     saveGame();   // ボスを倒したら自動保存
@@ -4633,7 +4713,10 @@ function updateStatus() {
     const bars = el("span", "bars");
     const bar = el("span", "bar hp"); const i = el("i"); i.style.width = (100 * u.hp / u.maxHp) + "%"; bar.append(i);
     const ebar = el("span", "bar en"); const j = el("i"); j.style.width = (100 * u.en / u.maxEn) + "%"; ebar.append(j);
-    bars.append(bar, ebar);
+    // 次のレベルまで（桜井流：ご褒美を目の前に吊るす）。最大レベルでは出さない
+    const xbar = el("span", "bar xp"); const xi = el("i"); xi.style.width = u.lv >= LEVEL_MAX ? "0%" : (100 * u.exp / expToNext(u.lv)) + "%"; xbar.append(xi);
+    xbar.title = u.lv >= LEVEL_MAX ? "最大レベル" : `次のLvまで あと${expToNext(u.lv) - u.exp}`;
+    bars.append(bar, ebar, xbar);
     const hp = el("span", "num", `${u.hp}/${u.maxHp}`);
     hp.classList.toggle("low", u.hp <= u.maxHp * 0.3);
     r.append(nm, bars, hp, el("span", "num", `EN${u.en}/${u.maxEn}`));
@@ -4791,6 +4874,7 @@ function depart(floor) {
   for (const u of team) u.bs = freshBattleState();
   newFloor();
   log(isBossFloor(floorNo) ? `${curFloorLabel()} ボスフロアの準備部屋から出発した。` : `${curFloorLabel()}から出発した。階段を探せ。`, "", null, "depart");
+  if (bossHintHere()) log("整備員が、何か知っているようだ。", "", null, "depart");
   resize();
 }
 
