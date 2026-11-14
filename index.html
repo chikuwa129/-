@@ -334,6 +334,9 @@
   .partyBar .pbSel { font-size: 13px; min-height: 1.4em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .partyBar .pbBtns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .partyBar .pbBtns button { min-height: 40px; font-size: 12px; padding: 4px; white-space: nowrap; }
+  .pbReco { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--t-textSub); }
+  .pbReco span { flex: 1; min-width: 0; }
+  .pbReco button { flex-shrink: 0; min-height: 36px; padding: 4px 10px; font-size: 12px; border-radius: 6px; background: var(--t-infoBg); border: 1px solid var(--t-infoLine); }
   .stockList { max-height: 46vh; overflow-y: auto; display: grid; gap: 4px; }
   .rcSec small { display: block; color: var(--t-textDim); }
   .rcNote { margin-top: 8px; font-size: 13px; color: var(--t-accent); }
@@ -695,7 +698,7 @@
 //  調整用の定数・データ
 // ================================================================
 // 版の目印（作業のたびに更新）。タイトル画面の隅、設定欄、?layout=1 の診断に出す
-const BUILD_ID = "1L-20261114-1800";
+const BUILD_ID = "1L-20261114-2100";
 // ================================================================
 //  色調（画面の色はすべてここから。ドット絵のパレット、ボスの色、レア度の色、世界地図の固定色は除く）
 //  THEME＝全画面の標準の色（1J の前の版の色）、THEME_MAP＝世界マップの画面だけの色（古地図）。地図の画面に入るときと出るときに切り替える
@@ -782,6 +785,8 @@ const DEBUG_HP_BONUS = 1500;
 const DESERT_PARAM = DEBUG && /[?&]desert=1(&|$)/.test(location.search);
 const DEBUG_HP = DEBUG && !DESERT_PARAM;
 const DESERT_DEBUG_START = { lv: 11, parts: ["g2", "m1", "l1", "g1"] };
+// テストモード（歯車の設定）：砂漠の洞窟から始める。?debug=1&desert=1 の状態に、仲間2体（機械遺跡で仲間にしたような機体）を足す
+const TEST_DESERT_ALLIES = [{ size: 1, sprite: "lion", lv: 10 }, { size: 2, sprite: "rex", lv: 10 }];
 
 const STAIRS_ENERGY_BONUS = 30;    // 次の階へ進んだとき、全員のエネルギー回復
 const WIN_ENERGY_BONUS = 5;        // 戦闘に勝ったとき、生きている全員のエネルギー回復
@@ -1750,6 +1755,22 @@ const TILES = {
   gate:      { g: tileGrid("f", [[5, 0, 2, 12, "y"], [5, 2, 2, 1, "k"], [5, 5, 2, 1, "k"], [5, 8, 2, 1, "k"], [5, 11, 2, 1, "k"]]), p: { f: "#d8d4b8", y: "#ffd23a", k: "#2b2b2b" } },
 };
 
+// 前庭の岩（壁のマス）：前庭の床の上に、丸い岩を置いた形。暗くした床（見えていないマス）と、形で見分けられる
+// f＝床、g＝床の点、r＝岩、l＝岩の明るい面（左上）、s＝岩の影（右下）
+const ROCK_GRID = [
+  "ffffffffffff",
+  "ffffrrrrffff",
+  "ffrrllrrrfff",
+  "frrllrrrrrff",
+  "frlrrrrrrrsf",
+  "frrrrrrrrrsf",
+  "rrrrrrrrrssf",
+  "rrrrrrrrsssf",
+  "frrrrrrssssf",
+  "ffrsssssssff",
+  "fgffffffffff",
+  "ffffffffgfff",
+].map(r => r.split(""));
 // ダンジョンの色のタイル（tiles の色から作る）。形は機械遺跡のタイルと同じ位置関係。前庭は床と岩を別に持つ
 function colorTiles(c) {
   const W = MAP_N - 1;
@@ -1759,7 +1780,7 @@ function colorTiles(c) {
     bossfloor:  { g: tileGrid("f", []), p: { f: c.bossFloor } },
     gate:       { g: TILES.gate.g, p: { ...TILES.gate.p, f: c.floor } },
     courtFloor: { g: tileGrid("f", [[3, 3, 1, 1, "g"], [9, 8, 1, 1, "g"], [6, 6, 1, 1, "g"]]), p: { f: c.courtFloor, g: c.courtDot } },
-    rock:       { g: tileGrid("r", [[0, 0, 12, 1, "l"], [W, 0, 1, 12, "l"]]), p: { r: c.rock, l: c.rockLine } },
+    rock:       { g: ROCK_GRID, p: { f: c.courtFloor, g: c.courtDot, r: c.rock, l: c.rockLine, s: c.wallShade } },
   };
 }
 // いまの階のタイルの絵（ダンジョンの色。前庭は前庭の床と岩）
@@ -2487,9 +2508,10 @@ function bossFloor() {
   npcs.push({ x: L.mech.x, y: L.mech.y, kind: "mech" });
   pos = { ...L.start };
   if (!bossDone(floorNo)) enemies.push(makeBoss(dungeon.bosses[floorNo], L.boss.x, L.boss.y));
-  const keys = [];
-  for (const [k, n] of Object.entries(BOSS_PREP_ITEMS)) for (let i = 0; i < n; i++) keys.push(k);
-  keys.forEach((k, i) => { const [x, y] = L.items[i % L.items.length]; groundItems.push({ x, y, key: k }); });
+  // 準備部屋の物資は、着いた時点でまとめて受け取る（桜井流「遅さは罪」：拾いに歩かせない）
+  const got = [];
+  for (const [k, n] of Object.entries(BOSS_PREP_ITEMS)) { inv.items[k] += n; got.push(`${ITEMS[k].name}×${n}`); }
+  floorNotice = `準備部屋の物資を受け取った：${got.join("・")}`;
   // ボス階は全体を見せる
   for (let y = 0; y < MAP_H; y++) { seen[y].fill(true); visible[y].fill(true); }
 }
@@ -2724,17 +2746,23 @@ function confirmGimmick(floor, go, cancel) {
     [{ label: "進む", primary: true, act: go }, { label: "やめる", act: cancel }]);
 }
 
+// 階に着いたときに出す一言（準備部屋の物資など）。階の文のあとに出す
+let floorNotice = null;
+function flushFloorNotice(out = (t) => mapLog(t, "", "stairs")) { if (floorNotice) { out(floorNotice); floorNotice = null; } }
+// 足もとと、となりのマス（PICKUP_REACH）のアイテムを拾う（桜井流「遅さは罪」：1マスずつ取りに行かせない）。
+// 回復アイテムはまとめて1行。パーツは1個ずつ
+const PICKUP_REACH = 1;
 function pickUpGround() {
-  const it = groundItems.find(i => i.x === pos.x && i.y === pos.y);
-  if (!it) return;
-  groundItems = groundItems.filter(i => i !== it);
-  if (it.key === "part") {
-    logPartGain(gainPart(it.part), "拾った", (t, c) => mapLog(t, c, "pickup"));
-    showHint("part");
-  } else {
-    inv.items[it.key]++;
-    mapLog(`${ITEMS[it.key].name}を拾った。（所持${inv.items[it.key]}）`, "", "pickup");
+  const near = groundItems.filter(i => Math.abs(i.x - pos.x) + Math.abs(i.y - pos.y) <= PICKUP_REACH && visible[i.y][i.x]);
+  if (!near.length) return;
+  groundItems = groundItems.filter(i => !near.includes(i));
+  const cnt = {};
+  for (const it of near) {
+    if (it.key === "part") { logPartGain(gainPart(it.part), "拾った", (t, c) => mapLog(t, c, "pickup")); showHint("part"); }
+    else { inv.items[it.key]++; cnt[it.key] = (cnt[it.key] || 0) + 1; }
   }
+  const items = Object.entries(cnt);
+  if (items.length) mapLog(`${items.map(([k, n]) => `${ITEMS[k].name}${n > 1 ? `×${n}` : ""}`).join("と")}を拾った。（所持 ${items.map(([k]) => `${ITEMS[k].name}${inv.items[k]}`).join("・")}）`, "", "pickup");
 }
 
 function descend() {
@@ -2756,6 +2784,7 @@ function goDown() {
     mapLog(`${curFloorLabel()}。空気が変わった…（全員EN+${bonus}）`, "", "stairs");
     const o = bossOutlook();
     mapLog(bossHintHere() ? "準備部屋だ。整備員が、何か知っているようだ。" : o && o.level === "hard" ? "準備部屋だ。整備員が、心配そうにこちらを見ている。" : "準備部屋だ。整備員に話しかけると整備できる。", "", "stairs");
+    flushFloorNotice();
   } else if (fromCourtyard) {
     mapLog(`${dungeon.caveEnterText || "洞窟に入った。"}（${curFloorLabel()}）`, "", "stairs");
   } else {
@@ -3761,6 +3790,11 @@ function recruitDecide(yes) {
   else { if (st.cand.gimmickJoin) recOf().pity++; st.out(`${st.cand.name}は去っていった。`); }   // 見送りも「仲間にならなかった」に数える
   afterRecruit();
 }
+// 仲間にするとき（満員）のおすすめ：新しい仲間と、主人公機以外のチームから選び直して、外す機体（入らないなら null）
+function recruitReco(cand) {
+  const rec = recommendFormation(team.slice(1).concat([cand]));
+  return { out: rec.units.includes(cand) ? team.slice(1).find(u => !rec.units.includes(u)) || null : null, reason: rec.reason };
+}
 // 「ストックに送る」：今までどおり（ストックも満員なら、ストックの機体を解体して空ける画面へ）
 function recruitToStock() {
   const st = recruitState;
@@ -3863,7 +3897,9 @@ function renderRecruit() {
     body.append(el("div", "mnote", "選んだ機体はストックに送られ、自由枠のパーツは持ち物に戻ります。"));
     body.append(el("div", "rcLabel", "新しい仲間"));
     const nl = el("div", "rcTeam"); nl.append(unitLine(u, { unique: true, trait: true })); body.append(nl);
-    body.append(el("div", "rcLabel", "チーム（外す機体を選ぶ）"));
+    const rec = recruitReco(u);
+    if (rec.out && !st.swapOut) st.swapOut = rec.out;   // おすすめの機体を選んでおく
+    body.append(el("div", "rcLabel", rec.out ? `チーム（外す機体を選ぶ。おすすめ：${rec.out.name}）` : "チーム（外す機体を選ぶ。おすすめは、入れ替えずにストックへ）"));
     const tl = el("div", "rcTeam"); tl.id = "rcSwapList";
     for (const x of team) if (!x.isLeader) tl.append(unitLine(x, { pick: true, on: st.swapOut === x, unique: true, trait: true, onClick: () => { st.swapOut = x; renderRecruit(); } }));
     body.append(tl);
@@ -3903,7 +3939,8 @@ function renderRecruit() {
   for (const x of team) tl.append(unitLine(x, { trait: true }));
   body.append(tl);
   if (st.view === "teamFull") {
-    const note = el("div", "rcNote", `チームが満員です（${team.length}/${TEAM_MAX}体）。どうする？`); note.id = "rcFullNote";
+    const rec = recruitReco(u);
+    const note = el("div", "rcNote", `チームが満員です（${team.length}/${TEAM_MAX}体）。どうする？\nおすすめ：${rec.out ? `${rec.out.name}と入れ替える` : "ストックに送る"}（${rec.reason}）`); note.id = "rcFullNote"; note.style.whiteSpace = "pre-line";
     body.insertBefore(note, body.children[1]);
     btn("チームに入れる（入れ替える）", () => { st.view = "swap"; st.swapOut = null; renderRecruit(); }, "primary", "rcSwap");
     btn(`ストックに送る（Y）${stock.length >= STOCK_MAX ? "：満員" : ""}`, recruitToStock, "", "rcToStock");
@@ -4563,6 +4600,40 @@ function renderMenu() {
 
 // ---- メニュー：「仲間」タブ（村だけ）。チーム（最大3体）とストック（最大20体）の入れ替え、解体 ----
 // 操作ボタンは固定ヘッダーの中に置く（ストックが長くても、スクロールせずに押せる）
+// ---- おすすめ編成 ----
+// 強さ＝1ターンに与える期待ダメージ（たいあたり・固有技・固定パーツ。持ち物から付けるパーツは入れ替えで移るので入れない）× dmg ＋ 最大HP × hp ＋ レベル × lv
+const FORMATION_W = { dmg: 2, hp: 0.1, lv: 1 };
+function unitScore(u) {
+  const keys = moveKeys(u).filter(k => k === "tackle" || k === "unique" || (k === "part0" && u.fixed));
+  const dmg = Math.max(0, ...keys.map(k => moveInfo(u, k)).filter(i => i.damaging).map(i => i.power * i.hits * (i.sure ? 100 : Math.min(100, i.acc || 0)) / 100));
+  return dmg * FORMATION_W.dmg + u.maxHp * FORMATION_W.hp + u.lv * FORMATION_W.lv;
+}
+// 編成で考える仕掛けの能力：ダンジョンの中ならその仕掛け、村なら解放済みでまだクリアしていない仕掛けのダンジョン
+function formationNeed() {
+  if (mode !== "village" && !(mode === "menu" && menuFrom === "village")) { const g = gimmickOf(); return g ? g.ability : null; }
+  const pl = WORLD_PLACES.find(q => q.dungeon && placeUnlocked(q) && clearsOf(q.dungeon) === 0 && dungeonByKey(q.dungeon) && dungeonByKey(q.dungeon).gimmick);
+  return pl ? GIMMICKS[dungeonByKey(pl.dungeon).gimmick].ability : null;
+}
+// おすすめ：pool（主人公機以外の候補）から slots 体。仕掛けに必要な能力があれば、その能力の仲間を必ず1体（主人公機が持っていれば不要）
+function recommendFormation(pool, slots = TEAM_MAX - 1, need = formationNeed()) {
+  const sorted = pool.slice().sort((a, b) => unitScore(b) - unitScore(a));
+  let pick = sorted.slice(0, slots), reason = "強さの順";
+  if (need && !unitHasAbility(leader(), need) && !pick.some(u => unitHasAbility(u, need))) {
+    const h = sorted.find(u => unitHasAbility(u, need));
+    if (h) { if (pick.length >= slots) pick[pick.length - 1] = h; else pick.push(h); reason = `${ABILITIES[need].name}の仲間を入れて、強さの順`; }
+  }
+  return { units: pick, reason };
+}
+// おすすめの編成にする（外した機体はストックへ、入れた機体はチームへ。今までの入れ替えと同じ扱い）
+function applyFormation(units) {
+  const hero = leader();
+  for (const u of team.slice(1)) if (!units.includes(u)) { clearFreeSlots(u); u.hp = u.maxHp; u.en = u.maxEn; stock.push(u); }
+  stock = stock.filter(u => !units.includes(u));
+  for (const u of units) if (!team.includes(u)) { u.hp = u.maxHp; u.en = u.maxEn; u.bs = freshBattleState(); }
+  team = [hero, ...units];
+  for (const u of units) fillFreeSlots(u);
+  log(`おすすめの編成にした：${units.map(u => u.name).join("・") || "主人公機だけ"}`, "", null, "menu-team");
+}
 function renderParty() {
   const ms = menuState, sel = ms.sel || null;
   const head = $("menuUnitHead");
@@ -4584,9 +4655,16 @@ function renderParty() {
       { label: "やめる", act: () => {} }]);
   }, ms.swap ? false : !inStock, ms.swap ? "" : "danger");
   b3.id = "pt-dismantle";
+  // おすすめ編成（チームとストックから）
+  const rec = recommendFormation(team.slice(1).concat(stock));
+  const same = rec.units.length === team.length - 1 && rec.units.every(u => team.includes(u));
+  const rr = el("div", "pbReco"); rr.id = "ptReco";
+  rr.append(el("span", "", `おすすめ：${rec.units.map(u => u.name).join("・") || "なし"}（${rec.reason}）`));
+  const rb = rowButton(same ? "おすすめどおり" : "おすすめにする", () => { applyFormation(rec.units); menuState = { unit: 0, pending: null, tab: "party" }; saveGame(); renderMenu(); renderVillage(); }, same || !!ms.swap);
+  rb.id = "pt-reco"; rr.append(rb);
   bb.append(b1, b2);
   if (menuFrom === "village" || ms.swap) bb.append(b3);   // 整備員の画面では解体しない（「やめる」だけ出す）
-  bar.append(bb);
+  bar.append(bb, rr);
   head.append(bar);
 
   const body = $("menuBody");
@@ -5013,6 +5091,7 @@ function showSelect() {
   mode = "select";
   hideAllScreens();
   $("select").hidden = false;
+  $("select").querySelector(".lead").textContent = testDesertNext ? "テストモード：タイプを選ぶと、砂漠の洞窟から始めます" : "最初の機体のタイプを選んでください";
   const list = $("typeList");
   list.textContent = "";
   START_TYPES.forEach((t, i) => {
@@ -5061,7 +5140,14 @@ function startGame(key) {
     hp: t.hp, en: t.en, tackle: t.tackle, accBonus: t.traits.accBonus, evade: t.traits.evade, enGrowth: t.enGrowth, unique: t.unique }));
   gainPart(t.part, { noMerge: true });
   bestLevel = 1;
-  if (DESERT_PARAM) debugDesertStart();
+  if (DESERT_PARAM || testDesertNext) debugDesertStart();
+  if (testDesertNext) {   // テストモード：仲間2体
+    for (const a of TEST_DESERT_ALLIES) { const def = ENEMY_TYPES[a.size]; team.push(createAlly(def, a.sprite, { lv: a.lv, part: def.ally.part, quirk: ANIMAL_TRAIT[a.sprite] })); }
+    autoEquipAll();
+    testDesertNext = false;
+    goVillage([`テストモード：機械遺跡をクリアした状態（主人公機Lv${DESERT_DEBUG_START.lv}・仲間2体）で始める。`, "「出発」から、砂漠の洞窟を選べる。"]);
+    return;
+  }
   goVillage([`${t.label}「${t.name}」で冒険を始める。`]);
 }
 
@@ -5158,6 +5244,7 @@ function depart(floor) {
   newFloor();
   log(isBossFloor(floorNo) ? `${curFloorLabel()} ボスフロアの準備部屋から出発した。` : `${curFloorLabel()}から出発した。階段を探せ。`, "", null, "depart");
   if (bossHintHere()) log("整備員が、何か知っているようだ。", "", null, "depart");
+  flushFloorNotice(t => log(t, "", null, "depart"));
   showHint(isBossFloor(floorNo) ? "prep" : "walk");
   resize();
 }
@@ -5515,11 +5602,26 @@ function buildRow() {
   return row;
 }
 // 歯車から開く設定（タイトル・タイプ選択）
+// テストモード：次にタイプを選んだとき、砂漠の洞窟から始める（今のセーブは、始めた時点で上書き）
+let testDesertNext = false;
+function testModeRow() {
+  const row = el("div", "mrow");
+  const info = el("div", "info", "テスト：砂漠の洞窟から始める"); info.append(el("small", "", "機械遺跡をクリアした状態（主人公機Lv11・パーツ・仲間2体）から。今のセーブは上書きされる"));
+  const b = rowButton("選ぶ", () => {
+    showDialog("テストモード", "機械遺跡をクリアした状態で、新しく始めます。今のセーブデータは上書きされます。よろしいですか？", [
+      { label: "タイプを選んで始める", primary: true, act: () => { testDesertNext = true; $("qset").hidden = true; showSelect(); } },
+      { label: "やめる", act: () => {} }]);
+  });
+  b.id = "testDesert";
+  const btns = el("div", "btns"); btns.append(b); row.append(info, btns);
+  return row;
+}
 function openQuickSettings() {
   const body = $("qsetBody"); body.textContent = "";
   body.append(topAdjustRow(openQuickSettings));
   body.append(buildRow());
   body.append(galleryRow("qset"));
+  body.append(testModeRow());
   $("qset").hidden = false;
 }
 
