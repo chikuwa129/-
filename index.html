@@ -724,7 +724,7 @@
 //  調整用の定数・データ
 // ================================================================
 // 版の目印（作業のたびに更新）。タイトル画面の隅、設定欄、?layout=1 の診断に出す
-const BUILD_ID = "1N2-20261115-1800";
+const BUILD_ID = "1N3-20261115-1900";
 // ================================================================
 //  色調（画面の色はすべてここから。ドット絵のパレット、ボスの色、レア度の色、世界地図の固定色は除く）
 //  THEME＝全画面の標準の色（1J の前の版の色）、THEME_MAP＝世界マップの画面だけの色（古地図）。地図の画面に入るときと出るときに切り替える
@@ -2584,9 +2584,15 @@ function bossFloor() {
   pos = { ...L.start };
   if (!bossDone(floorNo)) enemies.push(makeBoss(dungeon.bosses[floorNo], L.boss.x, L.boss.y));
   // 準備部屋の物資は、着いた時点でまとめて受け取る（桜井流「遅さは罪」：拾いに歩かせない）
-  const got = [];
-  for (const [k, n] of Object.entries(BOSS_PREP_ITEMS)) { inv.items[k] += n; got.push(`${ITEMS[k].name}×${n}`); }
-  floorNotice = `準備部屋の物資を受け取った：${got.join("・")}`;
+  // 受け取れるのは1回だけ（村との往復で増やせないように）。そのボスに負けると、また用意される。ボスを倒したあとは出ない
+  const rec = recOf(), pk = "prep" + floorNo;
+  if (bossDone(floorNo)) floorNotice = null;
+  else if (!rec[pk]) {
+    const got = [];
+    for (const [k, n] of Object.entries(BOSS_PREP_ITEMS)) { inv.items[k] += n; got.push(`${ITEMS[k].name}×${n}`); }
+    rec[pk] = true;
+    floorNotice = `準備部屋の物資を受け取った：${got.join("・")}`;
+  } else floorNotice = "準備部屋の物資は、もう受け取っている。（ボスに負けると、また用意される）";
   // ボス階は全体を見せる
   for (let y = 0; y < MAP_H; y++) { seen[y].fill(true); visible[y].fill(true); }
 }
@@ -2716,7 +2722,10 @@ const npcAt = (x, y) => npcs.find(n => n.x === x && n.y === y);
 // 同じボスに続けて負けた回数（セーブしない。勝つと0）
 const bossLosses = {};
 const bossKey = f => `${dungeon.key}:${f}`;
-function noteBossLoss(f) { bossLosses[bossKey(f)] = (bossLosses[bossKey(f)] || 0) + 1; }
+function noteBossLoss(f) {
+  bossLosses[bossKey(f)] = (bossLosses[bossKey(f)] || 0) + 1;
+  recOf()["prep" + f] = false;   // 負けたら、準備部屋の物資がまた用意される
+}
 // 整備員が教えるボスのコツ（この階のボスに、続けて BOSS_HINT_AFTER_LOSSES 回負けたとき。ボスがまだいるときだけ）
 function bossHintHere() {
   const b = dungeon.bosses[floorNo];
@@ -5760,7 +5769,7 @@ function applySave(d) {
   const int0 = v => okNum(v) && v >= 0 ? Math.floor(v) : 0;
   if (d.version >= 7) {
     const recs = {};
-    for (const [k, r] of Object.entries(d.progress.dungeons)) recs[k] = { clears: int0(r.clears), reached: int0(r.reached), boss5: !!r.boss5, boss10: !!r.boss10, pity: int0(r.pity) };
+    for (const [k, r] of Object.entries(d.progress.dungeons)) recs[k] = { clears: int0(r.clears), reached: int0(r.reached), boss5: !!r.boss5, boss10: !!r.boss10, pity: int0(r.pity), prep5: !!r.prep5, prep10: !!r.prep10 };   // prep は 1N3 から（なければ未受け取り）
     progress = makeProgress(recs);
   } else {
     const o = d.progress, ruinsKey = DUNGEONS[0].key;
@@ -5819,7 +5828,7 @@ function applySave(d) {
 const okNum = v => typeof v === "number" && isFinite(v);
 
 // ---- 進み具合（ダンジョンごとの記録）。reached＝到達した最も深い階（前庭＝0）、boss5・boss10＝そのボスを倒した、pity＝仲間の入手保証の数え ----
-const freshDungeonRec = () => ({ clears: 0, reached: 0, boss5: false, boss10: false, pity: 0 });
+const freshDungeonRec = () => ({ clears: 0, reached: 0, boss5: false, boss10: false, pity: 0, prep5: false, prep10: false });   // prep5・prep10＝その階の準備部屋の物資を受け取った
 function makeProgress(recs = {}) {
   const p = { dungeons: {} };
   for (const d of DUNGEONS) p.dungeons[d.key] = { ...freshDungeonRec(), ...(recs[d.key] || {}) };
