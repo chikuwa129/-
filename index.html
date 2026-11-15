@@ -724,7 +724,7 @@
 //  調整用の定数・データ
 // ================================================================
 // 版の目印（作業のたびに更新）。タイトル画面の隅、設定欄、?layout=1 の診断に出す
-const BUILD_ID = "1N4-20261115-2000";
+const BUILD_ID = "1N5-20261115-2130";
 // ================================================================
 //  色調（画面の色はすべてここから。ドット絵のパレット、ボスの色、レア度の色、世界地図の固定色は除く）
 //  THEME＝全画面の標準の色（1J の前の版の色）、THEME_MAP＝世界マップの画面だけの色（古地図）。地図の画面に入るときと出るときに切り替える
@@ -944,6 +944,9 @@ const SLOT_COUNT = HERO_FREE_SLOTS;   // 互換用（古いセーブの主人公
 const LEVEL_DAMAGE_COEF = 0.05;
 const PLUS_COEF = 0.08;            // 強化値1つにつき威力+8%
 const PLUS_MAX = 5;
+// 1機の版：強化の上限と、強化値1つで上がる威力の割合を、レア度で決める（★0〜★3）。
+// どのレア度も「上限まで強化しても、1段上のレア度の+0に届かない」ようにしてある（拾ったレアは付け替える価値がある）
+const SOLO_PLUS_BY_RARITY = [{ max: 2, step: 0.05 }, { max: 3, step: 0.06 }, { max: 4, step: 0.07 }, { max: 5, step: 0.10 }];
 const INVENTORY_MAX = 30;
 // ---- 1機の版（SOLO）の表 ----
 // choices＝レベルアップの選択肢の数、extraSlotLv＝この Lv で自由枠が1つ増える（わざは最大6つ＝3段）、
@@ -959,7 +962,11 @@ const SOLO_PERKS = {
   thrust:  { name: "回避スラスター", desc: "攻撃を8%かわす",                max: 3, q: { evadeAdd: 8 } },
   counter: { name: "反撃回路",       desc: "防御した次の攻撃が1.5倍",       max: 1, q: { guardCharge: 1.5 } },
   twin:    { name: "連撃回路",       desc: "たいあたりが2回攻撃（1回は6割）", max: 1, q: { tackleHits: 2, tackleMult: 0.6 } },
+  // 仕掛けの能力：その仕掛けのダンジョンに行けるようになってから、ほかの能力と同じ確率で出る（出るかどうかは運）
+  heatCoat: { name: "耐熱コーティング", desc: "耐熱の力。熱気の中でも、戦闘のあとにHPが減らない", max: 1, q: {}, ability: "heatproof", gimmick: "heat" },
 };
+// 仕掛けの能力の出る条件：その仕掛けのダンジョンが解放されている
+const perkAvailable = k => { const d = SOLO_PERKS[k]; return !d.gimmick || DUNGEONS.some(dg => dg.gimmick === d.gimmick && WORLD_PLACES.some(pl => pl.dungeon === dg.key && placeUnlocked(pl))); };
 const expectedDamage = p => p.power * p.acc / 100;   // 期待ダメージ（自動装備・おまかせ装備で比べる）
 
 // 落とし物
@@ -2113,7 +2120,9 @@ const partText = p => `${p.name}${RARITY[p.rarity].stars}`;
 const plusText = item => item && item.plus ? `+${item.plus}` : "";
 const itemName = item => partOf(item).name + plusText(item);                 // 「ハンドガンK7+2」
 const itemText = item => itemName(item) + RARITY[partOf(item).rarity].stars;  // ★付き
-const itemPower = item => partOf(item).power * (1 + PLUS_COEF * (item.plus || 0));   // 強化値の威力（小数のまま）
+const plusMaxOf = item => SOLO ? SOLO_PLUS_BY_RARITY[partOf(item).rarity].max : PLUS_MAX;     // 強化の上限
+const plusStepOf = item => SOLO ? SOLO_PLUS_BY_RARITY[partOf(item).rarity].step : PLUS_COEF;  // 強化値1つの威力の割合
+const itemPower = item => partOf(item).power * (1 + plusStepOf(item) * (item.plus || 0));   // 強化値の威力（小数のまま）
 const itemExpected = item => itemPower(item) * partOf(item).acc / 100;            // 自動装備で比べる期待ダメージ
 const isAbilityItem = item => !!item && !!partOf(item).ability;                   // 能力パーツ（放熱ユニット）
 const ownsPart = id => inv.parts.some(i => i.id === id);                         // 持ち物（装備中も含む）にあるか
@@ -2124,7 +2133,7 @@ const levelMult = u => 1 + LEVEL_DAMAGE_COEF * (u.lv - 1);
 function gainPart(id, opts = {}) {
   if (partById(id).ability) { const item = { id, uid: ++partUid, plus: 0 }; inv.parts.push(item); return { item, unit: null, swapped: null, discarded: trimInventory() }; }
   if (!opts.noMerge) {
-    const same = inv.parts.filter(i => i.id === id && (i.plus || 0) < PLUS_MAX);
+    const same = inv.parts.filter(i => i.id === id && (i.plus || 0) < plusMaxOf(i));
     if (same.length) {
       same.sort((a, b) => (b.plus || 0) - (a.plus || 0) || (isEquipped(b) ? 1 : 0) - (isEquipped(a) ? 1 : 0));
       const t = same[0];
@@ -2784,10 +2793,11 @@ const canSwapParty = () => !SOLO && menuFrom === "village" || (menuFrom === "map
 
 // ---- 能力と仕掛け（熱気） ----
 // 能力を持つか：動物の能力、または付けている能力パーツ（放熱ユニット）
-const unitHasAbility = (u, ab) => (u.abilities || []).includes(ab) || slotItems(u).some(it => it && partOf(it).ability === ab);
+const perkAbilities = u => Object.entries(u.perks || {}).filter(([k, n]) => n > 0 && SOLO_PERKS[k] && SOLO_PERKS[k].ability).map(([k]) => SOLO_PERKS[k].ability);   // 1機の版：能力で取った力
+const unitHasAbility = (u, ab) => (u.abilities || []).includes(ab) || perkAbilities(u).includes(ab) || slotItems(u).some(it => it && partOf(it).ability === ab);
 const teamHasAbility = ab => team.some(u => unitHasAbility(u, ab));   // HP0の機体も含む
 // 機体が持つ能力の一覧（動物の能力 → 付けている能力パーツの能力。重なりなし）
-const unitAbilities = u => [...new Set([...(u.abilities || []), ...slotItems(u).filter(isAbilityItem).map(it => partOf(it).ability)])];
+const unitAbilities = u => [...new Set([...(u.abilities || []), ...perkAbilities(u), ...slotItems(u).filter(isAbilityItem).map(it => partOf(it).ability)])];
 // 名前の横の小さなタグ（「耐熱」など）。能力がなければ何も足さない
 function appendAbilityTags(node, u) {
   for (const ab of unitAbilities(u)) node.append(el("span", "abTag", ABILITIES[ab].name));
@@ -2800,7 +2810,6 @@ const isCaveNormalFloor = (f = floorNo) => f >= 1 && !isBossFloor(f);
 // 熱気が効いているか（仕掛けのあるダンジョンの、洞窟の通常階で、チームに耐熱がいない）
 function heatActive(f = floorNo) {
   const g = gimmickOf();
-  if (SOLO) return false;   // 1機の版（試作）：仕掛けはまだない
   return !!g && isCaveNormalFloor(f) && !teamHasAbility(g.ability);
 }
 // 画面の縁の光（熱気など、仕掛けのダメージ）。縁が濃く中央は透明、1回だけ ms で消える。操作は邪魔しない。演出オフでは出さない
@@ -2839,7 +2848,7 @@ const heatStats = { total: 0 };   // テスト・計測用（熱気で消耗し�
 function confirmGimmick(floor, go, cancel) {
   const g = gimmickOf();
   if (!g || floor < 1 || teamHasAbility(g.ability)) { go(); return; }
-  showDialog(g.name, `この先は熱気がこもっている。${ABILITIES[g.ability].name}の力が必要だ。（今のチーム：${ABILITIES[g.ability].name}なし）`,
+  showDialog(g.name, soloWords(`この先は熱気がこもっている。${ABILITIES[g.ability].name}の力が必要だ。（今のチーム：${ABILITIES[g.ability].name}なし）`),
     [{ label: "進む", primary: true, act: go }, { label: "やめる", act: cancel }]);
 }
 
@@ -3890,12 +3899,12 @@ let pickState = null;   // { opts, step: "choose" | "swap", item }
 function soloPickOptions(u) {
   const used = new Set(), opts = [];
   const perk = () => {
-    const ids = Object.keys(SOLO_PERKS).filter(k => (u.perks[k] || 0) < SOLO_PERKS[k].max && !used.has("p:" + k));
+    const ids = Object.keys(SOLO_PERKS).filter(k => (u.perks[k] || 0) < SOLO_PERKS[k].max && perkAvailable(k) && !(SOLO_PERKS[k].ability && unitHasAbility(u, SOLO_PERKS[k].ability)) && !used.has("p:" + k));
     if (!ids.length) return null;
     const k = ids[rnd(ids.length)]; used.add("p:" + k); return { kind: "perk", id: k };
   };
   const upgrade = () => {
-    const items = u.free.filter(it => it && !isAbilityItem(it) && (it.plus || 0) < PLUS_MAX && !used.has("u:" + it.uid));   // 上限の手前なら、上限まで
+    const items = u.free.filter(it => it && !isAbilityItem(it) && (it.plus || 0) < plusMaxOf(it) && !used.has("u:" + it.uid));   // 上限の手前なら、上限まで
     if (!items.length) return null;
     const it = items[rnd(items.length)]; used.add("u:" + it.uid); return { kind: "upgrade", item: it };
   };
@@ -3925,12 +3934,12 @@ function pickText(u, o) {
   }
   if (o.kind === "upgrade") {
     const it = o.item, to = upgradedPlus(it), before = Math.round(itemPower(it) * levelMult(u)), after = Math.round(itemPower({ ...it, plus: to }) * levelMult(u));
-    return { tag: "強化", title: `${itemName(it)} → +${to}`, desc: `威力 ${before} → ${after}（+${Math.round(100 * (itemPower({ ...it, plus: to }) / itemPower(it) - 1))}%）` };
+    return { tag: "強化", title: `${itemName(it)} → +${to}${to >= plusMaxOf(it) ? "（上限）" : ""}`, desc: `威力 ${before} → ${after}（+${Math.round(100 * (itemPower({ ...it, plus: to }) / itemPower(it) - 1))}%）` };
   }
   const p = partById(o.id), same = sameWeapon(o.id);
   if (same) {   // 持っている同じ武器に重ねて強化（床で拾ったときと同じ）
     const to = upgradedPlus(same), before = Math.round(itemPower(same) * levelMult(u)), after = Math.round(itemPower({ ...same, plus: to }) * levelMult(u));
-    return { tag: "同じ武器", title: `${itemName(same)} → +${to}`, desc: `持っている同じ武器に重ねて強化。威力 ${before} → ${after}`, color: RARITY[p.rarity].color };
+    return { tag: "同じ武器", title: `${itemName(same)} → +${to}${to >= plusMaxOf(same) ? "（上限）" : ""}`, desc: `持っている同じ武器に重ねて強化。威力 ${before} → ${after}`, color: RARITY[p.rarity].color };
   }
   return { tag: "新しい武器", title: partText(p), desc: `${PART_KIND_LABEL[p.type]}　威力${p.power}　命中${p.acc}%　EN${p.en}`, color: RARITY[p.rarity].color };
 }
@@ -3944,11 +3953,11 @@ function fillSpareSlot(u) {
 const perkListText = u => Object.entries(u.perks || {}).filter(([, n]) => n > 0).map(([k, n]) => SOLO_PERKS[k].name + (n > 1 ? `×${n}` : "")).join("、") || "なし（レベルアップで選べる）";
 // 持っている同じ武器（強化値が上限未満）。付けているもの → 強化値が高いもの を優先（使っている武器が強くなるように）
 function sameWeapon(id) {
-  const same = inv.parts.filter(i => i.id === id && (i.plus || 0) < PLUS_MAX);
+  const same = inv.parts.filter(i => i.id === id && (i.plus || 0) < plusMaxOf(i));
   same.sort((a, b) => (isEquipped(b) ? 1 : 0) - (isEquipped(a) ? 1 : 0) || (b.plus || 0) - (a.plus || 0));
   return same[0] || null;
 }
-const upgradedPlus = it => Math.min(PLUS_MAX, (it.plus || 0) + SOLO_CFG.upgradePlus);
+const upgradedPlus = it => Math.min(plusMaxOf(it), (it.plus || 0) + SOLO_CFG.upgradePlus);
 function openLevelPick() {
   const u = leader();
   if (!SOLO || !u || !(u.picks > 0) || pickState) return;
@@ -5205,6 +5214,7 @@ function renderMap() {
   updateStatus();
   updateMini();
   checkFloorDone();
+  if (mode === "map") writeSuspend();   // オートセーブ（ダンジョンの途中）
 }
 
 // ================================================================
@@ -5473,6 +5483,7 @@ function debugDesertStart() {
 
 // 村に着く：全員全回復（HP0も復活）して自動保存
 function goVillage(msgs = []) {
+  clearSuspend();   // 村ではふつうのセーブ（途中のオートセーブは消す）
   battle = null;
   map = null;
   mode = "village";
@@ -5691,7 +5702,68 @@ function manualSave() {
 }
 function deleteSave() {
   try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* 使えなくても続ける */ }
+  clearSuspend();
 }
+
+// ================================================================
+//  オートセーブ（ダンジョンの途中）：マップを描くたび（歩く・階の移動・バトルのあと）と、画面を離れるときに保存する。
+//  ページが読み込み直されても、「つづきから」で同じ階の同じ場所から続けられる。村に着くと消す（村ではふつうのセーブ）
+//  バトル中は書かない（読み込み直すと、バトルの直前から）
+// ================================================================
+const SUSPEND_KEY = SAVE_KEY + "Suspend", SUSPEND_VERSION = 1;
+let suspendBlocked = false;   // テストなどで止めるとき
+function enemyToSave(e) {
+  const o = { ...e };
+  o.def = e.boss ? { boss: Object.keys(dungeon.bosses).find(k => dungeon.bosses[k] === e.def) } : { type: e.def.key };
+  return o;
+}
+function enemyFromSave(o) {
+  const def = o.def && o.def.boss != null ? dungeon.bosses[o.def.boss] : ENEMY_TYPES.find(t => t.key === (o.def && o.def.type));
+  if (!def) throw 0;
+  return { ...o, def };
+}
+function writeSuspend() {
+  if (suspendBlocked || mode !== "map" || !map || !team || !team.length) return;
+  try {
+    if (!saveGame()) return;
+    const d = { v: SUSPEND_VERSION, dungeon: dungeon.key, floorNo, pos, heroFacingLeft, floorDone, dropMiss,
+      map, seen: seen.map(r => r.map(b => b ? 1 : 0).join("")), enemies: enemies.map(enemyToSave), groundItems, npcs, floorRooms };
+    localStorage.setItem(SUSPEND_KEY, JSON.stringify(d));
+  } catch (e) { /* 保存できなくても遊べる */ }
+}
+function clearSuspend() { try { localStorage.removeItem(SUSPEND_KEY); } catch (e) {} }
+function readSuspend() {
+  try {
+    const d = JSON.parse(localStorage.getItem(SUSPEND_KEY) || "null");
+    if (!d || d.v !== SUSPEND_VERSION || !dungeonByKey(d.dungeon) || !okNum(d.floorNo) || !Array.isArray(d.map) || d.map.length !== MAP_H) return null;
+    return d;
+  } catch (e) { return null; }
+}
+// 中断したところから再開する（セーブを読み込んだあとに呼ぶ）。うまくいかなければ false（村から）
+function resumeSuspend(d) {
+  try {
+    dungeon = dungeonByKey(d.dungeon);
+    const es = d.enemies.map(enemyFromSave);
+    blankMap();
+    for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) { map[y][x] = d.map[y][x]; seen[y][x] = d.seen[y][x] === "1"; }
+    enemies = es; groundItems = d.groundItems || []; npcs = d.npcs || []; floorRooms = d.floorRooms || [];
+    floorNo = d.floorNo; pos = { x: d.pos.x, y: d.pos.y }; heroFacingLeft = !!d.heroFacingLeft; floorDone = !!d.floorDone; dropMiss = d.dropMiss || 0;
+  } catch (e) { return false; }
+  battle = null; autoWalking = false; floorNotice = null; heatHintShown = false;
+  hideAllScreens();
+  $("mapScreen").hidden = false;
+  mode = "map";
+  decideDungeonEasy();
+  for (const u of team) u.bs = freshBattleState();
+  if (isBossFloor(floorNo)) for (let y = 0; y < MAP_H; y++) { seen[y].fill(true); visible[y].fill(true); }
+  else updateFov();
+  log(`${curFloorLabel()}の、中断したところから再開した。`, tc("accent"), null, "depart");
+  resize();
+  if (SOLO) openLevelPick();
+  return true;
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") writeSuspend(); });
+window.addEventListener("pagehide", writeSuspend);
 // 読み込み：{ status: "none" | "ok" | "broken", data }
 function readSave() {
   let raw;
@@ -5828,6 +5900,7 @@ function applySave(d) {
   if (moved.size) { inv.parts = all.filter(i => !moved.has(i)); trimInventory(); }
   // 古い形式：仲間の自由枠は空きなので、チームに加えるときの規則で、持ち物から入れる
   if (d.version < 5) for (const u of team) if (!u.isLeader) { u.manual = false; fillFreeSlots(u); }
+  if (SOLO) for (const it of inv.parts) it.plus = Math.min(it.plus || 0, plusMaxOf(it));   // 1機の版：レア度の上限に合わせる
   bestLevel = Math.max(d.bestLevel || 1, ...team.map(u => u.lv));
   return migrated;
 }
@@ -6187,7 +6260,7 @@ function renderWorldInfo(power) {
     row("入り口", pl.entry);
     const d = pl.dungeon && DUNGEONS.find(x => x.key === pl.dungeon);
     if (d && d.hasRare) box.append(el("div", "wiLurk", WORLD_LURK_TEXT));
-    if (d && d.heatNote) { const hn = el("div", "wiRow", d.heatNote); hn.id = "wiGimmick"; box.append(hn); }
+    if (d && d.heatNote) { const hn = el("div", "wiRow", SOLO ? "熱気：耐熱の力が必要。レベルアップで「耐熱コーティング」を引くか、放熱ユニットを探そう" : d.heatNote); hn.id = "wiGimmick"; box.append(hn); }
     if (st === "soon") box.append(el("div", "wiRow", "この場所は、まだ準備中。"));
   }
   // 下端の「出発」：出発できないときは灰色にして、理由を上に出す
@@ -6336,8 +6409,11 @@ function boot() {
   $("title").hidden = false;
   $("btnContinue").hidden = r.status !== "ok";
   $("titleNote").textContent = r.status === "ok" ? "セーブデータがあります。" : "セーブデータを読めませんでした。はじめから遊べます。";
+  const sus = r.status === "ok" ? readSuspend() : null;
+  if (sus) $("titleNote").textContent = `${floorLabel(dungeonByKey(sus.dungeon), sus.floorNo)}の途中から続けられます。`;
   $("btnContinue").onclick = () => {
     const migrated = applySave(r.data), notes = r.data._notes || [];
+    if (sus && !migrated && resumeSuspend(sus)) return;
     goVillage((migrated ? ["つづきから再開した。", r.data.version < 2 ? "古いセーブデータを新しい形式に移しました（防御と固有技はLv1から）。" : "古いセーブデータを新しい形式に移しました。"] : ["つづきから再開した。"]).concat(notes));
   };
 }
