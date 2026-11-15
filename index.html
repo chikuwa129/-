@@ -724,7 +724,7 @@
 //  調整用の定数・データ
 // ================================================================
 // 版の目印（作業のたびに更新）。タイトル画面の隅、設定欄、?layout=1 の診断に出す
-const BUILD_ID = "1N3-20261115-1900";
+const BUILD_ID = "1N4-20261115-2000";
 // ================================================================
 //  色調（画面の色はすべてここから。ドット絵のパレット、ボスの色、レア度の色、世界地図の固定色は除く）
 //  THEME＝全画面の標準の色（1J の前の版の色）、THEME_MAP＝世界マップの画面だけの色（古地図）。地図の画面に入るときと出るときに切り替える
@@ -1491,6 +1491,7 @@ const MOVE_LIST_GAP = 4;
 const STATUS_TAG_MAX = 2;          // 味方の欄に出す状態のタグの数（残りは「+n」）
 const STATUS_DETAIL_MS = 2000;     // 味方の欄をタップしたとき、状態の説明を出す時間
 const GUARD_ALL_WAIT = 300;        // 全員防御：1体ずつの待ち
+const DIALOG_TAP_GUARD_MS = 350;   // 確認の画面を開いた直後、この間のタップは無視する
 const BATTLE_TAP_GUARD_MS = 400;   // バトルが始まった直後、この間のタップは無視する（前の画面のタップの続きを拾わない）
 
 // マップ
@@ -2766,7 +2767,7 @@ function talkMech() {
     { label: "整備する", primary: true, act: () => { healAll(); mapLog("整備完了。いってらっしゃい", "", "mech"); renderMap(); } }];
   if (!SOLO) btns.push({ label: "仲間を入れ替える", act: openMechParty });
   // 厳しいときは、村に戻って出直す道を出す（何度でも選べる。強制はしない）
-  if (o && o.level === "hard") btns.push({ label: "村に戻って出直す", act: () => goVillage(["整備員に見送られて、村に戻った。"]) });
+  if (o && o.level === "hard") btns.push({ label: "村に戻って出直す", act: () => askReturnVillage("整備員に見送られて、村に戻った。") });
   btns.push({ label: "やめる", act: () => {} });
   showDialog("整備員", text, btns);
 }
@@ -5108,11 +5109,11 @@ function doBulkHeal(kind) {
   return p;
 }
 
-// マップのメニューから村に戻る（確認つき）
-function askReturnVillage() {
+// 村に戻る（確認つき。メニューと、準備部屋の整備員から）。誤タップで戻らないように「やめる」を上に置く
+function askReturnVillage(msg = "村に戻った。") {
   showDialog("村に戻りますか？", `この階の進行（拾っていない落とし物、いる敵）は消えます。レベル・${SOLO ? "能力" : "仲間"}・持ち物はそのままです。`, [
-    { label: "村に戻る", primary: true, act: () => { $("menu").hidden = true; mode = "map"; goVillage(["村に戻った。"]); } },
-    { label: "やめる", act: () => {} },
+    { label: "やめる", cancel: true, act: () => {} },
+    { label: "村に戻る", danger: true, act: () => { $("menu").hidden = true; mode = "map"; goVillage([msg]); } },
   ]);
 }
 
@@ -5610,7 +5611,11 @@ function gameClear(lootId) {
 }
 
 // ---- 確認・選択ダイアログ ----
+// 確認の画面を開いた直後（DIALOG_TAP_GUARD_MS の間）のタップは無視する（前のボタンの2度押しが、そのまま通らないように）
+let dialogOpenedAt = -Infinity;
+const dialogGuardMs = () => (typeof window.__tapGuardMs === "number" ? window.__tapGuardMs : DIALOG_TAP_GUARD_MS);
 function showDialog(title, text, buttons) {
+  dialogOpenedAt = performance.now();
   $("dlgTitle").textContent = title;
   $("dlgText").textContent = text;
   const box = $("dlgBtns");
@@ -5618,7 +5623,8 @@ function showDialog(title, text, buttons) {
   buttons.forEach((bt, i) => {
     const b = el("button", bt.primary ? "primary" : (bt.danger ? "danger" : ""), bt.label);
     b.dataset.idx = i;
-    b.addEventListener("click", () => { $("dialog").hidden = true; bt.act(); });
+    if (bt.cancel) b.dataset.cancel = "1";   // Esc で押すボタン（なければ最後のボタン）
+    b.addEventListener("click", () => { if (performance.now() - dialogOpenedAt < dialogGuardMs()) return; $("dialog").hidden = true; bt.act(); });
     box.append(b);
   });
   $("dialog").hidden = false;
@@ -6364,7 +6370,7 @@ document.addEventListener("keydown", ev => {
     return;
   }
   if (!$("dialog").hidden) {
-    if (ev.key === "Escape") { const bs = $("dlgBtns").children; bs[bs.length - 1].click(); }
+    if (ev.key === "Escape") { const bs = $("dlgBtns").children; ($("dlgBtns").querySelector("[data-cancel]") || bs[bs.length - 1]).click(); }
     return;
   }
   if (recruitState) { if (recruitKey(ev.key)) ev.preventDefault(); return; }
