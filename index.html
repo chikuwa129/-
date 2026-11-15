@@ -723,7 +723,7 @@
 //  調整用の定数・データ
 // ================================================================
 // 版の目印（作業のたびに更新）。タイトル画面の隅、設定欄、?layout=1 の診断に出す
-const BUILD_ID = "1N-20261115-1500";
+const BUILD_ID = "1N1-20261115-1700";
 // ================================================================
 //  色調（画面の色はすべてここから。ドット絵のパレット、ボスの色、レア度の色、世界地図の固定色は除く）
 //  THEME＝全画面の標準の色（1J の前の版の色）、THEME_MAP＝世界マップの画面だけの色（古地図）。地図の画面に入るときと出るときに切り替える
@@ -3886,7 +3886,10 @@ function soloPickOptions(u) {
       const type = types[rnd(types.length)];
       let p = partById(floorRarityPart(type));
       if (Math.random() < SOLO_CFG.rarityUp) p = PARTS.find(q => q.type === type && q.rarity === Math.min(RARITY.length - 1, p.rarity + 1)) || p;
-      if (!used.has("w:" + p.id)) { used.add("w:" + p.id); return { kind: "weapon", id: p.id }; }
+      const same = sameWeapon(p.id);
+      if (!same && inv.parts.some(i => i.id === p.id)) continue;               // 持っているが強化値が上限：出さない
+      if (same && used.has("u:" + same.uid)) continue;                          // 同じ1本を「強化」でも出しているときは重ねない
+      if (!used.has("w:" + p.id)) { used.add("w:" + p.id); if (same) used.add("u:" + same.uid); return { kind: "weapon", id: p.id }; }
     }
     return null;
   };
@@ -3905,8 +3908,12 @@ function pickText(u, o) {
     const it = o.item, to = upgradedPlus(it), before = Math.round(itemPower(it) * levelMult(u)), after = Math.round(itemPower({ ...it, plus: to }) * levelMult(u));
     return { tag: "強化", title: `${itemName(it)} → +${to}`, desc: `威力 ${before} → ${after}（+${Math.round(100 * (itemPower({ ...it, plus: to }) / itemPower(it) - 1))}%）` };
   }
-  const p = partById(o.id), have = inv.parts.some(i => i.id === o.id);
-  return { tag: "新しい武器", title: partText(p), desc: `${PART_KIND_LABEL[p.type]}　威力${p.power}　命中${p.acc}%　EN${p.en}${have ? "（同じ武器をもう1つ）" : ""}`, color: RARITY[p.rarity].color };
+  const p = partById(o.id), same = sameWeapon(o.id);
+  if (same) {   // 持っている同じ武器に重ねて強化（床で拾ったときと同じ）
+    const to = upgradedPlus(same), before = Math.round(itemPower(same) * levelMult(u)), after = Math.round(itemPower({ ...same, plus: to }) * levelMult(u));
+    return { tag: "同じ武器", title: `${itemName(same)} → +${to}`, desc: `持っている同じ武器に重ねて強化。威力 ${before} → ${after}`, color: RARITY[p.rarity].color };
+  }
+  return { tag: "新しい武器", title: partText(p), desc: `${PART_KIND_LABEL[p.type]}　威力${p.power}　命中${p.acc}%　EN${p.en}`, color: RARITY[p.rarity].color };
 }
 // 増えた枠（空き）に、持ち物のいちばん強い武器を付ける
 function fillSpareSlot(u) {
@@ -3916,6 +3923,12 @@ function fillSpareSlot(u) {
 }
 // 取った能力の一覧（メニュー用）
 const perkListText = u => Object.entries(u.perks || {}).filter(([, n]) => n > 0).map(([k, n]) => SOLO_PERKS[k].name + (n > 1 ? `×${n}` : "")).join("、") || "なし（レベルアップで選べる）";
+// 持っている同じ武器（強化値が上限未満）。付けているもの → 強化値が高いもの を優先（使っている武器が強くなるように）
+function sameWeapon(id) {
+  const same = inv.parts.filter(i => i.id === id && (i.plus || 0) < PLUS_MAX);
+  same.sort((a, b) => (isEquipped(b) ? 1 : 0) - (isEquipped(a) ? 1 : 0) || (b.plus || 0) - (a.plus || 0));
+  return same[0] || null;
+}
 const upgradedPlus = it => Math.min(PLUS_MAX, (it.plus || 0) + SOLO_CFG.upgradePlus);
 function openLevelPick() {
   const u = leader();
@@ -3962,6 +3975,9 @@ function choosePick(i) {
   } else if (o.kind === "upgrade") {
     o.item.plus = upgradedPlus(o.item);
     mapLog(`${itemName(o.item)}に強化した。`, tc("accent"), "pick");
+  } else if (sameWeapon(o.id)) {
+    const it = sameWeapon(o.id); it.plus = upgradedPlus(it);
+    mapLog(`同じ武器を重ねて、${itemName(it)}に強化した。`, tc("accent"), "pick");
   } else {
     const item = { id: o.id, uid: ++partUid, plus: 0 };
     inv.parts.push(item);
@@ -3996,15 +4012,15 @@ function pickKey(key) {
   if (st.step === "choose") choosePick(n - 1); else swapPick(n - 1 < leader().free.length ? n - 1 : -1);
   return true;
 }
-// おまかせ（テストのボット用）：今の武器より強い新しい武器 → 強化 → 能力 の順
+// おまかせ（テストのボット用）：空き枠・今より強い新しい武器 → 能力 → 強化・同じ武器 の順
 function pickAuto() {
   const st = pickState, u = leader(); if (!st) return;
   if (st.step === "swap") {
     let w = -1; u.free.forEach((it, i) => { if (w < 0 || itemExpected(it) < itemExpected(u.free[w])) w = i; });
     swapPick(itemExpected(st.item) > itemExpected(u.free[w]) ? w : -1); return;
   }
-  const score = o => o.kind === "weapon" ? (u.free.includes(null) ? 3 : itemExpected({ id: o.id, plus: 0 }) > Math.min(...u.free.map(itemExpected)) ? 2.5 : 0.5)
-    : o.kind === "upgrade" ? 2 : 1.5;
+  const score = o => o.kind === "weapon" && sameWeapon(o.id) ? 1.8 : o.kind === "weapon" ? (u.free.includes(null) ? 3 : itemExpected({ id: o.id, plus: 0 }) > Math.min(...u.free.map(itemExpected)) ? 2.5 : 0.5)
+    : o.kind === "upgrade" ? 1.8 : 2;   // 能力 ＞ 強化・同じ武器
   let best = 0; st.opts.forEach((o, i) => { if (score(o) > score(st.opts[best])) best = i; });
   choosePick(best);
 }
