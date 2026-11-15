@@ -49,6 +49,11 @@
   .bar.en i { background: var(--t-en); }
   .bar.ehp i { background: var(--t-ehpBar); }
   .low { color: var(--t-hp) !important; }
+  /* HPが残りわずか（LOW_HP_RATE 以下）：HPバーと数字が点滅する。演出オフ・動きを減らす設定では、点滅のかわりに赤い枠 */
+  .bar.hp.lowHp { box-shadow: 0 0 0 1px var(--t-danger); }
+  .bar.hp.lowBlink i, .num.lowBlink { animation: lowBlink var(--low-blink-ms, 900ms) ease-in-out infinite; }
+  @keyframes lowBlink { 0%, 100% { opacity: 1; } 50% { opacity: .2; } }
+  @media (prefers-reduced-motion: reduce) { .bar.hp.lowBlink i, .num.lowBlink { animation: none; } }
 
   /* タイプ選択 */
   #select h1 { font-size: 22px; margin: 4px 0 0; letter-spacing: .04em; }
@@ -698,7 +703,7 @@
 //  調整用の定数・データ
 // ================================================================
 // 版の目印（作業のたびに更新）。タイトル画面の隅、設定欄、?layout=1 の診断に出す
-const BUILD_ID = "1L-20261114-2100";
+const BUILD_ID = "1M-20261115-1200";
 // ================================================================
 //  色調（画面の色はすべてここから。ドット絵のパレット、ボスの色、レア度の色、世界地図の固定色は除く）
 //  THEME＝全画面の標準の色（1J の前の版の色）、THEME_MAP＝世界マップの画面だけの色（古地図）。地図の画面に入るときと出るときに切り替える
@@ -733,7 +738,7 @@ const THEME_MAP = {
   tagGun: "#e0c060", tagMissile: "#e09060", tagLaser: "#7fc4d8", tagUnique: "#b8d880",
   heal: "#8ad070", enGlow: "#7fc4d8", crit: "#f2c14e", miss: "#c8b896", evade: "#9fdcc8", allyDmg: "#ff8a6a",
   overlay: "rgba(12,8,4,.86)", shadow: "#000", shadowSoft: "rgba(0,0,0,.6)", villageBg: "#2a2a1e",
-  mapBg: "#0c0905", mapDim: "rgba(0,0,0,.5)", mapEnemyHpBg: "#400", mapEnemyHp: "#f44", oneHitDot: "#fff",
+  mapBg: "#0c0905", mapEnemyHpBg: "#400", mapEnemyHp: "#f44", oneHitDot: "#fff",
   flashHeal: "rgba(80,230,120,.35)", flashGuard: "rgba(90,220,255,.35)", flashAttack: "rgba(255,230,220,.45)",
   btn2: "#2e2314", btnRow: "#2e2314", insetBack: "#1d160c", insetUnit: "#1d160c", selectRowBg: "#3a2c14", selectTabBg: "#3a2c14",
   goodBg2: "#1c2614", toastNgLine: "#8a3a24", overlayMini: "rgba(12,8,4,.86)", overlayDiag: "rgba(12,8,4,.86)",
@@ -757,7 +762,7 @@ const THEME = {
   tagGun: "#e8c25a", tagMissile: "#e98a5a", tagLaser: "#6fd6f2", tagUnique: "#b8e986",
   heal: "#5fe07a", enGlow: "#6fd6f2", crit: "#ffd447", miss: "#bbb", evade: "#8fd", allyDmg: "#ff6a6a",
   overlay: "rgba(0,0,0,0.82)", shadow: "#000", shadowSoft: "rgba(0,0,0,.6)", villageBg: "#2a3a2e",
-  mapBg: "#000", mapDim: "rgba(0,0,0,0.5)", mapEnemyHpBg: "#400", mapEnemyHp: "#f44", oneHitDot: "#fff",
+  mapBg: "#000", mapEnemyHpBg: "#400", mapEnemyHp: "#f44", oneHitDot: "#fff",
   flashHeal: "rgba(80,230,120,.35)", flashGuard: "rgba(90,220,255,.35)", flashAttack: "rgba(255,230,220,.45)",
   // 1J の前の版の色（1J でまとめていた近い色を、元の値に戻したもの）
   btn2: "#24252b", btnRow: "#2c2d34", insetBack: "#1c1d22", insetUnit: "#1f2026", selectRowBg: "#26231a", selectTabBg: "#2a2618",
@@ -1395,6 +1400,8 @@ const FLASH_THEME_KEYS = { heal: "flashHeal", guard: "flashGuard", attack: "flas
 // ratio＝ダメージ ÷ 最大HP（0〜1）。stopRate＝全体のうち止める割合（白く光らせる）、amp＝揺れの幅(px)、ms＝全体の長さ。
 // 見た目だけで、待ち時間（BATTLE_WAIT）は増やさない
 // 会心と強攻撃は strongMult 倍し、さらに strongAdd を足す（小さいダメージの会心でも、はっきり強く感じるように）
+// HPが残りわずか：最大HPのこの割合以下で、HPバーと数字が点滅する（演出オフでは赤い枠だけ）。点滅の1周（ミリ秒）
+const LOW_HP_RATE = 0.3, LOW_HP_BLINK_MS = 900;
 const HIT_FEEL = { minMs: 180, maxMs: 360, minAmp: 4, maxAmp: 14, strongMult: 1.4, strongAdd: 0.3, sparkPx: [36, 64] };
 // ボスを倒した瞬間／全滅した瞬間：一瞬止めて、明→暗のフラッシュ
 const BIG_FLASH_MS = { bossDown: 420, wipe: 360 };
@@ -1434,6 +1441,8 @@ const PAD_BTN_H = 52, PAD_BTN_W = 64, PAD_GAP = 6;   // 十字ボタン（3段�
 const ARENA_MIN_H = 190, ARENA_MIN_H_LOW = 160, LOW_SCREEN_H = 700;   // バトルの絵の領域（縮めない）。低い画面は160
 const COMPACT_H = 640, SCROLL_H = 500;   // 狭い画面で、この高さ未満はコンパクト表示、さらに低いとバトル画面全体をスクロール
 const ARENA_COMPACT_H = 116, PARTY_ROW_H_COMPACT = 30, MOVE_INFO_H_COMPACT = 44;
+// バトル画面を高さに合わせて縮めるときの下限（絵の領域・味方の欄1行・わざの説明・ログ）
+const FIT_MIN = { arena: 112, row: 30, minfo: 40, log: 44 };
 const MOVE_LIST_MIN_H = 96;        // わざ一覧の最低の高さ（2行分）
 const PARTY_ROW_H = 38, PARTY_ROW_H_LOW = 36;   // バトルの味方の欄（1体1行、状態はタグで同じ行に）。低い画面は36
 const BATTLE_LOG_H = 48, MOVE_INFO_H = 48, MOVE_BTN_H = 52, MOVE_BTN_H_MIN = 44;   // わざ一覧：1つの高さ。入らないときは44まで詰める
@@ -2530,6 +2539,12 @@ function updateFov() {
       if (lineOfSight(pos.x, pos.y, tx, ty)) { visible[ty][tx] = true; seen[ty][tx] = true; }
     }
   }
+  // 部屋の中にいるときは、部屋全体（まわりの壁も）が見える。前庭は全体が1つの部屋なので、着いた時点で全部見える
+  for (const r of floorRooms) {
+    if (!inRoom(r, pos.x, pos.y)) continue;
+    for (let y = Math.max(0, r.y - 1); y <= Math.min(MAP_H - 1, r.y + r.h); y++)
+      for (let x = Math.max(0, r.x - 1); x <= Math.min(MAP_W - 1, r.x + r.w); x++) { visible[y][x] = true; seen[y][x] = true; }
+  }
 }
 function lineOfSight(x0, y0, x1, y1) {
   const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
@@ -2881,7 +2896,42 @@ function topAdjustRow(after) {
 const isCompact = () => isNarrow() && window.innerHeight < COMPACT_H;
 const isScrollBattle = () => isNarrow() && window.innerHeight < SCROLL_H;
 const isCoarse = () => !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
-const arenaHeight = () => window.innerHeight < COMPACT_H ? ARENA_COMPACT_H : window.innerHeight < LOW_SCREEN_H ? ARENA_MIN_H_LOW : ARENA_MIN_H;
+const baseArenaH = () => window.innerHeight < COMPACT_H ? ARENA_COMPACT_H : window.innerHeight < LOW_SCREEN_H ? ARENA_MIN_H_LOW : ARENA_MIN_H;
+const basePartyRowH = () => window.innerHeight < COMPACT_H ? PARTY_ROW_H_COMPACT : window.innerHeight < LOW_SCREEN_H ? PARTY_ROW_H_LOW : PARTY_ROW_H;
+const baseMinfoH = () => window.innerHeight < COMPACT_H ? MOVE_INFO_H_COMPACT : MOVE_INFO_H;
+// バトル画面を実際の高さに合わせた値（狭い画面だけ。null なら上の基本の値）
+let battleFit = null;
+const arenaHeight = () => battleFit ? battleFit.arena : baseArenaH();
+// 狭い画面のバトル：わざ（いちばん多い仲間の段数）と下のボタンが、スクロールなしで必ず収まるようにする
+// 足りない分は 絵の領域 → 味方の欄の高さ → 説明・ログの高さ の順に縮める（下限は FIT_MIN）
+function fitBattleLayout() {
+  battleFit = null; applyLayoutVars();
+  const b = $("battle");
+  if (!isNarrow() || isScrollBattle() || b.hidden) return;
+  const cmds = $("cmds"), party = $("party"), cs = getComputedStyle(b), gap = parseFloat(cs.rowGap) || 0;
+  const rows = Math.max(1, ...team.map(u => Math.ceil(moveKeys(u).length / 2)));
+  const need = rows * MOVE_BTN_H_MIN + (rows - 1) * MOVE_LIST_GAP + 2;
+  // わざ一覧より下（「下にもあります」と、下のボタン）の高さ
+  let below = 0;
+  for (let n = cmds.nextElementSibling; n; n = n.nextElementSibling) {
+    if (n.hidden || getComputedStyle(n).display === "none") continue;
+    const ns = getComputedStyle(n); below += gap + n.offsetHeight + parseFloat(ns.marginTop) + parseFloat(ns.marginBottom);
+  }
+  // 味方の欄は、このバトルの人数で計算しなおす（まだ前のバトルの欄が残っていることがある）
+  const ps = getComputedStyle(party), n = team.length;
+  const partyH = r => n * r + (n - 1) * (parseFloat(ps.rowGap) || 0) + parseFloat(ps.paddingTop) + parseFloat(ps.paddingBottom) + parseFloat(ps.borderTopWidth) + parseFloat(ps.borderBottomWidth);
+  const fit = { arena: baseArenaH(), row: basePartyRowH(), minfo: baseMinfoH(), log: BATTLE_LOG_H };
+  const avail = (b.getBoundingClientRect().bottom - parseFloat(cs.paddingBottom)) - cmds.getBoundingClientRect().top - below
+    + party.offsetHeight - partyH(fit.row);
+  let deficit = need - avail;
+  if (deficit <= 0) return;
+  const cut = (k, min, per = 1) => { if (deficit <= 0) return; const d = Math.min(fit[k] - min, Math.ceil(deficit / per)); if (d > 0) { fit[k] -= d; deficit -= d * per; } };
+  cut("arena", FIT_MIN.arena);
+  cut("row", FIT_MIN.row, n);
+  cut("minfo", FIT_MIN.minfo);
+  cut("log", FIT_MIN.log);
+  battleFit = fit; applyLayoutVars();
+}
 // 画面の作りの値を CSS に渡す（起動時と、画面の大きさが変わったとき）
 function applyLayoutVars() {
   const r = document.documentElement.style;
@@ -2890,10 +2940,11 @@ function applyLayoutVars() {
   px("--top-bar-narrow", Math.max(-TOP_BAR_GAP, TOP_BAR_H + topAdjust)); px("--top-gap-narrow", TOP_BAR_GAP);
   px("--top-bar-fine", Math.max(-TOP_BAR_GAP, topAdjust));   // マウス操作の端末（バーの分なし。調整値だけ）
   px("--pad-h", PAD_BTN_H); px("--pad-w", PAD_BTN_W); px("--pad-gap", PAD_GAP);
-  const h = window.innerHeight;
-  px("--arena-h", arenaHeight()); px("--party-row-h", h < COMPACT_H ? PARTY_ROW_H_COMPACT : h < LOW_SCREEN_H ? PARTY_ROW_H_LOW : PARTY_ROW_H);
-  px("--blog-h", BATTLE_LOG_H); px("--minfo-h", h < COMPACT_H ? MOVE_INFO_H_COMPACT : MOVE_INFO_H); px("--move-h", MOVE_BTN_H);
+  const f = battleFit;
+  px("--arena-h", arenaHeight()); px("--party-row-h", f ? f.row : basePartyRowH());
+  px("--blog-h", f ? f.log : BATTLE_LOG_H); px("--minfo-h", f ? f.minfo : baseMinfoH()); px("--move-h", MOVE_BTN_H);
   px("--move-list-min", MOVE_LIST_MIN_H);
+  r.setProperty("--low-blink-ms", LOW_HP_BLINK_MS + "ms");
   px("--stomp-px", MINION_STOMP_PX); r.setProperty("--stomp-ms", MINION_STOMP_MS + "ms");
 }
 
@@ -2940,6 +2991,7 @@ function startBattle(e) {
   hideHint();
   $("mapScreen").hidden = true;
   $("battle").hidden = false;
+  fitBattleLayout();
   $("eName").className = e.boss ? "boss" : "";
   $("arena").classList.toggle("bossArena", e.boss);
   $("fx").textContent = "";
@@ -3085,6 +3137,15 @@ function showBanner(text) {
   if (!settings.fx) return false;
   const b = $("banner"); b.textContent = text; restartAnim(b, "show");
   return true;
+}
+// HPが残りわずか：点滅の位相を時刻にそろえる（描き直しても点滅がリセットされず、全員が同じリズムで点滅する）
+const isLowHp = u => u.hp > 0 && u.hp <= u.maxHp * LOW_HP_RATE;
+function lowHpMark(bar, num, u) {
+  const low = isLowHp(u);
+  bar.classList.toggle("lowHp", low);
+  bar.classList.toggle("lowBlink", low && settings.fx); num.classList.toggle("lowBlink", low && settings.fx);
+  const delay = low ? `-${Math.round(performance.now() % LOW_HP_BLINK_MS)}ms` : "";
+  bar.firstElementChild.style.animationDelay = delay; num.style.animationDelay = delay;
 }
 function flashScreen(kind) {
   if (!settings.fx || !kind) return;   // 1行動で1回だけ。点滅はしない
@@ -3436,11 +3497,13 @@ function enemyStrike(e, target, power, acc, label, heavy = false) {
   if (u.bs.braceLeft > 0) { dmg *= 1 - u.bs.brace / 100; u.bs.braceLeft--; cut.push("ふんばり"); }
   if (quirkOf(u).dmgCut) { dmg -= quirkOf(u).dmgCut; cut.push("くせ"); }   // かたい（仲間のくせ）
   dmg = Math.max(1, Math.round(dmg));
+  const hpBefore = u.hp;
   u.hp = Math.max(0, u.hp - dmg);
   log(`${label}！ ${u.name}に${dmg}ダメージ${cut.length ? `（${cut.join("・")}）` : ""}。`, "", null, "enemy");
   popNumber(`-${dmg}`, tc("allyDmg"), "ally");
   hitFeel($("ally" + team.indexOf(u)), dmg / u.maxHp, heavy);
   if (u.hp === 0) { battle.downs++; log(`${u.name}は動けなくなった！`, "", null, "enemy"); }
+  else if (isLowHp(u) && hpBefore > u.maxHp * LOW_HP_RATE) log(`⚠ ${u.name}のHPが残りわずか！`, tc("danger"), null, "lowhp");   // 赤に入った瞬間だけ1行
 }
 
 // ほえるで下がった攻撃力
@@ -4189,7 +4252,8 @@ function renderBattle() {
     r.querySelector(".bar.hp i").style.width = (100 * u.hp / u.maxHp) + "%";
     r.querySelector(".bar.en i").style.width = (100 * u.en / u.maxEn) + "%";
     r.querySelector(".hpn").textContent = u.hp > 0 ? `${u.hp}/${u.maxHp}` : "停止";
-    r.querySelector(".hpn").classList.toggle("low", u.hp > 0 && u.hp <= u.maxHp * 0.3);
+    r.querySelector(".hpn").classList.toggle("low", isLowHp(u));
+    lowHpMark(r.querySelector(".bar.hp"), r.querySelector(".hpn"), u);
     r.querySelector(".enn").textContent = `EN${u.en}/${u.maxEn}`;
     party.append(r);
   });
@@ -4884,12 +4948,7 @@ function renderMap() {
     if (canOneHit(e)) { ctx.fillStyle = tc("oneHitDot"); ctx.fillRect(px + 5 * s, py - s, 2 * s, 2 * s); if (mode === "map") showHint("onehit"); }
   }
   draw(heroMapKey(), pos.x, pos.y, 1, heroFacingLeft);   // 主人公は、最後に左右に進んだ向きを向く
-  // 探索済みだが今見えていないマスは暗くする
-  ctx.fillStyle = tc("mapDim");
-  for (let vy = 0; vy < viewRows; vy++) for (let vx = 0; vx < viewCols; vx++) {
-    const x = camX + vx, y = camY + vy;
-    if (seen[y][x] && !visible[y][x]) ctx.fillRect(vx * T, vy * T, T, T);
-  }
+  // 探索済みのマスは、今見えていなくても同じ明るさで描く（暗くしない：重なって見えないように。敵だけが見えている範囲に出る）
   // 見えていないレア個体も、近ければ金色の光点を出す（未探索の暗いマスでも）
   for (const e of enemies) {
     if (!e.rare || visible[e.y][e.x] || !rareGlintShown(e)) continue;
@@ -5078,7 +5137,8 @@ function updateStatus() {
     xbar.title = u.lv >= LEVEL_MAX ? "最大レベル" : `次のLvまで あと${expToNext(u.lv) - u.exp}`;
     bars.append(bar, ebar, xbar);
     const hp = el("span", "num", `${u.hp}/${u.maxHp}`);
-    hp.classList.toggle("low", u.hp <= u.maxHp * 0.3);
+    hp.classList.toggle("low", isLowHp(u));
+    lowHpMark(bar, hp, u);
     r.append(nm, bars, hp, el("span", "num", `EN${u.en}/${u.maxEn}`));
     rows.append(r);
   }
@@ -6153,7 +6213,7 @@ $("btnBackVillage").addEventListener("click", askReturnVillage);
 $("btnVillageMenu").addEventListener("click", openMenu);
 $("btnNewFromVillage").addEventListener("click", askNewGame);
 $("btnNewFromTitle").addEventListener("click", askNewGame);
-window.addEventListener("resize", () => { applyLayoutVars(); resize(); if (miniOpen) paintBigMini(); });
+window.addEventListener("resize", () => { if (mode === "battle") fitBattleLayout(); else applyLayoutVars(); resize(); if (miniOpen) paintBigMini(); });
 
 applyTheme();
 applyLayoutVars();
