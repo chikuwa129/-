@@ -49,6 +49,17 @@
   .bar.en i { background: var(--t-en); }
   .bar.ehp i { background: var(--t-ehpBar); }
   .low { color: var(--t-hp) !important; }
+  /* 1機の版：レベルアップの3択 */
+  h1 .soloMark { display: block; font-size: 13px; color: var(--t-accent); margin-top: 2px; }
+  .pkDialog { max-width: 420px; }
+  .pkDialog h2 { margin: 0 0 4px; }
+  #pkLead { font-size: 12px; color: var(--t-textDim); min-height: 1em; margin-bottom: 8px; }
+  #pkList { display: grid; gap: 8px; }
+  .pkCard { display: grid; grid-template-columns: auto auto minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 8px; text-align: left; padding: 10px 12px; min-height: 56px; }
+  .pkCard .pkNum { grid-row: 1 / 3; align-self: center; font-weight: bold; opacity: .6; }
+  .pkCard .pkTag { font-size: 11px; padding: 1px 6px; border-radius: 3px; background: var(--t-barBg); align-self: center; }
+  .pkCard b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pkCard small { grid-column: 2 / 4; font-size: 12px; opacity: .85; }
   /* HPが残りわずか（LOW_HP_RATE 以下）：HPバーと数字が点滅する。演出オフ・動きを減らす設定では、点滅のかわりに赤い枠 */
   .bar.hp.lowHp { box-shadow: 0 0 0 1px var(--t-danger); }
   .bar.hp.lowBlink i, .num.lowBlink { animation: lowBlink var(--low-blink-ms, 900ms) ease-in-out infinite; }
@@ -658,6 +669,15 @@
   </div>
 </div>
 
+<!-- 1機の版：レベルアップの強化を選ぶ -->
+<div class="overlay" id="lvpick" hidden>
+  <div class="dialog pkDialog">
+    <h2 id="pkTitle">レベルアップ！</h2>
+    <div id="pkLead"></div>
+    <div id="pkList"></div>
+  </div>
+</div>
+
 <!-- 歯車（タイトル・タイプ選択の隅）から開く設定：上の余白の調整、あそびかた -->
 <div class="overlay" id="qset" hidden>
   <div class="dialog">
@@ -703,7 +723,7 @@
 //  調整用の定数・データ
 // ================================================================
 // 版の目印（作業のたびに更新）。タイトル画面の隅、設定欄、?layout=1 の診断に出す
-const BUILD_ID = "1M-20261115-1200";
+const BUILD_ID = "1N-20261115-1500";
 // ================================================================
 //  色調（画面の色はすべてここから。ドット絵のパレット、ボスの色、レア度の色、世界地図の固定色は除く）
 //  THEME＝全画面の標準の色（1J の前の版の色）、THEME_MAP＝世界マップの画面だけの色（古地図）。地図の画面に入るときと出るときに切り替える
@@ -825,6 +845,9 @@ const EXP_FLOOR_SCALE = 0.1;                 // 経験値 × (1 + これ × (階
 
 // 遊び方のモード。"adventure"=全滅しても強さを引き継いで村に戻る。"rogue"（全滅で最初から）は未実装
 const GAME_MODE = "adventure";
+// 遊び方：party＝仲間と最大3体（今まで）、solo＝主人公1機。レベルアップのたびに強化を3択で選ぶ（試作。?style=solo、または別のページ）
+const PLAY_STYLE = (window.__PLAY_STYLE === "solo" || /[?&]style=solo(&|$)/.test(location.search)) ? "solo" : "party";
+const SOLO = PLAY_STYLE === "solo";
 // 全滅したときのペナルティ（冒険モード）
 const DEFEAT_PENALTY = {
   itemKeep: 0.5,                   // 修理キットとエネルギーセルが、この割合に（切り捨て）
@@ -832,7 +855,7 @@ const DEFEAT_PENALTY = {
 };
 
 // セーブ（localStorage）
-const SAVE_KEY = "robotRuinsSave";
+const SAVE_KEY = SOLO ? "robotRuinsSoloSave" : "robotRuinsSave";   // 1機の版は、別のセーブ
 const SAVE_VERSION = 7;            // 7：ダンジョンごとの記録（progress.dungeons）と、仲間の動物。6：ダンジョンごとのクリア回数（clears）。5：固定パーツ＋自由枠。4：ストック、ジャンク、仲間の固定パーツ。3：パーツの強化値と設定の追加。1〜4 は読み込み時に移行する
 
 // 村から出発できる階（条件を満たしたものだけ選べる）
@@ -919,6 +942,21 @@ const LEVEL_DAMAGE_COEF = 0.05;
 const PLUS_COEF = 0.08;            // 強化値1つにつき威力+8%
 const PLUS_MAX = 5;
 const INVENTORY_MAX = 30;
+// ---- 1機の版（SOLO）の表 ----
+// choices＝レベルアップの選択肢の数、extraSlotLv＝この Lv で自由枠が1つ増える（わざは最大6つ＝3段）、
+// upgradePlus＝「強化」で上がる強化値、rarityUp＝「新しい武器」が落とし物の表より1段上のレア度になる確率、bossHpMult・bossAtkMult＝1機で戦う分のボスの補正
+const SOLO_CFG = { choices: 3, upgradePlus: 2, extraSlotLv: [8], rarityUp: 0.3, bossHpMult: 0.55, bossAtkMult: 0.8 };
+// 能力（重ねて取れる。max＝取れる回数）。q はくせ（ALLY_QUIRKS）と同じ形：*Mult は掛け算、ほかは足し算、tackleHits・guardCharge は1回だけ
+const SOLO_PERKS = {
+  armor:   { name: "装甲強化",       desc: "最大HP+15%",                    max: 5, q: { hpMult: 1.15 } },
+  battery: { name: "大容量バッテリー", desc: "最大EN+15%",                  max: 5, q: { enMult: 1.15 } },
+  output:  { name: "出力強化",       desc: "与えるダメージ+10%",            max: 5, q: { dmgMult: 1.1 } },
+  sight:   { name: "照準補正",       desc: "命中+8",                        max: 3, q: { accAdd: 8 } },
+  plate:   { name: "追加装甲板",     desc: "受けるダメージ−2",              max: 3, q: { dmgCut: 2 } },
+  thrust:  { name: "回避スラスター", desc: "攻撃を8%かわす",                max: 3, q: { evadeAdd: 8 } },
+  counter: { name: "反撃回路",       desc: "防御した次の攻撃が1.5倍",       max: 1, q: { guardCharge: 1.5 } },
+  twin:    { name: "連撃回路",       desc: "たいあたりが2回攻撃（1回は6割）", max: 1, q: { tackleHits: 2, tackleMult: 0.6 } },
+};
 const expectedDamage = p => p.power * p.acc / 100;   // 期待ダメージ（自動装備・おまかせ装備で比べる）
 
 // 落とし物
@@ -1994,7 +2032,25 @@ function pickWeighted(rates) {
 //  機体
 // ================================================================
 // 仲間のくせ（なければ空）
-const quirkOf = u => (u && u.quirk && ALLY_QUIRKS[u.quirk]) || {};
+const quirkOf = u => {
+  const base = (u && u.quirk && ALLY_QUIRKS[u.quirk]) || {};
+  if (!SOLO || !u || !u.perks) return base;
+  return u._qc || (u._qc = mergePerks(base, u.perks));   // 能力を取ったら u._qc を消す
+};
+function mergePerks(base, perks) {
+  const q = { ...base };
+  for (const [k, n] of Object.entries(perks)) {
+    const d = SOLO_PERKS[k]; if (!d || !n) continue;
+    for (const [f, v] of Object.entries(d.q)) {
+      if (/Mult$/.test(f) && f !== "tackleMult") q[f] = (q[f] || 1) * v ** n;
+      else if (f === "tackleHits" || f === "tackleMult" || f === "guardCharge") q[f] = v;
+      else q[f] = (q[f] || 0) + v * n;
+    }
+  }
+  return q;
+}
+// 主人公機の自由枠の数（1機の版はレベルで増える）
+const heroFreeSlots = lv => HERO_FREE_SLOTS + (SOLO ? SOLO_CFG.extraSlotLv.filter(l => lv >= l).length : 0);
 const maxHpOf = u => Math.round((u.baseHp + LEVEL_HP_GROWTH * (u.lv - 1)) * (quirkOf(u).hpMult || 1)) + (DEBUG_HP ? DEBUG_HP_BONUS : 0);
 const maxEnOf = u => Math.round((u.baseEn + (u.enGrowth || LEVEL_EN_GROWTH) * (u.lv - 1)) * (quirkOf(u).enMult || 1));
 const typeOf = u => u.isLeader ? START_TYPES.find(t => t.key === u.kind) : null;
@@ -2010,7 +2066,8 @@ function createUnit(o) {
     lv: o.lv || 1, exp: 0,
     // fixed=固定パーツ（仲間だけ。持ち物には入らない）、free=自由枠（持ち物のパーツを付ける）
     fixed: !o.isLeader && o.part ? fixedPart(o.part, o.plus) : null,
-    free: new Array(o.isLeader ? HERO_FREE_SLOTS : ALLY_FREE_SLOTS).fill(null),
+    free: new Array(o.isLeader ? heroFreeSlots(o.lv || 1) : ALLY_FREE_SLOTS).fill(null),
+    perks: SOLO && o.isLeader ? {} : undefined, picks: 0,   // 1機の版：取った能力と、まだ選んでいないレベルアップの数
     manual: false,   // 手動で付け替えた機体は、自動の入れ替え対象にしない
     animal: o.animal || null, abilities: (o.abilities || []).slice(),   // 動物と、持っている能力（heatproof など）
     quirk: ALLY_QUIRKS[o.quirk] ? o.quirk : null,   // 仲間のくせ（敵のときの特徴から）
@@ -2164,11 +2221,16 @@ function processLevelUps() {
       u.en += enUp;
       // 褒める：強調の色と、伸びた分（HP・EN）を見せる
       mapLog(`${u.name}はLv${u.lv}になった！（HP+${hpUp}・EN+${enUp}）`, tc("accent"), "levelup");
+      if (SOLO && u.isLeader) {
+        u.picks = (u.picks || 0) + (u.lv - before);
+        while (u.free.length < heroFreeSlots(u.lv)) { u.free.push(null); fillSpareSlot(u); mapLog("武器の枠が1つ増えた！", tc("accent"), "levelup"); }
+      }
       bestLevel = Math.max(bestLevel, u.lv);
       any = true;
     }
   }
   if (any) flashScreen("heal");   // 1回のレベルアップの処理につき1回
+  if (SOLO && leader() && leader().picks > 0) openLevelPick();
 }
 
 // ================================================================
@@ -2236,8 +2298,9 @@ function makeEnemy(def, x, y, animal = null) {
   return e;
 }
 function makeBoss(def, x, y) {
+  const hp = SOLO ? Math.ceil(def.hp * SOLO_CFG.bossHpMult) : def.hp, atk = SOLO ? Math.ceil(def.atk * SOLO_CFG.bossAtkMult) : def.atk;
   return { def, sprite: def.sprite, name: def.name, x, y, size: 2,
-           hp: def.hp, maxHp: def.hp, atk: def.atk, acc: def.acc, exp: def.exp,
+           hp, maxHp: hp, atk, acc: def.acc, exp: def.exp,
            boss: true, awake: true, stun: 0 };
 }
 function makeRare(def, x, y, animal = null) {
@@ -2609,7 +2672,7 @@ const logText = () => logLines.map(l => l.t);
 const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0], wait: [0, 0] };
 
 function playerMove(dir) {
-  if (mode !== "map" || miniOpen || recruitState) return;
+  if (mode !== "map" || miniOpen || recruitState || pickState) return;
   const [dx, dy] = DIRS[dir];
   const nx = pos.x + dx, ny = pos.y + dy;
   if (dx) heroFacingLeft = dx < 0;   // 左右に進んだら向きを変える（上下では変えない。敵に触れるときも同じ）
@@ -2719,6 +2782,7 @@ const isCaveNormalFloor = (f = floorNo) => f >= 1 && !isBossFloor(f);
 // 熱気が効いているか（仕掛けのあるダンジョンの、洞窟の通常階で、チームに耐熱がいない）
 function heatActive(f = floorNo) {
   const g = gimmickOf();
+  if (SOLO) return false;   // 1機の版（試作）：仕掛けはまだない
   return !!g && isCaveNormalFloor(f) && !teamHasAbility(g.ability);
 }
 // 画面の縁の光（熱気など、仕掛けのダメージ）。縁が濃く中央は透明、1回だけ ms で消える。操作は邪魔しない。演出オフでは出さない
@@ -3784,6 +3848,7 @@ function makeRecruit(e) {
   return createAlly(e.def, e.sprite, { lv: leader().lv, part: id, animal: e.animal, quirk: ANIMAL_TRAIT[e.animal || e.sprite] });
 }
 function rollRecruit(e) {
+  if (SOLO) return null;   // 1機の版：仲間にならない
   if (e.boss || e.rare || !e.def.recruit) return null;
   // ギミックの仲間の入手保証：確率 GIMMICK_JOIN_CHANCE、続けて GIMMICK_PITY 回仲間にならなければ、次は必ず
   if (gimmickJoinCase(e)) {
@@ -3796,6 +3861,152 @@ function rollRecruit(e) {
   if (Math.random() >= e.def.recruit) return null;
   chooseAnimal(e);
   return makeRecruit(e);
+}
+
+// ================================================================
+//  1機の版：レベルアップの強化を選ぶ（新しい武器・武器の強化・能力の3択）
+//  入れ替えた武器は捨てずに持ち物へ（メニューでいつでも付け替えられる）
+// ================================================================
+let pickState = null;   // { opts, step: "choose" | "swap", item }
+function soloPickOptions(u) {
+  const used = new Set(), opts = [];
+  const perk = () => {
+    const ids = Object.keys(SOLO_PERKS).filter(k => (u.perks[k] || 0) < SOLO_PERKS[k].max && !used.has("p:" + k));
+    if (!ids.length) return null;
+    const k = ids[rnd(ids.length)]; used.add("p:" + k); return { kind: "perk", id: k };
+  };
+  const upgrade = () => {
+    const items = u.free.filter(it => it && !isAbilityItem(it) && (it.plus || 0) < PLUS_MAX && !used.has("u:" + it.uid));   // 上限の手前なら、上限まで
+    if (!items.length) return null;
+    const it = items[rnd(items.length)]; used.add("u:" + it.uid); return { kind: "upgrade", item: it };
+  };
+  const weapon = () => {
+    const types = Object.keys(PART_TYPE_LABEL);
+    for (let t = 0; t < 6; t++) {
+      const type = types[rnd(types.length)];
+      let p = partById(floorRarityPart(type));
+      if (Math.random() < SOLO_CFG.rarityUp) p = PARTS.find(q => q.type === type && q.rarity === Math.min(RARITY.length - 1, p.rarity + 1)) || p;
+      if (!used.has("w:" + p.id)) { used.add("w:" + p.id); return { kind: "weapon", id: p.id }; }
+    }
+    return null;
+  };
+  // 1つめは能力、2つめは武器か強化、3つめはどれか（足りなければ、ほかの種類で埋める）
+  const plan = [perk, Math.random() < 0.5 ? weapon : upgrade, [perk, weapon, upgrade][rnd(3)]];
+  for (const f of plan.slice(0, SOLO_CFG.choices)) { const o = f() || weapon() || perk() || upgrade(); if (o) opts.push(o); }
+  return opts;
+}
+// 選択肢の見出しと説明
+function pickText(u, o) {
+  if (o.kind === "perk") {
+    const d = SOLO_PERKS[o.id], n = u.perks[o.id] || 0;
+    return { tag: "能力", title: d.name + (d.max > 1 ? `（${n + 1}/${d.max}）` : ""), desc: d.desc };
+  }
+  if (o.kind === "upgrade") {
+    const it = o.item, to = upgradedPlus(it), before = Math.round(itemPower(it) * levelMult(u)), after = Math.round(itemPower({ ...it, plus: to }) * levelMult(u));
+    return { tag: "強化", title: `${itemName(it)} → +${to}`, desc: `威力 ${before} → ${after}（+${Math.round(100 * (itemPower({ ...it, plus: to }) / itemPower(it) - 1))}%）` };
+  }
+  const p = partById(o.id), have = inv.parts.some(i => i.id === o.id);
+  return { tag: "新しい武器", title: partText(p), desc: `${PART_KIND_LABEL[p.type]}　威力${p.power}　命中${p.acc}%　EN${p.en}${have ? "（同じ武器をもう1つ）" : ""}`, color: RARITY[p.rarity].color };
+}
+// 増えた枠（空き）に、持ち物のいちばん強い武器を付ける
+function fillSpareSlot(u) {
+  const i = u.free.indexOf(null); if (i < 0) return;
+  const spare = inv.parts.filter(it => !isEquipped(it) && !isAbilityItem(it)).sort((a, b) => itemExpected(b) - itemExpected(a))[0];
+  if (spare) u.free[i] = spare;
+}
+// 取った能力の一覧（メニュー用）
+const perkListText = u => Object.entries(u.perks || {}).filter(([, n]) => n > 0).map(([k, n]) => SOLO_PERKS[k].name + (n > 1 ? `×${n}` : "")).join("、") || "なし（レベルアップで選べる）";
+const upgradedPlus = it => Math.min(PLUS_MAX, (it.plus || 0) + SOLO_CFG.upgradePlus);
+function openLevelPick() {
+  const u = leader();
+  if (!SOLO || !u || !(u.picks > 0) || pickState) return;
+  pickState = { opts: soloPickOptions(u), step: "choose", item: null };
+  renderLevelPick();
+}
+function renderLevelPick() {
+  const u = leader(), st = pickState, list = $("pkList");
+  $("lvpick").hidden = !st;
+  if (!st) return;
+  list.textContent = "";
+  const card = (n, tag, title, desc, color, act) => {
+    const b = el("button", "pkCard");
+    b.append(el("span", "pkNum", String(n)), el("span", "pkTag", tag));
+    const t = el("b", "", title); if (color) t.style.color = color;
+    b.append(t, el("small", "", desc));
+    b.addEventListener("click", act);
+    list.append(b);
+  };
+  if (st.step === "choose") {
+    $("pkTitle").textContent = `Lv${u.lv}！ 強化を1つ選ぶ`;
+    $("pkLead").textContent = u.picks > 1 ? `あと${u.picks}回選べる` : "";
+    st.opts.forEach((o, i) => { const t = pickText(u, o); card(i + 1, t.tag, t.title, t.desc, t.color, () => choosePick(i)); });
+  } else {
+    $("pkTitle").textContent = "どの武器と入れ替える？";
+    $("pkLead").textContent = `${partText(partOf(st.item))}を付ける。外した武器は持ち物に残る（メニューで付け替えられる）`;
+    u.free.forEach((it, i) => {
+      const p = partOf(it);
+      card(i + 1, "外す", itemName(it) + RARITY[p.rarity].stars, `${PART_KIND_LABEL[p.type]}　威力${Math.round(itemPower(it) * levelMult(u))}　命中${p.acc}%`, RARITY[p.rarity].color, () => swapPick(i));
+    });
+    card(u.free.length + 1, "そのまま", "付けずに持ち物へ", "今の武器のままにする", null, () => swapPick(-1));
+  }
+}
+function choosePick(i) {
+  const st = pickState, u = leader();
+  if (!st || st.step !== "choose" || !st.opts[i]) return;
+  const o = st.opts[i];
+  if (o.kind === "perk") {
+    u.perks[o.id] = (u.perks[o.id] || 0) + 1; delete u._qc;
+    const mh = maxHpOf(u), me = maxEnOf(u);
+    u.hp = Math.min(mh, u.hp + Math.max(0, mh - u.maxHp)); u.en = Math.min(me, u.en + Math.max(0, me - u.maxEn)); u.maxHp = mh; u.maxEn = me;
+    mapLog(`能力「${SOLO_PERKS[o.id].name}」を取った。（${SOLO_PERKS[o.id].desc}）`, tc("accent"), "pick");
+  } else if (o.kind === "upgrade") {
+    o.item.plus = upgradedPlus(o.item);
+    mapLog(`${itemName(o.item)}に強化した。`, tc("accent"), "pick");
+  } else {
+    const item = { id: o.id, uid: ++partUid, plus: 0 };
+    inv.parts.push(item);
+    const open = u.free.indexOf(null);
+    if (open >= 0) { u.free[open] = item; mapLog(`${partText(partOf(item))}を手に入れて、付けた。`, tc("accent"), "pick"); }
+    else { st.step = "swap"; st.item = item; renderLevelPick(); return; }
+    trimInventory();
+  }
+  finishPick();
+}
+function swapPick(i) {
+  const st = pickState, u = leader();
+  if (!st || st.step !== "swap") return;
+  if (i >= 0 && u.free[i]) {
+    const old = u.free[i]; u.free[i] = st.item; u.manual = true;
+    mapLog(`${partText(partOf(st.item))}を付けた。${itemName(old)}は持ち物へ。`, tc("accent"), "pick");
+  } else mapLog(`${partText(partOf(st.item))}を持ち物に入れた。`, tc("accent"), "pick");
+  trimInventory();
+  finishPick();
+}
+function finishPick() {
+  const u = leader();
+  u.picks = Math.max(0, (u.picks || 0) - 1);
+  pickState = null;
+  if (u.picks > 0) openLevelPick(); else renderLevelPick();
+  if (mode === "map") renderMap();
+}
+function pickKey(key) {
+  const st = pickState; if (!st) return false;
+  const n = parseInt(key, 10);
+  if (!(n >= 1)) return false;
+  if (st.step === "choose") choosePick(n - 1); else swapPick(n - 1 < leader().free.length ? n - 1 : -1);
+  return true;
+}
+// おまかせ（テストのボット用）：今の武器より強い新しい武器 → 強化 → 能力 の順
+function pickAuto() {
+  const st = pickState, u = leader(); if (!st) return;
+  if (st.step === "swap") {
+    let w = -1; u.free.forEach((it, i) => { if (w < 0 || itemExpected(it) < itemExpected(u.free[w])) w = i; });
+    swapPick(itemExpected(st.item) > itemExpected(u.free[w]) ? w : -1); return;
+  }
+  const score = o => o.kind === "weapon" ? (u.free.includes(null) ? 3 : itemExpected({ id: o.id, plus: 0 }) > Math.min(...u.free.map(itemExpected)) ? 2.5 : 0.5)
+    : o.kind === "upgrade" ? 2 : 1.5;
+  let best = 0; st.opts.forEach((o, i) => { if (score(o) > score(st.opts[best])) best = i; });
+  choosePick(best);
 }
 // 条件：仕掛けのあるダンジョンで、倒した敵がその能力を持つ動物、チームとストックにその能力の動物が1体もいない（パーツは数えない）
 function gimmickJoinCase(e) {
@@ -3983,6 +4194,7 @@ function renderRecruit() {
   stat("HP", String(u.maxHp)); stat("EN", String(u.maxEn)); stat("たいあたり", String(Math.max(1, Math.round(tackleOf(u) * levelMult(u)))));
   stat("特性", traitTextOf(u));
   if (u.quirk) { stat("くせ", quirkText(u)); g.lastChild.style.gridColumn = "1 / -1"; }   // 説明が長いので1行全体
+  if (SOLO && u.perks) { stat("能力", perkListText(u)); g.lastChild.style.gridColumn = "1 / -1"; }
   nm.append(g);
   top.append(nm);
   body.append(top);
@@ -4551,6 +4763,7 @@ function renderMenu() {
   stat("たいあたり", `威力${tackleOf(u)}`);
   stat("特性", traitTextOf(u));
   if (u.quirk) { stat("くせ", quirkText(u)); g.lastChild.style.gridColumn = "1 / -1"; }   // 説明が長いので1行全体
+  if (SOLO && u.perks) { stat("能力", perkListText(u)); g.lastChild.style.gridColumn = "1 / -1"; }
   if (unitAbilities(u).length) stat("能力", unitAbilities(u).map(ab => ABILITIES[ab].name).join("・"));
   head.append(g);
   body.append(head);
@@ -4998,7 +5211,7 @@ function stepToStairs() {
   return null;
 }
 function startAutoWalk() {
-  if (!floorDone || mode !== "map" || autoWalking || miniOpen || recruitState) return;
+  if (!floorDone || mode !== "map" || autoWalking || miniOpen || recruitState || pickState) return;
   autoWalking = true;
   checkFloorDone();
   walkStep();
@@ -5010,7 +5223,7 @@ function stopAutoWalk() {
 }
 function walkStep() {
   if (!autoWalking) return;
-  if (mode !== "map" || miniOpen || recruitState) { stopAutoWalk(); return; }
+  if (mode !== "map" || miniOpen || recruitState || pickState) { stopAutoWalk(); return; }
   const f = floorNo, d = stepToStairs();
   if (!d) { stopAutoWalk(); return; }
   playerMove(d);
@@ -5217,8 +5430,10 @@ function debugDesertStart() {
   Object.assign(r, { clears: 1, reached: DUNGEONS[0].floors, boss5: true, boss10: true });
   hero.lv = D.lv; hero.exp = 0; hero.maxHp = maxHpOf(hero); hero.maxEn = maxEnOf(hero); hero.hp = hero.maxHp; hero.en = hero.maxEn;
   bestLevel = D.lv;
+  if (SOLO) { while (hero.free.length < heroFreeSlots(hero.lv)) hero.free.push(null); hero.picks = D.lv - 1; }   // 1機の版：上げた分のレベルアップを選べる
   for (const id of D.parts) gainPart(id, { noMerge: true });
   autoEquipAll();
+  if (SOLO) openLevelPick();
 }
 
 // 村に着く：全員全回復（HP0も復活）して自動保存
@@ -5233,6 +5448,7 @@ function goVillage(msgs = []) {
   log("村に着いた。みんな回復した。", "", null, "village");
   saveGame();
   renderVillage();
+  if (SOLO) openLevelPick();   // 選び残したレベルアップ（読み込んだあとも）
   showHint(msgs.some(m => (typeof m === "string" ? m : m.t).startsWith("全滅")) ? "wipe" : "village");
 }
 
@@ -5254,7 +5470,7 @@ function renderVillage() {
     const r = recOf(d.key);
     if (r.reached || r.clears) rec.push(`${d.name} 到達 ${floorLabel(d, r.reached)}${r.clears ? "（踏破済み）" : ""}`);
   }
-  $("villageInv").textContent = `パーツ ${inv.parts.length}個　修理キット ${inv.items.repair}　エネルギーセル ${inv.items.cell}　ストック ${stock.length}/${STOCK_MAX}体　／　${rec.join("・")}`;
+  $("villageInv").textContent = `パーツ ${inv.parts.length}個　修理キット ${inv.items.repair}　エネルギーセル ${inv.items.cell}${SOLO ? "" : `　ストック ${stock.length}/${STOCK_MAX}体`}　／　${rec.join("・")}`;
   $("villageJunk").textContent = `ジャンク ×${inv.junk || 0}（使い道は今後追加）`;
   $("saveNote").hidden = !saveFailed;
   renderVillageScene();
@@ -5403,6 +5619,7 @@ function unitToSave(u, idx) {
     lv: u.lv, exp: u.exp, hp: u.hp, en: u.en, skills: { guard: u.skills.guard, unique: u.skills.unique }, unique: u.unique, manual: u.manual,
     animal: u.animal || null, quirk: u.quirk || null,
   };
+  if (SOLO && u.isLeader) { o.perks = { ...(u.perks || {}) }; o.picks = u.picks || 0; }
   // 版5：固定パーツ（仲間）はパーツそのもの、自由枠は持ち物の番号
   o.fixed = u.fixed ? { id: u.fixed.id, plus: u.fixed.plus || 0 } : null;
   o.free = u.free.map(it => it ? idx.get(it) : null);
@@ -5465,7 +5682,7 @@ function readSave() {
       if (u.animal != null && !animalDef(u.animal)) throw 0;
       if (!SPR[u.sprite] || !okNum(u.lv) || !okNum(u.exp) || !okNum(u.baseHp) || !okNum(u.baseEn) || !okNum(u.baseTackle)) throw 0;
       if (d.version >= 5) {
-        const n = u.isLeader ? HERO_FREE_SLOTS : ALLY_FREE_SLOTS;
+        const n = u.isLeader ? heroFreeSlots(u.lv) : ALLY_FREE_SLOTS;
         if (!Array.isArray(u.free) || u.free.length !== n || !u.free.every(okIdx) || !okPart(u.fixed) || (u.isLeader && u.fixed)) throw 0;
         for (const i of u.free) if (i !== null) { if (usedIdx.has(i)) throw 0; usedIdx.add(i); }   // 同じパーツを2か所に付けない
       } else if (u.isLeader || d.version < 4) {
@@ -5551,6 +5768,12 @@ function applySave(d) {
       }
     }
     u.exp = s.exp; u.manual = !!s.manual;
+    if (SOLO && s.isLeader) {
+      u.perks = {};
+      for (const [k, n] of Object.entries(s.perks || {})) if (SOLO_PERKS[k] && okNum(n)) u.perks[k] = Math.max(0, Math.min(SOLO_PERKS[k].max, Math.floor(n)));
+      u.picks = okNum(s.picks) ? Math.max(0, Math.floor(s.picks)) : 0;
+      delete u._qc; u.maxHp = maxHpOf(u); u.maxEn = maxEnOf(u);
+    }
     if (!skillsReset) {
       u.skills.guard = Math.min(SKILL_MAX_LEVEL, Math.max(1, s.skills.guard));
       u.skills.unique = Math.min(SKILL_MAX_LEVEL, Math.max(1, s.skills.unique));
@@ -6110,6 +6333,7 @@ document.addEventListener("keydown", ev => {
     return;
   }
   if (recruitState) { if (recruitKey(ev.key)) ev.preventDefault(); return; }
+  if (pickState) { if (pickKey(ev.key)) ev.preventDefault(); return; }
   if (mode === "over") {
     // 戦闘中にEnterで送っていた勢いで、結果画面を飛ばさないようにする
     if ((ev.key === "Enter" || ev.key === " ") && Date.now() - endShownAt > END_KEY_DELAY) { ev.preventDefault(); goVillage(); }
@@ -6221,6 +6445,8 @@ updateLayoutDiag();
 prepareSprites();
 if (DEBUG) document.body.append(el("div", "debug", "DEBUG MODE"));
 for (const id of ["buildTitle", "buildSelect"]) $(id).textContent = BUILD_ID;
+// 1機の版：タイトルに印をつける（セーブも別）
+if (SOLO) document.querySelectorAll("h1").forEach(h => h.append(el("small", "soloMark", "1機の版（試作）")));
 if (SPRITES_GALLERY) showGallery(); else boot();
 </script>
 </body>
