@@ -159,6 +159,7 @@
   }
   .arena.bossArena { background: linear-gradient(var(--t-bossSky) 0 62%, var(--t-bossGround) 62% 100%); }
   #allies { display: flex; flex-direction: column; gap: 4px; }
+  .solo #allies { align-self: center; }   /* 1機の版：1体だけなので、絵の領域の上下まんなかに */
   .ally { padding: 2px; border: 2px solid transparent; border-radius: 6px; }
   .ally.active { border-color: var(--t-select); background: var(--t-selectGlow); }
   .ally.down { opacity: 0.25; }
@@ -723,7 +724,7 @@
 //  調整用の定数・データ
 // ================================================================
 // 版の目印（作業のたびに更新）。タイトル画面の隅、設定欄、?layout=1 の診断に出す
-const BUILD_ID = "1N1-20261115-1700";
+const BUILD_ID = "1N2-20261115-1800";
 // ================================================================
 //  色調（画面の色はすべてここから。ドット絵のパレット、ボスの色、レア度の色、世界地図の固定色は除く）
 //  THEME＝全画面の標準の色（1J の前の版の色）、THEME_MAP＝世界マップの画面だけの色（古地図）。地図の画面に入るときと出るときに切り替える
@@ -848,6 +849,8 @@ const GAME_MODE = "adventure";
 // 遊び方：party＝仲間と最大3体（今まで）、solo＝主人公1機。レベルアップのたびに強化を3択で選ぶ（試作。?style=solo、または別のページ）
 const PLAY_STYLE = (window.__PLAY_STYLE === "solo" || /[?&]style=solo(&|$)/.test(location.search)) ? "solo" : "party";
 const SOLO = PLAY_STYLE === "solo";
+// 1機の版の言い換え（「全員」「仲間」が出る文を、1機向けに）
+const soloWords = t => !SOLO ? t : t.replace(/全員への攻撃/g, "大技").replace(/全員へ攻撃/g, "大技").replace(/全員への奇襲/g, "奇襲").replace(/全員防御/g, "防御").replace(/今のチーム/g, "今の機体");
 // 全滅したときのペナルティ（冒険モード）
 const DEFEAT_PENALTY = {
   itemKeep: 0.5,                   // 修理キットとエネルギーセルが、この割合に（切り捨て）
@@ -2737,6 +2740,11 @@ function bossOutlook(f = floorNo) {
 // 見立ての一言
 function outlookText(o) {
   if (!o) return "";
+  if (SOLO) {   // 1機の版：仲間の話はしない
+    if (o.level === "good") return `今の機体なら、${o.boss}にもいけそうだ。溜めや構えを見たら、防御で受けて。`;
+    if (o.level === "even") return `${o.boss}には、勝てる見込みはあるけど、油断はできないね。回復アイテムと、防御を上手に使って。`;
+    return `うーん、今の機体だと${o.boss}はかなり厳しそうだ。いったん村に戻って、レベルを上げて強化を選んだり、武器を付け替えてから来るといい。B1Fから潜り直すのもありだよ。`;
+  }
   if (o.level === "good") return `今のチームなら、${o.boss}にもいけそうだ。溜めや構えを見たら、防御で受けて。`;
   if (o.level === "even") return `${o.boss}には、勝てる見込みはあるけど、油断はできないね。${o.solo ? "仲間がいれば、ずっと楽になるよ。" : "回復アイテムと、防御を上手に使って。"}`;
   const why = o.solo ? "仲間が一人もいないね。" : team.length < TEAM_MAX ? "仲間が足りないし、" : "";
@@ -2746,8 +2754,8 @@ function talkMech() {
   const hint = bossHintHere(), o = bossOutlook();
   const text = ["整備するかい？", o ? outlookText(o) : "", hint || ""].filter(Boolean).join("\n\n");
   const btns = [
-    { label: "整備する", primary: true, act: () => { healAll(); mapLog("整備完了。いってらっしゃい", "", "mech"); renderMap(); } },
-    { label: "仲間を入れ替える", act: openMechParty }];
+    { label: "整備する", primary: true, act: () => { healAll(); mapLog("整備完了。いってらっしゃい", "", "mech"); renderMap(); } }];
+  if (!SOLO) btns.push({ label: "仲間を入れ替える", act: openMechParty });
   // 厳しいときは、村に戻って出直す道を出す（何度でも選べる。強制はしない）
   if (o && o.level === "hard") btns.push({ label: "村に戻って出直す", act: () => goVillage(["整備員に見送られて、村に戻った。"]) });
   btns.push({ label: "やめる", act: () => {} });
@@ -2762,7 +2770,7 @@ function openMechParty() {
   menuState = { unit: 0, pending: null, tab: "party" };
   renderMenu();
 }
-const canSwapParty = () => menuFrom === "village" || (menuFrom === "map" && mechParty);
+const canSwapParty = () => !SOLO && menuFrom === "village" || (menuFrom === "map" && mechParty);
 
 // ---- 能力と仕掛け（熱気） ----
 // 能力を持つか：動物の能力、または付けている能力パーツ（放熱ユニット）
@@ -2931,6 +2939,7 @@ function battleScales(bossSize = { w: BOSS_SPRITE_W, h: BOSS_SPRITE_H }) {
     const fit = Math.floor(inner / (BATTLE_H + 2 * RARE_PAD));
     enemy = Math.max(1, Math.min(enemy, fit));
   }
+  if (SOLO) ally = enemy;   // 1機の版：味方は1体なので、通常の敵と同じ大きさで描く
   return { boss: bossScaleFor(bossSize.w, bossSize.h), enemy, ally };
 }
 const isNarrow = () => window.innerWidth <= NARROW_MAX;
@@ -3709,7 +3718,7 @@ async function enemyPhase() {
   }
   if (act === "sweep") {
     battle.sweepReady = true;
-    log(`${e.name}は${ai.sweepPrep}`, "", null, "enemy");
+    log(soloWords(`${e.name}は${ai.sweepPrep}`), "", null, "enemy");
     popNumber("構えた", tc("chargeBg"), "center");
     renderBattle();
     await pause();
@@ -4448,13 +4457,13 @@ function renderBattle() {
   $("eHpText").textContent = `${st.length ? st.join(" ") + "　" : ""}HP ${e.hp}/${e.maxHp}`;
   $("eHpBar").firstElementChild.style.width = (100 * e.hp / e.maxHp) + "%";
   // 予告：溜め（ボスは必中の強攻撃、通常の敵「ためる」は強攻撃）、構え（全員への攻撃）
-  $("charge").textContent = battle.bossHidden ? "⚠ 砂の中！ 攻撃は当たらない。次は全員への奇襲（全員防御が有効）"
+  $("charge").textContent = soloWords(battle.bossHidden ? "⚠ 砂の中！ 攻撃は当たらない。次は全員への奇襲（全員防御が有効）"
     : battle.glareTarget ? `👁 ${battle.glareTarget.name}をにらんでいる！ 防御すれば受け流せる`
     : battle.sweepReady ? "⚠ 構えている！ 次のターンに全員へ攻撃（全員防御が有効）"
     : battle.heavyReady ? "⚡ 力を溜めている！ 次のターンに強攻撃（必中）"
     : battle.bossShield ? "🛡 鉄壁の構え！ この番はダメージが半分"
     : battle.eCharged ? "⚡ 力を溜めている！ 次のターンに強攻撃"
-    : battle.minionTurns > 0 ? `群れが加わっている（あと${battle.minionTurns}ターン）` : "";
+    : battle.minionTurns > 0 ? `群れが加わっている（あと${battle.minionTurns}ターン）` : "");
   $("charge").hidden = !$("charge").textContent;
 
   team.forEach((u, i) => {
@@ -4616,7 +4625,7 @@ function renderOther() {
         { label: "にげる", primary: true, act: () => { closeOther(); runCommand("escape"); } },
         { label: "やめる", act: () => {} }]);
     }, battle.enemy.boss, "oEscape");
-    big(`仲間：${settings.allyAuto ? "おまかせ" : "手動"}（押して切り替え）`, () => { settings.allyAuto = !settings.allyAuto; saveGame(); renderOther(); renderBattle(); }, false, "oAuto");
+    if (!SOLO) big(`仲間：${settings.allyAuto ? "おまかせ" : "手動"}（押して切り替え）`, () => { settings.allyAuto = !settings.allyAuto; saveGame(); renderOther(); renderBattle(); }, false, "oAuto");
     big("もどる", closeOther, false, "oBack");
   } else if (o.view === "items") {
     for (const key of ["repair", "cell"]) {
@@ -4860,12 +4869,12 @@ function renderMenu() {
   };
   toggle("演出", "fx", "技名の表示、揺れ、閃光（ダメージの数字とメッセージは常に出る）");
   toggle("確認なしで即実行", "instant", "わざの行をタップした瞬間に実行する");
-  toggle("仲間のおまかせ", "allyAuto", "主人公機以外の仲間は、自動で行動する");
+  if (!SOLO) toggle("仲間のおまかせ", "allyAuto", "主人公機以外の仲間は、自動で行動する");
   toggle("ひとうち", "oneHit", "たいあたり1回で倒せる弱い敵は、バトルに入らず倒す");
   toggle("ヒント", "hints", "初めての場面で、短いヒントを1回だけ出す");
   toggle("ミニマップの常時表示", "miniMap", "広い画面で、右上に小さく出す");
   toggle("一括回復の確認なし", "bulkNoConfirm", "一括回復ボタンで、確認せずに使う");
-  {
+  if (!SOLO) {
     // 仲間にする確認：押すたびに「毎回聞く → いつも仲間にする → いつもあきらめる」
     const row = el("div", "mrow");
     const info = el("div", "info", "仲間にする確認"); info.append(el("small", "", "敵が仲間になりたそうなとき、どうするか"));
@@ -5092,7 +5101,7 @@ function doBulkHeal(kind) {
 
 // マップのメニューから村に戻る（確認つき）
 function askReturnVillage() {
-  showDialog("村に戻りますか？", "この階の進行（拾っていない落とし物、いる敵）は消えます。レベル・仲間・持ち物はそのままです。", [
+  showDialog("村に戻りますか？", `この階の進行（拾っていない落とし物、いる敵）は消えます。レベル・${SOLO ? "能力" : "仲間"}・持ち物はそのままです。`, [
     { label: "村に戻る", primary: true, act: () => { $("menu").hidden = true; mode = "map"; goVillage(["村に戻った。"]); } },
     { label: "やめる", act: () => {} },
   ]);
@@ -5838,8 +5847,9 @@ const bossDone = (f, key) => !!recOf(key)["boss" + f];
 const TUTORIAL_PAGES = [
   { title: "めざすもの", lines: [`遺跡の奥まで潜って、${floorLabel(DUNGEONS[0], DUNGEONS[0].floors)}のボスを倒そう。`, "敵に触れると、バトルになる。"] },
   { title: "歩く", lines: ["十字ボタン（または矢印キー）で動く。", "「メニュー」で装備や回復。", "「地図」で、まだ行っていない場所がわかる。"] },
-  { title: "戦う", lines: ["わざを選んで「決定」。", "「防御」でダメージを減らし、ENも回復する。", "ENが足りないと、パーツのわざは使えない。", "ボスが力を溜めたら「全員防御」。"] },
-  { title: "パーツと仲間", lines: ["敵がパーツを落とす。同じパーツを拾うと強くなる。", "敵がまれに仲間になる。中身を見てから選べる。"] },
+  { title: "戦う", lines: ["わざを選んで「決定」。", "「防御」でダメージを減らし、ENも回復する。", "ENが足りないと、パーツのわざは使えない。", SOLO ? "ボスが力を溜めたら「防御」。" : "ボスが力を溜めたら「全員防御」。"] },
+  SOLO ? { title: "パーツと強化", lines: ["敵がパーツを落とす。同じパーツを拾うと強くなる。", "レベルが上がるたびに、強化を3つから1つ選べる。", "外した武器は持ち物に残る。メニューで付け替えよう。"] }
+    : { title: "パーツと仲間", lines: ["敵がパーツを落とす。同じパーツを拾うと強くなる。", "敵がまれに仲間になる。中身を見てから選べる。"] },
   { title: "村", lines: ["全滅しても、村に戻るだけ。強さはそのまま。", "準備が足りないときは、村に戻って整えよう。", "メニューの「セーブ」で、成長を残せる。"] },
 ];
 // ---- 遊びながら覚えるヒント ----
@@ -5853,7 +5863,7 @@ function showHint(id) {
   const host = mode === "battle" ? $("arena") : mode === "village" ? $("villageScene") : $("mapWrap");
   let h = $("hint");
   if (!h) { h = document.createElement("div"); h.id = "hint"; h.addEventListener("click", hideHint); }
-  h.textContent = HINTS[id]; h.dataset.id = id;
+  h.textContent = soloWords(HINTS[id]); h.dataset.id = id;
   host.append(h); h.hidden = false;
   clearTimeout(hintTimer); hintTimer = setTimeout(hideHint, HINT_MS);
   return true;
@@ -6447,6 +6457,7 @@ $("wmGo").addEventListener("click", worldGo);
 $("btnGo").addEventListener("click", decide);
 $("btnOther").addEventListener("click", openOther);
 $("btnGuardAll").addEventListener("click", guardAll);
+if (SOLO) { $("btnGuardAll").firstChild.textContent = "防御 "; document.body.classList.add("solo"); }   // 1機の版：全員＝自分だけ
 $("cmds").addEventListener("scroll", () => { const b = $("cmds"); $("cmdsMore").hidden = b.scrollHeight <= b.clientHeight + 1 || b.scrollTop + b.clientHeight >= b.scrollHeight - 2; });
 $("otherClose").addEventListener("click", closeOther);
 $("btnBackVillage").addEventListener("click", askReturnVillage);
