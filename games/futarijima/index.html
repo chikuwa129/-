@@ -630,7 +630,19 @@ function boxBlocked(x, y){
 }
 function facingTile(){
   const [dx,dy] = DIRV[player.dir];
-  return {x: Math.floor((player.x + dx*11)/TS), y: Math.floor((player.y + dy*11)/TS)};
+  const ox = Math.floor(player.x/TS), oy = Math.floor(player.y/TS);
+  let x = Math.floor((player.x + dx*11)/TS), y = Math.floor((player.y + dy*11)/TS);
+  if (x === ox && y === oy){ x += dx; y += dy; }   // 自分の立っているマスは「目の前」にしない
+  return {x, y};
+}
+// 万一かたい物の中にいたら、近くのあいている所へ出す（詰み防止）
+function unstuck(){
+  if (!boxBlocked(player.x, player.y)) return;
+  for (let r=4; r<=48; r+=4) for (let a=0; a<16; a++){
+    const x = player.x + Math.cos(a/16*6.283)*r, y = player.y + Math.sin(a/16*6.283)*r;
+    if (!boxBlocked(x, y)){ player.x = x; player.y = y; return; }
+  }
+  player.x = START.x*TS+8; player.y = START.y*TS+10;
 }
 let bumpCool = 0;
 function updatePlay(){
@@ -663,6 +675,7 @@ function updatePlay(){
   if (player.kx || player.ky){ tryMove(player.kx, player.ky); player.kx *= 0.8; player.ky *= 0.8; if (Math.abs(player.kx)+Math.abs(player.ky) < 0.1){ player.kx = player.ky = 0; } }
   if (player.inv > 0) player.inv--;
 
+  unstuck();
   // 移動
   let mx = 0, my = 0;
   if (player.act <= 0){
