@@ -1,0 +1,1522 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>ふたりじま</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#2a2438; --body:#c9c3d6; --body-dark:#9d96ad; --ink:#1c1826; --btn:#3a3348; --btn-ab:#a8305a; --label:#3a3348;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --bg:#141019; --body:#3b3547; --body-dark:#2b2635; --ink:#e8e2f2; --btn:#1c1826; --btn-ab:#8a2349; --label:#cfc8dc; }
+}
+:root[data-theme="dark"]{ --bg:#141019; --body:#3b3547; --body-dark:#2b2635; --ink:#e8e2f2; --btn:#1c1826; --btn-ab:#8a2349; --label:#cfc8dc; }
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"DotGothic16",monospace;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}
+#wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100%;padding-block:8px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+#console{background:var(--body);border-radius:14px 14px 48px 14px;padding:14px 14px 10px;box-shadow:0 6px 0 var(--body-dark);max-width:100%}
+#screenbox{background:#3d3a4a;border-radius:8px 8px 24px 8px;padding:12px 18px 14px}
+canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;background:#000;width:640px;height:576px;max-width:100%}
+#brand{font-size:12px;color:#cfc8dc;margin-top:6px;letter-spacing:2px}
+#pad{display:none;justify-content:space-between;align-items:center;margin-top:12px;padding:0 4px}
+.dpad{position:relative;width:132px;height:132px}
+.dpad button{position:absolute;width:44px;height:44px;background:var(--btn);border:0;border-radius:6px;color:#9d96ad;font-size:16px}
+.dpad .u{left:44px;top:0}.dpad .d{left:44px;bottom:0}.dpad .l{left:0;top:44px}.dpad .r{right:0;top:44px}
+.dpad .c{left:44px;top:44px;border-radius:0;pointer-events:none}
+.ab{display:flex;gap:14px;transform:rotate(-20deg)}
+.ab button{width:58px;height:58px;border-radius:50%;background:var(--btn-ab);border:0;color:#fff;font-family:inherit;font-size:18px;box-shadow:0 3px 0 #50122a}
+.sel{display:flex;gap:18px;justify-content:center;margin-top:10px}
+.sel button{background:var(--btn);color:#d8d0e8;border:0;border-radius:10px;padding:4px 14px;font-family:inherit;font-size:12px}
+#keys{font-size:12px;color:var(--label);margin-top:8px;text-align:center;line-height:1.6}
+button:active{filter:brightness(1.4)}
+@media (max-width:700px), (pointer:coarse){
+  #pad{display:flex}
+  #keys{display:none}
+  #console{padding:10px 10px 8px}
+  #screenbox{padding:8px}
+  canvas{width:calc(100vw - 52px);height:auto;aspect-ratio:10/9;max-height:52vh;max-width:calc(52vh * 10 / 9)}
+}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="console">
+    <div id="screenbox"><canvas id="cv" width="320" height="288"></canvas><div id="brand">FUTARIJIMA ◆ COLOR</div></div>
+    <div id="pad">
+      <div class="dpad">
+        <button class="u" data-k="up">▲</button><button class="l" data-k="left">◀</button>
+        <button class="c"></button>
+        <button class="r" data-k="right">▶</button><button class="d" data-k="down">▼</button>
+      </div>
+      <div class="ab"><button data-k="b">B</button><button data-k="a">A</button></div>
+    </div>
+    <div class="sel" id="selrow"><button data-k="start" id="startbtn">START</button><button id="mutebtn">♪ ON</button></div>
+  </div>
+  <div id="keys">移動: 矢印 / WASD　 A: Z・スペース（しらべる・つかう）　 B: X（カバン）　 START: Enter（メニュー）　 M: 音</div>
+</div>
+<script>
+'use strict';
+// =====================================================================
+//  ふたりじま — 双子島のサバイバル
+//  調整したい数値はすべてここ（【日本語名】で書く）
+// =====================================================================
+const P = {
+  '【1日の長さ(秒)】': 240,
+  '【夕方になる時刻(秒)】': 165,
+  '【夜になる時刻(秒)】': 190,
+  '【おなかが空になる秒数】': 330,
+  '【のどがカラになる秒数】': 220,
+  '【つかれが満タンになる秒数】': 420,
+  '【メーター1本が尽きた時の体力の減り(毎秒)】': 1.4,
+  '【歩く速さ(px/フレーム)】': 1.0,
+  '【浅瀬での速さの倍率】': 0.55,
+  '【木の枝を取った時のつかれ】': 1.5,
+  '【オノをふった時のつかれ】': 2.5,
+  '【木を切りたおす回数】': 3,
+  '【ヘビのダメージ】': 10,
+  '【ヘビの体力】': 2,
+  '【ヘビの追いかける距離(px)】': 56,
+  '【昼のヘビの最大数】': 4,
+  '【夜のヘビの最大数】': 8,
+  '【つりのアタリの受付フレーム】': 32,
+  '【たいまつの持続秒数】': 150,
+  '【たき火の明かりの半径(px)】': 54,
+  '【ヒットストップ:木を叩く】': 4,
+  '【ヒットストップ:木が倒れる】': 10,
+  '【ヒットストップ:ヘビを叩く】': 6,
+  '【ヒットストップ:ダメージ】': 9,
+  '【なま物でおなかをこわす確率】': 0.3,
+  '【リクが何か見つける間隔(秒)】': 45,
+};
+const p = k => P['【' + k + '】'];
+
+// ---------------------------------------------------------------------
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+const TS = 16, VW = 160, VH = 128, HUD = 16; // 論理解像度（GBC 160x144）
+const MW = 50, MH = 34;
+const FONT = '"DotGothic16", monospace';
+
+// ---------- 色 ----------
+const C = {
+  ol:'#181820', deep:'#1d4f96', sea:'#2f74c0', sea2:'#3b86d0', shallow:'#62b4e8', foam:'#d4f0ff',
+  sand:'#f0d890', sandD:'#d6b46a', sandL:'#fff0b8', grass:'#5cb24a', grassD:'#3d8c3a', grassL:'#8ad468',
+  trunk:'#7a4a20', trunkD:'#4e2c10', leaf:'#2f7d32', leafD:'#1d5424', leafL:'#4ea844',
+  rock:'#8e8e98', rockD:'#5a5a66', rockL:'#c4c4cc', skin:'#f8c090', skinD:'#d08860', hair:'#3a2418',
+  kai:'#d84030', kaiD:'#90241c', riku:'#2f6fd8', rikuD:'#1c4090', pants:'#e8e0c0', pantsD:'#a89c70',
+  cave:'#3a3040', caveD:'#241c2a', caveL:'#56485e', ui:'#f8f0d8', uiD:'#c8b890', ink:'#282018',
+  red:'#e04040', blue:'#40a0f0', yellow:'#f8c838', purple:'#9060d0', berry:'#e03070', fire:'#f88020', fireL:'#ffe040',
+};
+
+// ---------- 乱数 ----------
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+const hash2 = (x,y)=>{let h=(x*374761393+y*668265263)^0x5bd1e995;h=Math.imul(h^h>>>13,1274126177);return((h^h>>>16)>>>0)/4294967296;};
+
+// =====================================================================
+//  タイル
+// =====================================================================
+const T = {DEEP:0,SHALLOW:1,SAND:2,GRASS:3,TREE:4,PALM:5,ROCK:6,BUSH:7,BUSHE:8,TALL:9,CUT:10,SPRING:11,BAMBOO:12,STUMP:13,CAVE:14,WALL:15,BRIDGEX:16,BRIDGE:17,CHEST:18,CHESTO:19,HILL:20,SUMMIT:21,BAMBOOC:22};
+const SOLID = new Set([T.DEEP,T.TREE,T.PALM,T.ROCK,T.BUSH,T.BUSHE,T.SPRING,T.BAMBOO,T.WALL,T.BRIDGEX,T.CHEST,T.CHESTO]);
+const isWater = t => t===T.DEEP||t===T.SHALLOW;
+
+// =====================================================================
+//  アイテム
+// =====================================================================
+const ITEMS = {
+  stone:{n:'いし',ic:'stone',d:'ただの石。2つあればなにかできそう'},
+  sharp:{n:'するどい石',ic:'sharp',d:'割れて刃のようになった石。切ったり割ったりできる'},
+  branch:{n:'木の枝',ic:'branch',d:'まっすぐな枝'},
+  vine:{n:'つる',ic:'vine',d:'じょうぶなつる。むすべそう'},
+  rope:{n:'ロープ',ic:'rope',d:'つるをよったロープ'},
+  coconut:{n:'ヤシの実',ic:'coconut',d:'かたい実。するどい物で割れそう'},
+  opencoco:{n:'割ったヤシの実',ic:'opencoco',d:'つかう: のど+35 おなか+8',eat:{th:35,hu:8}},
+  leaf:{n:'大きな葉',ic:'leaf',d:'ヤシの大きな葉っぱ'},
+  hay:{n:'かれ草',ic:'hay',d:'よくかわいた草。燃えやすい'},
+  log:{n:'丸太',ic:'log',d:'切りたおした木'},
+  logs:{n:'丸太のたば',ic:'logs',d:'丸太を2本ならべたもの'},
+  plank:{n:'橋のいた',ic:'plank',d:'こわれた橋のところで つかう'},
+  axe:{n:'石のオノ',ic:'axe',d:'木を切りたおせる。ヘビにもつよい',tool:1},
+  rod:{n:'つりざお',ic:'rod',d:'海に向かってAでつりをする',tool:1},
+  drill:{n:'ひきり棒',ic:'drill',d:'こすって火をおこす道具',tool:1},
+  firekit:{n:'たき火のもと',ic:'firekit',d:'つかう: 目の前にたき火をつくる'},
+  shelterkit:{n:'シェルターのもと',ic:'shelterkit',d:'つかう: 目の前に寝床をつくる'},
+  berry:{n:'きのみ',ic:'berry',d:'つかう: おなか+12 のど+4',eat:{hu:12,th:4}},
+  fish:{n:'なま魚',ic:'fish',d:'つかう: おなか+15（おなかをこわすかも）。たき火で焼ける',eat:{hu:15},raw:1},
+  gfish:{n:'焼き魚',ic:'gfish',d:'つかう: おなか+45',eat:{hu:45}},
+  meat:{n:'ヘビ肉',ic:'meat',d:'つかう: おなか+18（おなかをこわすかも）。たき火で焼ける',eat:{hu:18},raw:1},
+  gmeat:{n:'焼き肉',ic:'gmeat',d:'つかう: おなか+50 体力+10',eat:{hu:50,hp:10}},
+  bamboo:{n:'竹',ic:'bamboo',d:'中がからっぽの竹'},
+  bottle:{n:'竹の水筒',ic:'bottle',d:'わき水のところで水をくめる',tool:1},
+  bottlew:{n:'水筒(水)',ic:'bottlew',d:'つかう: のど+40',eat:{th:40},back:'bottle'},
+  torch:{n:'たいまつ',ic:'torch',d:'つかう: たき火のそばで火をつける。暗い所を照らす'},
+  sail:{n:'古い帆',ic:'sail',d:'難破船の帆。風をうけられる'},
+  raft:{n:'いかだ',ic:'raft',d:'海に向かってつかう: 島を出る（帆がない）'},
+  sraft:{n:'帆つきいかだ',ic:'sraft',d:'海に向かってつかう: 島を出る'},
+};
+// あわせる: [a, b, 結果, 残す材料, 条件]
+const RECIPES = [
+  ['stone','stone','sharp'],
+  ['branch','sharp','axe'],
+  ['coconut','sharp','opencoco',['sharp']],
+  ['coconut','axe','opencoco',['axe']],
+  ['branch','vine','rod'],
+  ['vine','vine','rope'],
+  ['branch','branch','drill'],
+  ['hay','drill','firekit',['drill']],
+  ['leaf','rope','shelterkit'],
+  ['bamboo','sharp','bottle',['sharp']],
+  ['bamboo','axe','bottle',['axe']],
+  ['branch','hay','torch',null,'fire'],
+  ['log','log','logs'],
+  ['log','rope','plank'],
+  ['logs','rope','raft'],
+  ['raft','sail','sraft'],
+];
+const BOOK = ['sharp','opencoco','axe','rod','rope','drill','firekit','shelterkit','bottle','torch','logs','plank','raft','sraft','gfish','gmeat'];
+const ENDINGS = {
+  alone:{n:'ひとりだけの帰り道',no:1},
+  drift:{n:'ふたりの漂流',no:2},
+  voyage:{n:'ふたりの航海',no:3},
+  smoke:{n:'のろしの朝',no:4},
+};
+
+// =====================================================================
+//  サウンド（矩形波でGBっぽく）
+// =====================================================================
+let AC = null, muted = false, master = null;
+try { muted = localStorage.getItem('futari_mute') === '1'; } catch(e){}
+function audio(){
+  if (!AC) { try { AC = new (window.AudioContext||window.webkitAudioContext)(); master = AC.createGain(); master.gain.value = muted?0:0.5; master.connect(AC.destination);} catch(e){ AC = null; } }
+  if (AC && AC.state === 'suspended') AC.resume();
+}
+function tone(f, d, type='square', vol=0.15, slide=0, delay=0){
+  if (!AC) return;
+  const t0 = AC.currentTime + delay;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t0);
+  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + slide), t0 + d);
+  g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + d);
+  o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + d + 0.02);
+}
+function noise(d, vol=0.2, hp=800, delay=0){
+  if (!AC) return;
+  const t0 = AC.currentTime + delay;
+  const len = Math.floor(AC.sampleRate * d), b = AC.createBuffer(1, len, AC.sampleRate), ch = b.getChannelData(0);
+  for (let i=0;i<len;i++) ch[i] = (Math.random()*2-1) * (1 - i/len);
+  const s = AC.createBufferSource(); s.buffer = b;
+  const f = AC.createBiquadFilter(); f.type='highpass'; f.frequency.value = hp;
+  const g = AC.createGain(); g.gain.value = vol;
+  s.connect(f); f.connect(g); g.connect(master); s.start(t0);
+}
+// 効果音の音量は「プレイヤーへの影響度」順（#032）
+const SFX = {
+  step(){ tone(90+Math.random()*30, .03, 'triangle', .04); },
+  pick(){ tone(880,.05,'square',.08); tone(1320,.07,'square',.08,0,.05); },
+  bump(){ tone(110,.06,'square',.06); },
+  empty(){ tone(220,.05,'square',.05,-60); },     // 押して何も起きない、をなくす（#104）
+  swing(){ noise(.07,.06,2400); },
+  chop(){ noise(.05,.25,300); tone(160,.08,'square',.14,-60); },   // アタック強め（#165）
+  fall(){ noise(.25,.3,150); tone(120,.3,'square',.14,-80); },
+  hit(){ noise(.04,.25,500); tone(300,.08,'square',.15,-200); },
+  kill(){ noise(.12,.25,400); tone(500,.12,'square',.14,300); },
+  hurt(){ tone(240,.18,'square',.2,-180); noise(.1,.2,900); },
+  eat(){ tone(520,.06,'square',.1); tone(660,.06,'square',.1,0,.07); tone(780,.1,'square',.1,0,.14); },
+  craft(){ [523,659,784,1047].forEach((f,i)=>tone(f,.09,'square',.12,0,i*.07)); },
+  fail(){ tone(200,.1,'square',.1); tone(150,.16,'square',.1,0,.1); },
+  menu(){ tone(1200,.025,'square',.05); },
+  ok(){ tone(990,.04,'square',.08); },
+  warn(){ tone(440,.07,'square',.09); tone(440,.07,'square',.09,0,.12); },
+  bite(){ tone(1400,.05,'square',.14); tone(1800,.08,'square',.14,0,.05); },
+  splash(){ noise(.18,.15,1200); },
+  fire(){ noise(.3,.12,600); },
+  join(){ [392,523,659,784,1047].forEach((f,i)=>tone(f,.13,'square',.11,0,i*.1)); },
+  sleep(){ [523,392,330,262].forEach((f,i)=>tone(f,.2,'triangle',.12,0,i*.16)); },
+  fanfare(){ [523,523,523,659,784,659,784,1047].forEach((f,i)=>tone(f,.16,'square',.11,0,i*.13)); },
+};
+// BGM: 2声の小さなループ（昼はゆったり、夜は暗く）
+const BGM = {
+  day:{bpm:104, mel:[72,0,76,79,0,77,76,74, 72,0,74,76,0,74,72,69, 67,0,69,72,0,74,76,77, 76,0,74,72,0,0,0,0], bass:[48,55,52,55, 53,57,48,55, 45,52,48,52, 50,55,48,0]},
+  night:{bpm:76, mel:[69,0,0,72,0,71,69,0, 64,0,0,67,0,0,65,64, 62,0,0,65,0,64,62,0, 60,0,0,0,0,0,0,0], bass:[45,0,40,0, 41,0,40,0, 38,0,40,0, 45,0,0,0]},
+};
+let bgmName = null, bgmStep = 0, bgmNext = 0;
+const mid = n => 440 * Math.pow(2, (n-69)/12);
+function bgmTick(){
+  if (!AC || !bgmName || muted) return;
+  const s = BGM[bgmName], st = 60 / s.bpm / 2;
+  while (bgmNext < AC.currentTime + 0.15) {
+    if (bgmNext < AC.currentTime) bgmNext = AC.currentTime + 0.02;
+    const m = s.mel[bgmStep % s.mel.length];
+    if (m) tone(mid(m), st*0.9, 'square', 0.035, 0, bgmNext - AC.currentTime);
+    if (bgmStep % 2 === 0) { const b = s.bass[(bgmStep/2) % s.bass.length]; if (b) tone(mid(b), st*1.8, 'triangle', 0.07, 0, bgmNext - AC.currentTime); }
+    bgmStep++; bgmNext += st;
+  }
+}
+function setBgm(n){ if (bgmName !== n){ bgmName = n; bgmStep = 0; } }
+function setMute(m){ muted = m; if (master) master.gain.value = m?0:0.5; document.getElementById('mutebtn').textContent = m ? '♪ OFF' : '♪ ON'; try{localStorage.setItem('futari_mute', m?'1':'0');}catch(e){} }
+setMute(muted);
+
+// =====================================================================
+//  入力
+// =====================================================================
+const keys = {}, pressed = {};
+const KEYMAP = {ArrowUp:'up',KeyW:'up',ArrowDown:'down',KeyS:'down',ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right',
+  KeyZ:'a',Space:'a',KeyJ:'a',KeyX:'b',KeyK:'b',Escape:'start',Enter:'start',KeyM:'mute',F1:'f1',F2:'f2',F3:'f3',F4:'f4'};
+addEventListener('keydown', e => { const k = KEYMAP[e.code]; if (!k) return; e.preventDefault(); audio(); if (!keys[k]) pressed[k] = true; keys[k] = true; });
+addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) keys[k] = false; });
+document.querySelectorAll('[data-k]').forEach(b => {
+  const k = b.dataset.k;
+  const on = e => { e.preventDefault(); audio(); if (!keys[k]) pressed[k] = true; keys[k] = true; };
+  const off = e => { e.preventDefault(); keys[k] = false; };
+  b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off); b.addEventListener('pointerleave', off); b.addEventListener('pointercancel', off);
+});
+document.getElementById('mutebtn').addEventListener('click', () => { audio(); setMute(!muted); });
+const hit = k => { if (pressed[k]) { pressed[k] = false; return true; } return false; };
+function clearPressed(){ for (const k in pressed) pressed[k] = false; }
+
+// =====================================================================
+//  スプライト（コードで描く。外枠付きでシルエットを立てる #241）
+// =====================================================================
+const spriteCache = {};
+function outlined(key, w, h, draw){
+  if (spriteCache[key]) return spriteCache[key];
+  const a = document.createElement('canvas'); a.width = w+2; a.height = h+2;
+  const ac = a.getContext('2d'); ac.translate(1,1); draw(ac);
+  const s = document.createElement('canvas'); s.width = w+2; s.height = h+2;
+  const sc = s.getContext('2d'); sc.drawImage(a,0,0); sc.globalCompositeOperation = 'source-in'; sc.fillStyle = C.ol; sc.fillRect(0,0,w+2,h+2);
+  const o = document.createElement('canvas'); o.width = w+2; o.height = h+2;
+  const oc = o.getContext('2d');
+  [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dx,dy]) => oc.drawImage(s,dx,dy));
+  oc.drawImage(a,0,0);
+  return spriteCache[key] = o;
+}
+const R = (c,x,y,w,h,col) => { c.fillStyle = col; c.fillRect(x,y,w,h); };
+
+// 子ども（兄カイ=赤、弟リク=青）
+function kidSprite(who, dir, frame, pose){
+  return outlined(`kid${who}${dir}${frame}${pose}`, 14, 16, c => {
+    const sh = who==='kai' ? C.kai : C.riku, shD = who==='kai' ? C.kaiD : C.rikuD;
+    const leg = pose==='walk' ? frame : 0;
+    // 脚
+    if (pose === 'sit') { R(c,3,13,8,2,C.skin); }
+    else {
+      R(c,4,13 - (leg===1?1:0),2,3,C.skin); R(c,8,13 - (leg===2?1:0),2,3,C.skin);
+      R(c,4,15,2,1,C.ink); R(c,8,15,2,1,C.ink);
+    }
+    // 体
+    const sq = pose==='windup' ? 1 : 0; // 構え：1フレーム目で極端に（#049）
+    R(c,3,8+sq,8,4,sh); R(c,3,11+sq,8,1,shD);
+    R(c,4,12,6,2,C.pants);
+    // 腕
+    if (pose==='windup'){ if (dir==='left') R(c,10,6,2,3,C.skin); else if (dir==='right') R(c,2,6,2,3,C.skin); else { R(c,1,6,2,3,C.skin); R(c,11,6,2,3,C.skin);} }
+    else if (pose==='swing'){ if (dir==='left') R(c,0,9,3,2,C.skin); else if (dir==='right') R(c,11,9,3,2,C.skin); else if (dir==='down') R(c,5,12,4,2,C.skin); else R(c,5,6,4,2,C.skin); }
+    else if (pose==='wave'){ R(c,11,3,2,5,C.skin); R(c,1,9,2,3,C.skin); }
+    else { R(c,1,9,2,3,C.skin); R(c,11,9,2,3,C.skin); }
+    // 頭
+    const hy = sq;
+    R(c,3,1+hy,8,7,C.skin);
+    R(c,2,0+hy,10,3,C.hair);
+    if (dir==='up') { R(c,3,1+hy,8,6,C.hair); }
+    else if (dir==='down') { R(c,2,2+hy,2,2,C.hair); R(c,10,2+hy,2,2,C.hair); R(c,5,4+hy,1,2,C.ink); R(c,8,4+hy,1,2,C.ink); R(c,4,6+hy,1,1,'#f09080'); R(c,9,6+hy,1,1,'#f09080'); }
+    else if (dir==='left') { R(c,7,1+hy,5,4,C.hair); R(c,4,4+hy,1,2,C.ink); }
+    else { R(c,2,1+hy,5,4,C.hair); R(c,9,4+hy,1,2,C.ink); }
+    // 弟はバンダナ
+    if (who==='riku') R(c,2,2+hy,10,1,C.yellow);
+  });
+}
+function snakeSprite(frame, flash){
+  return outlined(`snake${frame}${flash}`, 14, 9, c => {
+    const g = flash ? '#ffffff' : '#8a3cb4', gD = flash ? '#ffffff' : '#5a2080', y = flash?'#fff':'#f0d040';
+    const o = frame ? 1 : 0;
+    R(c,0,6-o,4,2,g); R(c,3,5+o,4,3,g); R(c,6,4-o,4,3,g); R(c,9,1,4,5,g);
+    R(c,4,7+o,2,1,gD); R(c,7,6-o,2,1,gD);
+    R(c,11,2,1,1,y); R(c,13,4,1,1,C.red);
+  });
+}
+// アイテムのアイコン 12x12
+function icon(id){
+  return outlined('ic'+id, 12, 12, c => {
+    switch(id){
+      case 'stone': R(c,2,4,8,6,C.rock); R(c,3,4,4,2,C.rockL); R(c,2,9,8,1,C.rockD); break;
+      case 'sharp': R(c,3,2,5,8,C.rock); R(c,7,3,2,5,C.rockL); R(c,4,1,2,2,C.rockL); R(c,3,9,4,1,C.rockD); break;
+      case 'branch': for(let i=0;i<10;i++) R(c,1+i,10-i,2,2,C.trunk); R(c,6,3,1,3,C.trunk); R(c,7,2,2,1,C.leafL); break;
+      case 'vine': for(let i=0;i<11;i++) R(c,i,5+Math.round(Math.sin(i*.9)*3),2,2,C.leaf); R(c,4,2,2,2,C.leafL); break;
+      case 'rope': for(let i=0;i<4;i++){ R(c,2+i*2,1+i*2,3,3,'#c8a060'); R(c,3+i*2,2+i*2,1,1,'#806030'); } R(c,8,8,3,3,'#c8a060'); break;
+      case 'coconut': R(c,2,3,8,8,'#7a5028'); R(c,3,3,4,3,'#a07040'); R(c,4,1,3,2,C.leaf); break;
+      case 'opencoco': R(c,1,5,10,6,'#7a5028'); R(c,2,5,8,3,'#f8f8f0'); R(c,3,6,6,1,'#d0e8f0'); break;
+      case 'leaf': R(c,1,5,10,3,C.leaf); R(c,2,4,8,1,C.leafL); R(c,0,6,12,1,C.leafD); R(c,4,8,2,3,C.leafD); break;
+      case 'hay': for(let i=0;i<5;i++) R(c,2+i*2,2+(i%2),1,9,'#d8c060'); R(c,1,7,10,2,'#b09030'); break;
+      case 'log': R(c,0,3,11,7,C.trunk); R(c,0,4,11,1,'#9a6430'); R(c,9,3,3,7,'#d8a868'); R(c,10,5,1,3,C.trunkD); break;
+      case 'logs': R(c,0,1,11,5,C.trunk); R(c,0,6,11,5,C.trunk); R(c,9,1,3,5,'#d8a868'); R(c,9,6,3,5,'#d8a868'); R(c,0,5,11,1,C.trunkD); break;
+      case 'plank': R(c,0,2,12,3,'#c08848'); R(c,0,7,12,3,'#c08848'); R(c,2,0,2,12,'#c8a060'); R(c,8,0,2,12,'#c8a060'); break;
+      case 'axe': for(let i=0;i<9;i++) R(c,2+i,10-i,1,2,C.trunk); R(c,6,0,4,6,C.rock); R(c,9,1,2,4,C.rockL); R(c,7,5,2,2,'#c8a060'); break;
+      case 'rod': for(let i=0;i<10;i++) R(c,1+i,11-i,1,1,C.trunk); R(c,11,1,1,8,'#e8e8e8'); R(c,10,9,2,2,C.red); break;
+      case 'drill': R(c,5,0,2,10,C.trunk); R(c,2,9,8,3,'#9a6430'); R(c,5,8,2,1,C.fire); break;
+      case 'firekit': R(c,1,8,10,3,C.trunk); R(c,3,5,6,3,'#d8c060'); R(c,5,1,2,6,C.trunk); break;
+      case 'shelterkit': R(c,0,9,12,2,C.trunk); for(let i=0;i<6;i++) R(c,5-i,2+i*1.2,2+i*2,2,C.leaf); break;
+      case 'berry': R(c,2,4,4,4,C.berry); R(c,6,6,4,4,C.berry); R(c,3,4,1,1,'#ffc0d0'); R(c,5,1,2,4,C.leaf); break;
+      case 'fish': R(c,1,4,8,4,'#90b0c8'); R(c,8,3,3,6,'#90b0c8'); R(c,1,5,7,1,'#d0e0f0'); R(c,2,5,1,1,C.ink); break;
+      case 'gfish': R(c,1,4,8,4,'#c88040'); R(c,8,3,3,6,'#c88040'); R(c,2,6,6,1,'#804010'); R(c,2,5,1,1,C.ink); R(c,4,4,1,4,'#804010'); break;
+      case 'meat': R(c,2,3,8,6,'#e07080'); R(c,3,4,4,2,'#f8b0b8'); R(c,9,5,3,2,'#f0f0f0'); break;
+      case 'gmeat': R(c,2,3,8,6,'#a05028'); R(c,3,4,4,2,'#d08040'); R(c,9,5,3,2,'#f0f0f0'); break;
+      case 'bamboo': R(c,4,0,4,12,'#70b040'); R(c,4,3,4,1,'#3a7020'); R(c,4,8,4,1,'#3a7020'); R(c,5,0,1,12,'#a0d870'); break;
+      case 'bottle': R(c,3,1,6,11,'#70b040'); R(c,3,1,6,2,'#d8c890'); R(c,4,3,1,9,'#a0d870'); break;
+      case 'bottlew': R(c,3,1,6,11,'#70b040'); R(c,3,1,6,2,C.blue); R(c,4,3,1,9,'#a0d870'); R(c,6,6,2,3,C.blue); break;
+      case 'torch': R(c,5,4,2,8,C.trunk); R(c,4,1,4,4,C.fire); R(c,5,0,2,3,C.fireL); break;
+      case 'sail': R(c,1,1,10,10,'#e8e0c8'); R(c,1,1,10,1,'#a89878'); R(c,3,4,6,1,'#c8b898'); R(c,7,7,3,3,'#c8b898'); break;
+      case 'raft': for(let i=0;i<4;i++) R(c,1+i*2.6,3,2,8,C.trunk); R(c,0,5,12,1,'#c8a060'); R(c,0,8,12,1,'#c8a060'); break;
+      case 'sraft': for(let i=0;i<4;i++) R(c,1+i*2.6,8,2,4,C.trunk); R(c,5,0,1,8,C.trunkD); R(c,6,1,5,6,'#e8e0c8'); break;
+    }
+  });
+}
+
+// ---------- タイル画像 ----------
+const tileCache = {};
+function tileImg(t, v, anim){
+  const key = t+'_'+v+'_'+anim;
+  if (tileCache[key]) return tileCache[key];
+  const cnv = document.createElement('canvas'); cnv.width = TS; cnv.height = TS;
+  const c = cnv.getContext('2d');
+  const rnd = mulberry(t*97 + v*13 + 5);
+  const speck = (col, n) => { for (let i=0;i<n;i++) R(c, Math.floor(rnd()*16), Math.floor(rnd()*16), 1, 1, col); };
+  const grassBase = () => { R(c,0,0,16,16,C.grass); speck(C.grassD,10); speck(C.grassL,6); };
+  const sandBase = () => { R(c,0,0,16,16,C.sand); speck(C.sandD,8); speck(C.sandL,5); };
+  switch(t){
+    case T.DEEP: case T.SHALLOW: {
+      R(c,0,0,16,16, t===T.DEEP ? C.sea : C.shallow);
+      const col = t===T.DEEP ? C.sea2 : C.foam;
+      for (let i=0;i<3;i++){ const y = (i*5 + v*3) % 16, x = (i*7 + anim*2 + v*5) % 16; R(c,x,y,4,1,col); R(c,(x+9)%16,(y+2)%16,2,1,col); }
+      break; }
+    case T.SAND: sandBase(); break;
+    case T.GRASS: grassBase(); if (v%3===0){ R(c,4,6,1,2,C.grassD); R(c,5,5,1,2,C.grassD);} break;
+    case T.CUT: grassBase(); R(c,3,10,10,2,'#c8b060'); R(c,5,9,2,1,'#c8b060'); break;
+    case T.TALL: grassBase(); for (let i=0;i<6;i++){ const x=1+i*2.5|0; R(c,x,4+(i%2)*2,2,10,C.grassD); R(c,x,4+(i%2)*2,1,6,C.grassL);} break;
+    case T.TREE: case T.STUMP: grassBase();
+      if (t===T.STUMP){ R(c,4,8,8,6,C.trunk); R(c,4,8,8,2,'#d8a868'); R(c,6,9,4,1,C.trunkD); R(c,4,13,8,1,C.trunkD); break; }
+      R(c,6,10,4,6,C.trunk); R(c,6,10,1,6,C.trunkD);
+      R(c,1,1,14,10,C.leaf); R(c,0,3,16,6,C.leaf); R(c,2,1,8,3,C.leafL); R(c,1,8,14,3,C.leafD); R(c,3,0,10,1,C.leaf);
+      if (v%2) { R(c,10,3,2,2,C.leafL); R(c,13,5,1,3,C.leafD); }
+      R(c,12,9,1,6,C.leafD); break;   // つる
+    case T.PALM: sandBase();
+      R(c,7,6,3,10,'#a07040'); R(c,7,8,3,1,'#7a5028'); R(c,7,12,3,1,'#7a5028');
+      R(c,1,3,6,2,C.leaf); R(c,10,3,6,2,C.leaf); R(c,3,1,10,2,C.leafL); R(c,0,5,3,2,C.leafD); R(c,13,5,3,2,C.leafD); R(c,5,0,6,2,C.leaf);
+      break;
+    case T.ROCK: grassBase(); R(c,1,4,14,11,C.rock); R(c,2,3,10,3,C.rockL); R(c,1,13,14,2,C.rockD); R(c,10,6,2,5,C.rockD); break;
+    case T.BUSH: case T.BUSHE: grassBase();
+      R(c,1,4,14,11,C.leaf); R(c,2,3,12,3,C.leafL); R(c,1,12,14,3,C.leafD);
+      if (t===T.BUSH){ [[4,6],[9,5],[6,10],[11,9]].forEach(([x,y])=>{ R(c,x,y,2,2,C.berry); R(c,x,y,1,1,'#ffc0d0'); }); }
+      break;
+    case T.SPRING: grassBase(); R(c,1,3,14,11,C.rockD); R(c,2,4,12,9,C.shallow); R(c,4,6,4,1,C.foam); R(c,8,9,4,1,C.foam); R(c,1,13,14,1,C.rock); break;
+    case T.BAMBOO: case T.BAMBOOC: grassBase();
+      if (t===T.BAMBOOC){ [2,7,12].forEach(x=>{ R(c,x,10,3,4,'#70b040'); R(c,x,10,3,1,'#d8e8a0'); }); break; }
+      [1,6,11].forEach((x,i)=>{ R(c,x,0,3,16,'#70b040'); R(c,x,(4+i*3)%14,3,1,'#3a7020'); R(c,x,(11+i*2)%16,3,1,'#3a7020'); R(c,x+1,0,1,16,'#a0d870'); });
+      R(c,3,2,3,1,C.leafL); R(c,9,7,3,1,C.leafL); break;
+    case T.CAVE: R(c,0,0,16,16,C.cave); speck(C.caveD,12); speck(C.caveL,4); break;
+    case T.WALL: R(c,0,0,16,16,C.caveD); R(c,0,0,16,3,C.caveL); R(c,v%2?3:9,6,4,2,C.cave); R(c,0,15,16,1,'#100c14'); break;
+    case T.BRIDGEX: case T.BRIDGE:
+      R(c,0,0,16,16,C.deep); for (let i=0;i<3;i++) R(c,(i*6+v*3)%16,(i*5)%16,4,1,C.sea);
+      if (t===T.BRIDGE){ R(c,0,3,16,10,'#c08848'); for (let x=0;x<16;x+=4) R(c,x,3,1,10,'#805020'); R(c,0,2,16,1,'#c8a060'); R(c,0,13,16,1,'#c8a060'); }
+      else { R(c,0,2,16,1,'#c8a060'); if (v%2) R(c,2,5,5,6,'#a07040'); }
+      break;
+    case T.CHEST: case T.CHESTO: R(c,0,0,16,16,C.cave); speck(C.caveD,10);
+      R(c,2,5,12,9,'#8a5428'); R(c,2,5,12,2,'#b07038'); R(c,7,8,2,3,C.yellow); R(c,2,13,12,1,'#4e2c10');
+      if (t===T.CHESTO){ R(c,2,2,12,4,'#5a3418'); R(c,3,7,10,4,'#2a1a10'); }
+      break;
+    case T.HILL: grassBase(); R(c,0,0,16,1,C.grassL); speck('#a0c070',6); break;
+    case T.SUMMIT: R(c,0,0,16,16,'#b0a080'); speck('#8a7a60',10); R(c,2,2,12,12,'#c8b890'); R(c,3,3,10,1,'#e0d4b0'); break;
+  }
+  return tileCache[key] = cnv;
+}
+
+// =====================================================================
+//  地図づくり（ふたつの島）
+// =====================================================================
+let map, res;
+const W_ISLE = {cx:12, cy:17, rx:10.2, ry:13};
+const E_ISLE = {cx:37.5, cy:17, rx:10.8, ry:13.5};
+const START = {x:7, y:26};
+const RIKU_POS = {x:28, y:17};
+const CAVE_ENT = {x:35, y:10};
+const CHEST_POS = {x:38, y:5};
+const SUMMIT_POS = {x:41, y:26};
+const SPRING_W = {x:9, y:9}, SPRING_E = {x:43, y:14};
+function genMap(){
+  const rnd = mulberry(20000719);
+  const grid = (s) => { const g=[]; for(let y=0;y<=MH/s+1;y++){g.push([]);for(let x=0;x<=MW/s+1;x++)g[y].push(rnd());} return (x,y)=>{const gx=x/s,gy=y/s,ix=Math.floor(gx),iy=Math.floor(gy),fx=gx-ix,fy=gy-iy;const a=g[iy][ix],b=g[iy][ix+1],c=g[iy+1][ix],d=g[iy+1][ix+1];const sx=fx*fx*(3-2*fx),sy=fy*fy*(3-2*fy);return a+(b-a)*sx+(c-a)*sy+(a-b-c+d)*sx*sy;}; };
+  const n1 = grid(5), n2 = grid(3);
+  map = [];
+  for (let y=0;y<MH;y++){ map.push([]); for (let x=0;x<MW;x++){
+    let best = 9;
+    for (const I of [W_ISLE,E_ISLE]){ const d = Math.hypot((x-I.cx)/I.rx, (y-I.cy)/I.ry) - (n1(x,y)-0.5)*0.35; best = Math.min(best,d); }
+    let t;
+    if (best > 1.12) t = T.DEEP; else if (best > 1.0) t = T.SHALLOW; else if (best > 0.8) t = T.SAND;
+    else {
+      const f = n2(x,y), r = rnd();
+      if (best < 0.72 && f > 0.52) t = r < 0.72 ? T.TREE : (r < 0.8 ? T.TALL : T.GRASS);
+      else if (r < 0.06) t = T.TALL; else if (r < 0.085) t = T.BUSH; else if (r < 0.1) t = T.ROCK; else if (r<0.14 && f>0.4) t = T.TREE; else t = T.GRASS;
+    }
+    if (t===T.SAND && rnd() < 0.07) t = T.PALM;
+    map[y].push(t);
+  }}
+  // 2つの島のあいだ（海峡）は深い海に
+  for (let y=0;y<MH;y++) for (let x=23;x<=26;x++) map[y][x] = T.DEEP;
+  for (let y=0;y<MH;y++){ if (map[y][22]===T.SHALLOW) map[y][22]=T.DEEP; if (map[y][27]===T.SHALLOW) map[y][27]=T.DEEP; }
+  const set = (x,y,t) => { if (x>=0&&y>=0&&x<MW&&y<MH) map[y][x] = t; };
+  const clearTo = (x,y,t=T.GRASS) => { const c = map[y][x]; if (c!==T.DEEP && c!==T.SHALLOW && c!==T.SAND && c!==T.SPRING) set(x,y,t); else if (c===T.DEEP||c===T.SHALLOW) set(x,y,T.SAND); };
+  const path = (a,b) => { let x=a.x,y=a.y; const r2=mulberry(a.x*31+b.y); while(x!==b.x||y!==b.y){ clearTo(x,y); if (r2()<0.5 && x!==b.x) x+=Math.sign(b.x-x); else if (y!==b.y) y+=Math.sign(b.y-y); else x+=Math.sign(b.x-x); } clearTo(x,y); };
+  // 橋（こわれている）
+  for (let x=19;x<=22;x++){ set(x,16,T.SAND); set(x,17,T.SAND); set(x,18,T.SAND); }
+  for (let x=27;x<=30;x++){ set(x,16,T.SAND); set(x,17,T.SAND); set(x,18,T.SAND); }
+  for (let x=23;x<=26;x++) set(x,17,T.BRIDGEX);
+  // スタートの浜（漂着物）
+  for (let y=START.y-2;y<=START.y+2;y++) for (let x=START.x-3;x<=START.x+3;x++) if (map[y][x]!==T.DEEP && map[y][x]!==T.SHALLOW) set(x,y,T.SAND);
+  for (const [x,y] of [[START.x+3,START.y-2],[START.x-2,START.y-2]]){ for (let yy=y-1;yy<=y+1;yy++) for (let xx=x-1;xx<=x+1;xx++) set(xx,yy,T.SAND); set(x,y,T.PALM); }
+  // 洞窟（東の島の北）
+  for (let y=2;y<=10;y++) for (let x=31;x<=41;x++) set(x,y,T.WALL);
+  const caveFloor = [[35,10],[35,9],[35,8],[34,8],[33,8],[33,7],[33,6],[33,5],[34,5],[35,5],[36,5],[36,4],[37,4],[38,4],[38,5],[39,5],[39,6],[39,7],[38,7],[37,7],[37,8]];
+  caveFloor.forEach(([x,y])=>set(x,y,T.CAVE));
+  set(CHEST_POS.x, CHEST_POS.y, T.CHEST); set(39,4,T.CAVE);
+  for (let x=33;x<=37;x++) set(x,11,T.GRASS);
+  // 丘とてっぺん
+  for (let y=SUMMIT_POS.y-2;y<=SUMMIT_POS.y+2;y++) for (let x=SUMMIT_POS.x-2;x<=SUMMIT_POS.x+2;x++) set(x,y,T.HILL);
+  set(SUMMIT_POS.x,SUMMIT_POS.y,T.SUMMIT);
+  // 竹やぶ
+  [[43,19],[44,19],[44,20],[45,20],[43,21],[45,21],[44,22]].forEach(([x,y])=>set(x,y,T.BAMBOO));
+  // わき水
+  for (const s of [SPRING_W,SPRING_E]){ for (let y=s.y-1;y<=s.y+1;y++) for (let x=s.x-1;x<=s.x+1;x++) set(x,y,T.GRASS); set(s.x,s.y,T.SPRING); }
+  // 道
+  path(START, {x:10,y:20}); path({x:10,y:20}, {x:SPRING_W.x,y:SPRING_W.y+1}); path({x:10,y:20},{x:19,y:17});
+  path({x:30,y:17},{x:CAVE_ENT.x,y:11}); path({x:30,y:17},{x:SPRING_E.x-1,y:SPRING_E.y}); path({x:30,y:17},{x:SUMMIT_POS.x,y:SUMMIT_POS.y+3});
+  path({x:SPRING_E.x-1,y:SPRING_E.y},{x:42,y:20});
+  set(SUMMIT_POS.x,SUMMIT_POS.y+3,T.HILL);
+  // 西の島に木と草むらを保証
+  [[13,13],[14,12],[15,14],[6,16],[7,15],[16,22],[15,23],[12,24]].forEach(([x,y])=>{ if (map[y][x]===T.GRASS) set(x,y,T.TREE); });
+  [[11,22],[12,21],[9,18],[14,19]].forEach(([x,y])=>{ if (map[y][x]===T.GRASS) set(x,y,T.TALL); });
+  [[8,20],[17,19]].forEach(([x,y])=>{ if (map[y][x]===T.GRASS) set(x,y,T.BUSH); });
+  res = {};
+}
+const inMap = (x,y) => x>=0 && y>=0 && x<MW && y<MH;
+const tileAt = (x,y) => inMap(x,y) ? map[y][x] : T.DEEP;
+
+// =====================================================================
+//  状態
+// =====================================================================
+let S; // セーブされる状態
+let scene = 'title', sceneT = 0;
+let player, snakes = [], parts = [], floats = [], toasts = [];
+let hitstop = 0, shake = {t:0,mag:0,mode:0}, flash = 0;
+let dialog = null, menu = null, fishing = null, fade = null;
+let debug = {info:false, fast:false, god:false};
+let titleSel = 0, hasSave = false;
+let frame = 0;
+
+function newState(){
+  genMap();
+  return {
+    day:1, time:12, hp:100, hu:80, th:60, fa:0,
+    inv:[], objs:[], ground:[], recipes:[], flags:{}, faints:0, rikuJoined:false,
+    px: START.x*TS+8, py: START.y*TS+10, map: null, res: null, torch:0, rikuFind:0,
+  };
+}
+function startGame(load){
+  S = newState();
+  if (load) {
+    try { const d = JSON.parse(localStorage.getItem('futari_save')); Object.assign(S, d); map = d.map; res = d.res || {}; } catch(e){ }
+  } else {
+    // 漂着物（遊び始めてすぐ拾えるもの）
+    [[START.x+1,START.y],[START.x-2,START.y+1],[START.x+2,START.y+2]].forEach(([x,y])=>S.ground.push({id:'stone',x:x*TS+8,y:y*TS+8}));
+    [[START.x-1,START.y-1],[START.x+3,START.y+1]].forEach(([x,y])=>S.ground.push({id:'branch',x:x*TS+8,y:y*TS+8}));
+  }
+  player = {x:S.px, y:S.py, dir:'up', walk:0, act:0, actPose:null, inv:0, kx:0, ky:0, trail:[]};
+  snakes = []; parts = []; floats = []; toasts = []; dialog = null; menu = null; fishing = null;
+  riku.x = RIKU_POS.x*TS+8; riku.y = RIKU_POS.y*TS+10;
+  if (S.rikuJoined){ riku.x = player.x - 12; riku.y = player.y; }
+  scene = 'play';
+  if (!load){ S.flags.tut = 0; }
+}
+function save(){
+  try {
+    S.px = player.x; S.py = player.y; S.map = map; S.res = res;
+    localStorage.setItem('futari_save', JSON.stringify(S));
+    S.map = null; S.res = null;
+  } catch(e){}
+}
+function getEndings(){ try { return JSON.parse(localStorage.getItem('futari_endings')) || {}; } catch(e){ return {}; } }
+function addEnding(k){ try { const e = getEndings(); e[k] = (e[k]||0)+1; localStorage.setItem('futari_endings', JSON.stringify(e)); } catch(e){} }
+
+const riku = {x:0,y:0,dir:'down',walk:0,waved:false};
+
+// ---------- カバン ----------
+const count = id => { const s = S.inv.find(i=>i.id===id); return s ? s.n : 0; };
+function give(id, n=1, quiet){
+  let s = S.inv.find(i=>i.id===id);
+  if (!s){ if (S.inv.length >= 15){ toast('カバンがいっぱい!'); S.ground.push({id, x:player.x, y:player.y+4, nopick:60}); return false; } s = {id,n:0}; S.inv.push(s); }
+  s.n += n;
+  if (!quiet){ SFX.pick(); floatText(player.x, player.y-14, '+' + ITEMS[id].n, '#fff'); }
+  return true;
+}
+function take(id, n=1){ const s = S.inv.find(i=>i.id===id); if (!s) return; s.n -= n; if (s.n<=0) S.inv.splice(S.inv.indexOf(s),1); }
+
+// ---------- 表示ヘルパー ----------
+function toast(msg, col){ toasts.push({msg, t:110, col}); if (toasts.length>3) toasts.shift(); }
+function floatText(x,y,msg,col){ floats.push({x,y,msg,col,t:50}); }
+function say(lines, then){ dialog = {lines: Array.isArray(lines)?lines:[lines], i:0, ch:0, then}; }
+function burst(x,y,col,n=8,sp=1.5,life=24){ for (let i=0;i<n;i++){ const a=Math.random()*6.28, s=sp*(0.4+Math.random()); parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-0.6,g:0.08,t:life*(0.6+Math.random()*0.6),col,sz:Math.random()<0.4?2:1}); } }
+function doShake(mag, frames, mode){ if (mag >= shake.mag || shake.t <= 0) shake = {t:frames, mag, mode, f:frames}; }
+
+// =====================================================================
+//  チュートリアル（本編の流れに溶かす #085）／いまの目標
+// =====================================================================
+const TUT = [
+  {msg:'足もとの いし を2つ ひろおう', done:()=>count('stone')>=2 || count('sharp')>0},
+  {msg:'Bでカバン → いし を「あわせる」→ いし', done:()=>count('sharp')>0 || S.recipes.includes('sharp')},
+  {msg:'ヤシの木に向かってA で実をおとそう', done:()=>count('coconut')>0 || S.recipes.includes('opencoco')},
+  {msg:'ヤシの実 と するどい石 をあわせて のもう', done:()=>S.recipes.includes('opencoco')},
+];
+function goalText(){
+  if (S.flags.tut < TUT.length) return TUT[S.flags.tut].msg;
+  if (!S.flags.sawRiku) return '島をしらべよう。東の方から声がする…';
+  if (!S.flags.bridge){
+    if (count('plank')) return 'こわれた橋で 橋のいた をつかおう';
+    if (!count('axe') && !S.recipes.includes('axe')) return '木を切るには オノが要る（枝+するどい石）';
+    return '丸太 と ロープ で 橋のいた をつくろう';
+  }
+  if (!S.rikuJoined) return 'リクのところへ行こう';
+  if (!S.recipes.includes('raft') && !S.flags.smoke) return 'いかだ か のろし で島を出よう';
+  if (!S.recipes.includes('sraft')) return '帆があれば遠くへ行ける。洞くつがあやしい';
+  return '帆つきいかだ を 海に向かってつかおう';
+}
+
+// =====================================================================
+//  プレイ中
+// =====================================================================
+const DIRV = {up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};
+function solidAt(px, py){
+  const tx = Math.floor(px/TS), ty = Math.floor(py/TS), t = tileAt(tx,ty);
+  if (SOLID.has(t)) return true;
+  if (t === T.CAVE && S.torch <= 0) return 'dark';
+  if (S.objs.some(o => o.x===tx && o.y===ty && o.type==='shelter')) return true;
+  if (S.objs.some(o => o.x===tx && o.y===ty && o.type==='fire')) return true;
+  if (!S.rikuJoined && tx===RIKU_POS.x && ty===RIKU_POS.y) return true;
+  return false;
+}
+function boxBlocked(x, y){
+  for (const [ox,oy] of [[-4,-3],[4,-3],[-4,3],[4,3]]){ const s = solidAt(x+ox, y+oy); if (s) return s; }
+  return false;
+}
+function facingTile(){
+  const [dx,dy] = DIRV[player.dir];
+  return {x: Math.floor((player.x + dx*11)/TS), y: Math.floor((player.y + dy*11)/TS)};
+}
+let bumpCool = 0;
+function updatePlay(){
+  // 演出の進行
+  updateFx();
+  if (S.flags.tut < TUT.length && TUT[S.flags.tut].done()){ S.flags.tut++; if (S.flags.tut===TUT.length){ toast('ひらめきの力で 島を生きのびよう!', C.yellow); } }
+  // 会話・メニュー中は時間を止める
+  if (dialog){ updateDialog(); return; }
+  if (menu){ updateMenu(); return; }
+  const spd = debug.fast ? 4 : 1;
+  for (let k=0;k<spd;k++) tickTime(1/60);
+  if (fade) return;
+  if (fishing){ updateFishing(); return; }
+  if (hit('start')){ menu = {kind:'pause', sel:0}; SFX.menu(); return; }
+  if (hit('b')){ menu = {kind:'bag', sel:0, sub:null}; SFX.menu(); return; }
+  if (hit('mute')) setMute(!muted);
+  if (hit('f1')) debug.info = !debug.info;
+  if (hit('f2')) { debug.fast = !debug.fast; toast('時間 x' + (debug.fast?4:1)); }
+  if (hit('f3')) { ['stone','branch','vine','log','rope','hay','coconut','leaf','sharp','axe','fish','sail','bamboo','drill'].forEach(i=>give(i,3,true)); toast('デバッグ: 材料'); }
+  if (hit('f4')) { debug.god = !debug.god; toast('無敵 ' + (debug.god?'ON':'OFF')); }
+
+  // 動作中（構え→ふり→フォロースルー）
+  if (player.act > 0){
+    player.act--;
+    if (player.act === player.actHit) doAction();
+    if (player.act === 0) player.actPose = null;
+    else player.actPose = player.act > player.actHit ? 'windup' : 'swing';
+  }
+  // ノックバック
+  if (player.kx || player.ky){ tryMove(player.kx, player.ky); player.kx *= 0.8; player.ky *= 0.8; if (Math.abs(player.kx)+Math.abs(player.ky) < 0.1){ player.kx = player.ky = 0; } }
+  if (player.inv > 0) player.inv--;
+
+  // 移動
+  let mx = 0, my = 0;
+  if (player.act <= 0){
+    if (keys.left) mx = -1; else if (keys.right) mx = 1;
+    if (keys.up) my = -1; else if (keys.down) my = 1;
+  }
+  if (mx || my){
+    if (mx && !my) player.dir = mx<0?'left':'right';
+    else if (my && !mx) player.dir = my<0?'up':'down';
+    else if (!(player.dir==='left'&&mx<0) && !(player.dir==='right'&&mx>0) && !(player.dir==='up'&&my<0) && !(player.dir==='down'&&my>0)) player.dir = my<0?'up':'down';
+    let sp = p('歩く速さ(px/フレーム)') * (S.fa > 85 ? 0.7 : 1);
+    if (tileAt(Math.floor(player.x/TS), Math.floor(player.y/TS)) === T.SHALLOW) sp *= p('浅瀬での速さの倍率');
+    if (mx && my) sp *= 0.7071;
+    const r = tryMove(mx*sp, my*sp);
+    player.walk += sp;
+    if (Math.floor(player.walk/7) !== Math.floor((player.walk-sp)/7)) SFX.step();
+    if (r === 'dark' && bumpCool <= 0){ toast('まっくらで 先に進めない… あかりがほしい'); bumpCool = 90; SFX.bump(); }
+    // 足あと（リクがついてくる）
+    player.trail.push({x:player.x, y:player.y, dir:player.dir}); if (player.trail.length > 40) player.trail.shift();
+  } else player.walk = 0;
+  if (bumpCool > 0) bumpCool--;
+
+  // A：しらべる・つかう（いつでも何か反応する）
+  if (hit('a') && player.act <= 0) startAction();
+
+  // 落ちている物を拾う
+  for (let i=S.ground.length-1;i>=0;i--){
+    const g = S.ground[i];
+    if (g.nopick > 0){ g.nopick--; continue; }
+    if (Math.abs(g.x-player.x) < 9 && Math.abs(g.y-player.y) < 9){ if (give(g.id)) S.ground.splice(i,1); }
+  }
+  updateSnakes();
+  updateRiku();
+}
+function tryMove(dx, dy){
+  let res2 = false;
+  const nx = player.x + dx; const bx = boxBlocked(nx, player.y); if (!bx) player.x = nx; else res2 = bx;
+  const ny = player.y + dy; const by = boxBlocked(player.x, ny); if (!by) player.y = ny; else res2 = res2 || by;
+  return res2;
+}
+
+// ---------- 時間とメーター ----------
+function tickTime(dt){
+  S.time += dt;
+  if (S.time >= p('1日の長さ(秒)')){ S.time = 0; newDay(); }
+  if (debug.god) return;
+  S.hu = Math.max(0, S.hu - 100/p('おなかが空になる秒数')*dt);
+  S.th = Math.max(0, S.th - 100/p('のどがカラになる秒数')*dt);
+  S.fa = Math.min(100, S.fa + 100/p('つかれが満タンになる秒数')*dt);
+  let drain = 0;
+  if (S.hu <= 0) drain++; if (S.th <= 0) drain++; if (S.fa >= 100) drain++;
+  if (drain) S.hp -= drain * p('メーター1本が尽きた時の体力の減り(毎秒)') * dt;
+  else if (S.hu > 50 && S.th > 50 && S.fa < 60) S.hp = Math.min(100, S.hp + 0.3*dt);
+  if (S.torch > 0){ S.torch -= dt; if (S.torch <= 0) toast('たいまつが 燃えつきた'); }
+  // 警告（ギュッ）
+  for (const [k,lab] of [['hu','おなか'],['th','のど']]){ const f = 'warn_'+k; if (S[k] < 20 && !S.flags[f]){ S.flags[f] = 1; toast(lab+'が ピンチ!', C.red); SFX.warn(); } if (S[k] > 30) S.flags[f] = 0; }
+  if (S.fa > 85 && !S.flags.warn_fa){ S.flags.warn_fa = 1; toast('くたくただ… ねむりたい', C.red); SFX.warn(); } if (S.fa < 70) S.flags.warn_fa = 0;
+  if (S.hp <= 0 && scene === 'play' && !fade) faint();
+}
+function isNight(){ return S.time >= p('夜になる時刻(秒)'); }
+function darkness(){
+  const t = S.time, L = p('1日の長さ(秒)'), du = p('夕方になる時刻(秒)'), ni = p('夜になる時刻(秒)');
+  if (t < 12) return 0.55 * (1 - t/12);
+  if (t < du) return 0;
+  if (t < ni) return 0.55 * (t-du)/(ni-du);
+  return 0.72;
+}
+function newDay(){
+  S.day++;
+  // 草や実が戻る
+  for (let y=0;y<MH;y++) for (let x=0;x<MW;x++){ if (map[y][x]===T.BUSHE) map[y][x]=T.BUSH; if (map[y][x]===T.CUT) map[y][x]=T.TALL; }
+  res = {};
+  S.objs = S.objs.filter(o => o.type !== 'fire' || o.summit);
+  toast(S.day + '日目の朝', C.yellow);
+}
+function faint(){
+  S.faints++;
+  SFX.hurt(); hitstop = 30; flash = 12;
+  fade = {t:0, dur:70, mid:() => {
+    S.time = 6; newDay();
+    S.hp = 45; S.hu = Math.max(S.hu,40); S.th = Math.max(S.th,40); S.fa = 0;
+    const sh = S.objs.find(o=>o.type==='shelter');
+    if (sh){ player.x = sh.x*TS+8; player.y = (sh.y+1)*TS+8; } else { player.x = START.x*TS+8; player.y = START.y*TS+10; }
+    if (boxBlocked(player.x, player.y)) { player.x = START.x*TS+8; player.y = START.y*TS+10; }
+    snakes = [];
+    if (S.rikuJoined){ riku.x = player.x-12; riku.y = player.y; }
+  }, after:() => say(S.rikuJoined ? ['リク「にいちゃん! 気がついた!?」','たおれてしまったが、なんとか朝をむかえた。'] : ['……たおれてしまった。','なんとか朝をむかえた。むりは禁物だ。']) };
+}
+
+// ---------- A ボタン ----------
+function startAction(){
+  const ft = facingTile(), t = tileAt(ft.x, ft.y);
+  // ふりかぶる動作が要るもの（木、ヘビ、竹、空ぶり）
+  const snakeNear = snakes.find(s => Math.hypot(s.x - (player.x + DIRV[player.dir][0]*10), s.y - (player.y + DIRV[player.dir][1]*10)) < 13);
+  const swingy = snakeNear || (t===T.TREE && count('axe')) || (t===T.BAMBOO);
+  if (swingy){ player.act = 16; player.actHit = 11; player.actPose = 'windup'; SFX.swing(); return; } // 1F目で構える（#049）
+  doAction();
+}
+function doAction(){
+  const ft = facingTile(), t = tileAt(ft.x, ft.y), key = ft.x+','+ft.y;
+  const fx = ft.x*TS+8, fy = ft.y*TS+8;
+  const obj = S.objs.find(o => o.x===ft.x && o.y===ft.y);
+  // ヘビ
+  const sn = snakes.find(s => Math.hypot(s.x - (player.x + DIRV[player.dir][0]*10), s.y - (player.y + DIRV[player.dir][1]*10)) < 13);
+  if (sn){
+    const dmg = count('axe') ? 2 : 1;
+    sn.hp -= dmg; sn.flash = 8; sn.kx = DIRV[player.dir][0]*3; sn.ky = DIRV[player.dir][1]*3;
+    hitstop = p('ヒットストップ:ヘビを叩く'); doShake(2, 8, 0); SFX.hit();
+    burst(sn.x, sn.y, '#fff', 6, 1.6, 12);
+    S.fa = Math.min(100, S.fa + 1);
+    if (sn.hp <= 0){
+      snakes.splice(snakes.indexOf(sn),1); SFX.kill(); hitstop = 10; doShake(3,12,1);
+      burst(sn.x, sn.y, '#8a3cb4', 12, 2, 22); burst(sn.x, sn.y, C.ol, 6, 1.2, 26);
+      S.ground.push({id:'meat', x:sn.x, y:sn.y, nopick:20}); floatText(sn.x, sn.y-10, 'やっつけた!', C.yellow);
+    } else if (dmg===1 && !S.flags.snakeTip){ S.flags.snakeTip = 1; toast('素手だと なかなか効かない…'); }
+    return;
+  }
+  // リク
+  if (!S.rikuJoined && ft.x===RIKU_POS.x && ft.y===RIKU_POS.y){ talkRiku(); return; }
+  // 置いた物
+  if (obj){
+    if (obj.type === 'shelter'){ askSleep(); return; }
+    if (obj.type === 'fire'){
+      if (obj.summit && count('leaf')){ signal(obj); return; }
+      let cooked = 0;
+      for (const [r,g] of [['fish','gfish'],['meat','gmeat']]){ const n = count(r); if (n){ take(r,n); give(g,n,true); cooked += n; learn(g); } }
+      if (cooked){ SFX.fire(); burst(fx,fy,C.fire,10,1.2,20); toast('じゅうじゅう… '+cooked+'こ 焼けた!', C.yellow); return; }
+      if (obj.summit) { toast('ここで 大きな葉 をくべれば けむりが上がりそう'); SFX.empty(); return; }
+      toast('あたたかい… 魚や肉を焼けそうだ'); S.fa = Math.max(0, S.fa - 3); SFX.empty(); return;
+    }
+  }
+  switch(t){
+    case T.PALM: {
+      S.fa = Math.min(100, S.fa + 1);
+      if (!res['c'+key]){ res['c'+key] = 1; SFX.chop(); hitstop = 3; doShake(1,6,0);
+        S.ground.push({id:'coconut', x:fx + DIRV[player.dir][0]*-10, y:fy + DIRV[player.dir][1]*-10 + 2, nopick:10, drop:12});
+        burst(fx, fy-4, C.leafL, 5, 1, 16); toast('ヤシの実が おちてきた!');
+      } else if ((res['l'+key]||0) < 2){ res['l'+key] = (res['l'+key]||0)+1; give('leaf'); }
+      else { toast('今日はもう 何もとれない'); SFX.empty(); }
+      return; }
+    case T.TREE: {
+      if (count('axe')){
+        res['h'+key] = (res['h'+key]||0) + 1; S.fa = Math.min(100, S.fa + p('オノをふった時のつかれ'));
+        burst(fx, fy+4, '#d8a868', 6, 1.4, 14); burst(fx, fy, C.leafL, 4, 1, 18);
+        if (res['h'+key] >= p('木を切りたおす回数')){
+          map[ft.y][ft.x] = T.STUMP; delete res['h'+key];
+          hitstop = p('ヒットストップ:木が倒れる'); doShake(4, 18, 2); SFX.fall(); flash = 4;
+          burst(fx, fy, C.leaf, 16, 2.2, 28); burst(fx, fy, C.leafD, 8, 1.6, 24);
+          give('log'); if (Math.random()<0.4) S.ground.push({id:'branch', x:fx+6, y:fy+8, nopick:30});
+          floatText(fx, fy-8, 'ドーン!', '#fff');
+        } else { hitstop = p('ヒットストップ:木を叩く'); doShake(1.5, 8, 0); SFX.chop(); tileShake[key] = 8; }
+        return;
+      }
+      const n = res['b'+key]||0;
+      if (n < 2){ res['b'+key] = n+1; S.fa = Math.min(100, S.fa + p('木の枝を取った時のつかれ')); tileShake[key] = 6; burst(fx, fy, C.leafL, 4, 1, 14);
+        if (Math.random() < 0.45) give('vine'); else give('branch');
+      } else { toast('この木からは もう取れない（オノがあれば…）'); SFX.empty(); }
+      return; }
+    case T.BUSH: map[ft.y][ft.x] = T.BUSHE; give('berry'); if (Math.random()<0.5) give('berry', 1, true); burst(fx,fy,C.berry,5,1,14); return;
+    case T.BUSHE: toast('実はまだ なっていない'); SFX.empty(); return;
+    case T.TALL: map[ft.y][ft.x] = T.CUT; give('hay'); burst(fx,fy,'#d8c060',6,1.2,16); S.fa = Math.min(100,S.fa+0.5); return;
+    case T.SPRING: {
+      SFX.splash(); burst(fx,fy,C.foam,8,1,16);
+      S.th = Math.min(100, S.th + 40); floatText(player.x, player.y-14, 'のど+40', C.blue);
+      const b = count('bottle'); if (b){ take('bottle', b); give('bottlew', b, true); toast('ごくごく! 水筒にも水をくんだ', C.blue); }
+      else toast('ごくごく… つめたい わき水だ', C.blue);
+      return; }
+    case T.BAMBOO: {
+      if (count('sharp') || count('axe')){ map[ft.y][ft.x] = T.BAMBOOC; give('bamboo'); SFX.chop(); hitstop = 4; doShake(1.5,8,0); burst(fx,fy,'#a0d870',8,1.4,16); S.fa = Math.min(100,S.fa+1.5); }
+      else { toast('かたくて 手では切れない'); SFX.empty(); }
+      return; }
+    case T.BRIDGEX: {
+      if (count('plank')){ take('plank'); repairBridge(); }
+      else { toast('橋がこわれている。丸太とロープがあれば…'); SFX.empty(); }
+      return; }
+    case T.CHEST: {
+      map[ft.y][ft.x] = T.CHESTO; SFX.fanfare(); give('sail', 1, true); burst(fx,fy,C.yellow,14,1.6,24);
+      say(['古い木箱を あけた!','中には 難破船の 古い帆 が入っていた。','いかだに つければ 遠くまで行けそうだ!']);
+      return; }
+    case T.DEEP: case T.SHALLOW: {
+      if (count('rod')){ startFishing(); return; }
+      if (count('raft') || count('sraft')) { toast('カバンから いかだ を「つかう」と出発できる'); SFX.empty(); return; }
+      toast('海の水は しょっぱくて のめない'); SFX.empty(); return; }
+    case T.ROCK: case T.WALL: toast('かたい岩だ'); SFX.empty(); return;
+    case T.STUMP: toast('切りかぶ。すわって休めそう'); S.fa = Math.max(0,S.fa-2); SFX.empty(); return;
+    case T.SUMMIT: toast('島じゅうが見わたせる。ここで火をたけば…'); SFX.empty(); return;
+  }
+  // 何もない：空ぶりでも反応する（#104）
+  player.act = 10; player.actHit = -1; SFX.empty();
+}
+const tileShake = {};
+
+// ---------- 橋とリク ----------
+function repairBridge(){
+  for (let x=23;x<=26;x++) map[17][x] = T.BRIDGE;
+  S.flags.bridge = 1; SFX.fanfare(); hitstop = 12; doShake(3,16,2); flash = 6;
+  for (let x=23;x<=26;x++) burst(x*TS+8, 17*TS+8, '#c8a060', 8, 1.6, 22);
+  say(['ロープで丸太をむすび… 橋がなおった!', 'リク「にいちゃーん!!」']);
+}
+function talkRiku(){
+  if (S.flags.rikuFed){ joinRiku(); return; }
+  const food = ['gmeat','gfish','opencoco','berry','fish','meat','bottlew'].find(id => count(id));
+  if (!food){
+    say(['リク「にいちゃん…! 会いたかったよう」','リク「でも、おなかぺこぺこで 足もいたくて 歩けない…」','（なにか 食べ物か飲み物を 持ってこよう）']);
+    S.flags.rikuHungry = 1; return;
+  }
+  take(food); if (ITEMS[food].back) give(ITEMS[food].back,1,true);
+  S.flags.rikuFed = 1; SFX.eat();
+  say(['リクに '+ITEMS[food].n+' をあげた。', 'リク「…おいしい! げんき出てきた!」'], joinRiku);
+}
+function joinRiku(){
+  S.rikuJoined = true; SFX.join(); flash = 4;
+  burst(riku.x, riku.y, C.yellow, 16, 1.8, 26);
+  player.trail = []; S.rikuFind = 0;
+  say(['リクが なかまになった!','リク「ぼくも手伝うよ。いっしょに 島を出よう!」','リク「東の丘なら 船から見えるかも。北の洞くつも あやしいよ」']);
+  save();
+}
+function updateRiku(){
+  if (!S.rikuJoined){
+    // 向こう岸から手をふる＝目の前のごほうび（#023）
+    const d = Math.hypot(player.x - riku.x, player.y - riku.y);
+    const onScreen = riku.x > camX+8 && riku.x < camX+VW-8 && riku.y > camY && riku.y < camY+VH;
+    if (onScreen && d < 130 && !S.flags.sawRiku){ S.flags.sawRiku = 1; say(['向こう岸に だれかいる!','リク「にいちゃーん! ぼくはここだよー!」','弟のリクだ! でも 橋がこわれていて わたれない…'], ()=>{ toast('橋をなおすには 丸太+ロープ', C.yellow); }); }
+    riku.waving = d < 150 && !S.flags.bridge;
+    return;
+  }
+  // ついてくる
+  const tg = player.trail.length > 14 ? player.trail[player.trail.length-14] : null;
+  if (tg && Math.hypot(tg.x - riku.x, tg.y - riku.y) > 1){
+    const dx = tg.x - riku.x, dy = tg.y - riku.y, d = Math.hypot(dx,dy), sp = Math.min(d, 1.1);
+    riku.x += dx/d*sp; riku.y += dy/d*sp; riku.walk += sp;
+    riku.dir = Math.abs(dx) > Math.abs(dy) ? (dx<0?'left':'right') : (dy<0?'up':'down');
+  } else riku.walk = 0;
+  if (Math.hypot(player.x-riku.x, player.y-riku.y) > 100){ riku.x = player.x - DIRV[player.dir][0]*12; riku.y = player.y - DIRV[player.dir][1]*12; player.trail = []; }
+  // ときどき何か見つけてくれる（ごほうびの間隔を短く #064）
+  S.rikuFind += 1/60;
+  if (S.rikuFind > p('リクが何か見つける間隔(秒)')){
+    S.rikuFind = 0;
+    const pool = ['berry','branch','vine','stone','hay','berry'];
+    const id = pool[Math.floor(Math.random()*pool.length)];
+    give(id, 1, true); SFX.pick(); floatText(riku.x, riku.y-16, 'これ見つけた!', C.yellow); toast('リクが '+ITEMS[id].n+' を見つけてくれた');
+  }
+}
+
+// ---------- ねる ----------
+function askSleep(){
+  if (!isNight() && S.fa < 40){ toast('まだ ねむくない（夜か、つかれた時に）'); SFX.empty(); return; }
+  menu = {kind:'yesno', q:'ねむる?', sel:0, yes: doSleep};
+}
+function doSleep(){
+  SFX.sleep();
+  fade = {t:0, dur:50, mid:() => {
+    if (S.time > 30) { S.time = 0; newDay(); }
+    S.time = 8;
+    S.fa = 0; S.hp = Math.min(100, S.hp + 35); S.hu = Math.max(0, S.hu - 15); S.th = Math.max(0, S.th - 15);
+    snakes = [];
+    save();
+  }, after:() => toast('ぐっすり ねむった（セーブしました）', C.yellow)};
+}
+
+// ---------- つり（アタリの瞬間を逃すな） ----------
+function startFishing(){
+  fishing = {t:0, bite: 60 + Math.floor(Math.random()*150), state:'wait'};
+  SFX.splash(); S.fa = Math.min(100, S.fa + 1);
+}
+function updateFishing(){
+  const f = fishing; f.t++;
+  if (f.state === 'wait'){
+    if (hit('a') || hit('b')){ toast('まだ かかっていない…'); fishing = null; SFX.empty(); return; }
+    if (f.t >= f.bite){ f.state = 'bite'; f.t = 0; SFX.bite(); doShake(1,6,0); }
+  } else if (f.state === 'bite'){
+    if (hit('a')){
+      // 早く合わせるほど大物（引きつけの反対：反応の速さ＝腕前）
+      const big = f.t < p('つりのアタリの受付フレーム') * 0.4;
+      give('fish', big ? 2 : 1, true); SFX.craft(); hitstop = 8; doShake(2,10,1);
+      const ft = facingTile(); burst(ft.x*TS+8, ft.y*TS+8, C.foam, 12, 1.8, 20);
+      floatText(player.x, player.y-16, big ? '大物! 魚x2' : 'つれた!', big ? C.yellow : '#fff');
+      fishing = null; return;
+    }
+    if (f.t > p('つりのアタリの受付フレーム')){ toast('にげられた…!'); SFX.fail(); fishing = null; }
+  }
+}
+
+// ---------- のろし・いかだ（エンディング） ----------
+function signal(obj){
+  if (!S.rikuJoined){ toast('先に リクを むかえに行こう'); return; }
+  take('leaf'); S.flags.smoke = 1; obj.smoke = 1; SFX.fire();
+  say(['大きな葉を 火にくべた。','もくもくと 白いけむりが 空へのぼっていく…','リク「とどけー!!」'], () => endGame('smoke'));
+}
+function launchRaft(kind){
+  const ft = facingTile(), t = tileAt(ft.x, ft.y);
+  if (!isWater(t) && t!==T.BRIDGEX){ toast('海に向かって つかおう'); SFX.empty(); return; }
+  if (!S.rikuJoined){
+    menu = {kind:'yesno', q:'リクがまだ島にいる。出発する?', sel:1, yes:() => endGame('alone')};
+    return;
+  }
+  endGame(kind === 'sraft' ? 'voyage' : 'drift');
+}
+function endGame(kind){
+  fade = {t:0, dur:80, mid:() => { scene = 'ending'; sceneT = 0; ending = kind; addEnding(kind); try{ localStorage.removeItem('futari_save'); }catch(e){} hasSave = false; }, after:()=>{}};
+}
+let ending = null;
+
+// ---------- カバンでつかう ----------
+function useItem(id){
+  const it = ITEMS[id];
+  if (it.eat){
+    take(id); if (it.back) give(it.back, 1, true);
+    const e = it.eat;
+    if (e.hu){ S.hu = Math.min(100, S.hu + e.hu); }
+    if (e.th){ S.th = Math.min(100, S.th + e.th); }
+    if (e.hp){ S.hp = Math.min(100, S.hp + e.hp); }
+    SFX.eat();
+    floatText(player.x, player.y-16, [e.hu?'おなか+'+e.hu:'', e.th?'のど+'+e.th:''].filter(Boolean).join(' '), '#fff');
+    if (it.raw && Math.random() < p('なま物でおなかをこわす確率')){ S.fa = Math.min(100, S.fa + 25); S.hp -= 5; toast('うっ… おなかをこわした（つかれ+25）', C.red); SFX.hurt(); }
+    return true;
+  }
+  const ft = facingTile(), t = tileAt(ft.x, ft.y);
+  const freeTile = () => (t===T.SAND || t===T.GRASS || t===T.CUT || t===T.HILL || t===T.SUMMIT) && !S.objs.some(o=>o.x===ft.x&&o.y===ft.y);
+  switch(id){
+    case 'coconut': toast('かたくて割れない。するどい物とあわせよう'); SFX.empty(); return false;
+    case 'firekit':
+      if (!freeTile()){ toast('目の前の あいている地面で つかおう'); SFX.empty(); return false; }
+      take(id); S.objs.push({type:'fire', x:ft.x, y:ft.y, summit: t===T.SUMMIT}); SFX.fire(); burst(ft.x*TS+8, ft.y*TS+8, C.fire, 14, 1.5, 24); toast('火がついた!', C.yellow);
+      if (t===T.SUMMIT) toast('大きな葉を くべれば のろしになりそう', C.yellow);
+      return true;
+    case 'shelterkit':
+      if (!freeTile() || t===T.SUMMIT){ toast('目の前の あいている地面で つかおう'); SFX.empty(); return false; }
+      S.objs = S.objs.filter(o=>o.type!=='shelter'); take(id);
+      S.objs.push({type:'shelter', x:ft.x, y:ft.y}); SFX.craft(); burst(ft.x*TS+8, ft.y*TS+8, C.leafL, 12, 1.4, 20); toast('寝床ができた! 夜はここでねむろう', C.yellow);
+      return true;
+    case 'torch': {
+      const nearFire = S.objs.some(o => o.type==='fire' && Math.hypot(o.x*TS+8-player.x, o.y*TS+8-player.y) < 40);
+      if (!nearFire){ toast('たき火のそばで つかうと 火がつく'); SFX.empty(); return false; }
+      take(id); S.torch = p('たいまつの持続秒数'); SFX.fire(); toast('たいまつに 火がついた!', C.yellow); return true; }
+    case 'plank':
+      if (t===T.BRIDGEX){ take(id); repairBridge(); return true; }
+      toast('こわれた橋に向かって つかおう'); SFX.empty(); return false;
+    case 'leaf': {
+      const o = S.objs.find(o=>o.x===ft.x&&o.y===ft.y&&o.type==='fire'&&o.summit);
+      if (o){ signal(o); return true; }
+      toast('丘のてっぺんの たき火で つかえそう'); SFX.empty(); return false; }
+    case 'raft': case 'sraft': launchRaft(id); return true;
+  }
+  toast(it.d); SFX.empty(); return false;
+}
+function combine(a, b){
+  const r = RECIPES.find(r => (r[0]===a && r[1]===b) || (r[0]===b && r[1]===a));
+  if (!r || (a===b && count(a) < 2)){ SFX.fail(); toast('うまく いかない…'); return false; }
+  if (r[4]==='fire' && !S.objs.some(o => o.type==='fire' && Math.hypot(o.x*TS+8-player.x, o.y*TS+8-player.y) < 40)){ SFX.fail(); toast('火のそばで あわせれば 何かできそう'); return false; }
+  const keep = r[3] || [];
+  if (!keep.includes(r[0])) take(r[0]);
+  if (!keep.includes(r[1])) take(r[1]);
+  give(r[2], 1, true);
+  const fresh = learn(r[2]);
+  SFX.craft(); flash = 2;
+  burst(player.x, player.y-8, C.yellow, 10, 1.5, 20);
+  toast((fresh ? 'ひらめいた! ' : '') + ITEMS[r[2]].n + ' ができた!', C.yellow);
+  return r[2];
+}
+function learn(id){ if (!S.recipes.includes(id)){ S.recipes.push(id); return true; } return false; }
+
+// ---------- ヘビ ----------
+function updateSnakes(){
+  const max = isNight() ? p('夜のヘビの最大数') : p('昼のヘビの最大数');
+  if (snakes.length < max && frame % 50 === 0){
+    for (let tries=0; tries<10; tries++){
+      const x = Math.floor(Math.random()*MW), y = Math.floor(Math.random()*MH), t = tileAt(x,y);
+      if ((t===T.TALL || t===T.GRASS) && Math.hypot(x*TS-player.x, y*TS-player.y) > 120 && !S.objs.some(o=>o.type==='fire' && Math.hypot(o.x-x,o.y-y)<4)){
+        snakes.push({x:x*TS+8, y:y*TS+8, hp:p('ヘビの体力'), dir:Math.random()*6.28, t:0, flash:0, kx:0, ky:0, cool:0}); break;
+      }
+    }
+  }
+  for (const s of snakes){
+    s.t++; if (s.flash) s.flash--; if (s.cool) s.cool--;
+    const dx = player.x - s.x, dy = player.y - s.y, d = Math.hypot(dx,dy);
+    let vx, vy;
+    const fireNear = S.objs.find(o => o.type==='fire' && Math.hypot(o.x*TS+8-s.x, o.y*TS+8-s.y) < 50);
+    if (fireNear){ vx = s.x-(fireNear.x*TS+8); vy = s.y-(fireNear.y*TS+8); const l=Math.hypot(vx,vy)||1; vx=vx/l*0.6; vy=vy/l*0.6; }
+    else if (d < p('ヘビの追いかける距離(px)') * (isNight()?1.4:1) && s.cool<=0){ vx = dx/d*0.55; vy = dy/d*0.55; }
+    else { if (s.t % 90 === 0) s.dir = Math.random()*6.28; vx = Math.cos(s.dir)*0.25; vy = Math.sin(s.dir)*0.25; }
+    vx += s.kx; vy += s.ky; s.kx *= 0.8; s.ky *= 0.8;
+    const nx = s.x + vx, ny = s.y + vy;
+    const ok = (x,y) => { const t = tileAt(Math.floor(x/TS), Math.floor(y/TS)); return !SOLID.has(t) && !isWater(t) && t!==T.CAVE && t!==T.BRIDGE; };
+    if (ok(nx, s.y)) s.x = nx; else s.dir = Math.random()*6.28;
+    if (ok(s.x, ny)) s.y = ny; else s.dir = Math.random()*6.28;
+    if (d < 9 && player.inv <= 0 && !debug.god){
+      S.hp -= p('ヘビのダメージ'); player.inv = 60; hitstop = p('ヒットストップ:ダメージ'); doShake(3,14,1); flash = 8; SFX.hurt();
+      player.kx = dx/d*2.5; player.ky = dy/d*2.5; s.cool = 50;
+      floatText(player.x, player.y-14, '-'+p('ヘビのダメージ'), C.red);
+      burst(player.x, player.y-6, C.red, 8, 1.6, 16);
+      if (!S.flags.snakeHint){ S.flags.snakeHint = 1; toast('ヘビだ! Aで たたける。火のそばには来ない', C.red); }
+    }
+  }
+  // 遠すぎるヘビは消す
+  snakes = snakes.filter(s => Math.hypot(s.x-player.x, s.y-player.y) < 260);
+}
+
+// ---------- 演出 ----------
+function updateFx(){
+  for (const q of parts){ q.x += q.vx; q.y += q.vy; q.vy += q.g; q.vx *= 0.96; q.t--; }
+  parts = parts.filter(q => q.t > 0);
+  for (const f of floats){ f.y -= 0.4; f.t--; } floats = floats.filter(f => f.t > 0);
+  for (const t of toasts) t.t--; toasts = toasts.filter(t => t.t > 0);
+  for (const k in tileShake){ if (--tileShake[k] <= 0) delete tileShake[k]; }
+  for (const g of S.ground){ if (g.drop > 0) g.drop--; }
+  if (shake.t > 0) shake.t--;
+  if (flash > 0) flash--;
+}
+
+// ---------- 会話 ----------
+function updateDialog(){
+  const d = dialog, line = d.lines[d.i];
+  d.ch = Math.min(line.length, d.ch + 1.2);
+  if (hit('a') || hit('b') || hit('start')){
+    if (d.ch < line.length) d.ch = line.length; // 1回目は全文を出す
+    else { d.i++; d.ch = 0; SFX.ok(); if (d.i >= d.lines.length){ dialog = null; if (d.then) d.then(); } }
+  }
+}
+
+// ---------- メニュー ----------
+const SUBS = ['つかう','あわせる','すてる'];
+function updateMenu(){
+  const m = menu;
+  if (m.kind === 'yesno'){
+    if (hit('up')||hit('down')||hit('left')||hit('right')){ m.sel = 1-m.sel; SFX.menu(); }
+    if (hit('a')){ menu = null; SFX.ok(); if (m.sel===0) m.yes(); }
+    if (hit('b')){ menu = null; SFX.menu(); }
+    return;
+  }
+  if (m.kind === 'pause'){
+    if (hit('start') || hit('b') || hit('a')){ menu = null; SFX.menu(); }
+    if (hit('mute')) setMute(!muted);
+    return;
+  }
+  // bag
+  const n = S.inv.length;
+  if (m.sub){
+    if (hit('up')){ m.sub.sel = (m.sub.sel+2)%3; SFX.menu(); }
+    if (hit('down')){ m.sub.sel = (m.sub.sel+1)%3; SFX.menu(); }
+    if (hit('b')){ m.sub = null; SFX.menu(); return; }
+    if (hit('a')){
+      const id = S.inv[m.sel].id, act = m.sub.sel;
+      m.sub = null; m.lastSub = act;
+      if (act === 0){ const used = useItem(id); if (menu === m && used && !ITEMS[id].eat) menu = null; clampBag(); }
+      else if (act === 1){ m.pick = id; m.pickSel = m.sel; SFX.ok(); }
+      else { take(id); S.ground.push({id, x:player.x+DIRV[player.dir][0]*12, y:player.y+DIRV[player.dir][1]*12, nopick:90}); SFX.menu(); clampBag(); }
+    }
+    return;
+  }
+  if (hit('b') || hit('start')){ if (m.pick){ m.pick = null; SFX.menu(); } else { menu = null; SFX.menu(); } return; }
+  if (!n){ if (hit('a')) { menu = null; } return; }
+  if (hit('up')){ m.sel = (m.sel - 2 + n*2) % n; SFX.menu(); }
+  if (hit('down')){ m.sel = (m.sel + 2) % n; SFX.menu(); }
+  if (hit('left')){ m.sel = (m.sel - 1 + n) % n; SFX.menu(); }
+  if (hit('right')){ m.sel = (m.sel + 1) % n; SFX.menu(); }
+  if (hit('a')){
+    if (m.pick){
+      const a = m.pick, b = S.inv[m.sel].id;
+      m.pick = null;
+      const made = combine(a, b);
+      clampBag();
+      if (made){ const i = S.inv.findIndex(s=>s.id===made); if (i>=0) m.sel = i; }
+    } else { m.sub = {sel: m.lastSub || 0}; SFX.ok(); }
+  }
+}
+function clampBag(){ if (menu && menu.kind==='bag'){ menu.sel = Math.max(0, Math.min(menu.sel, S.inv.length-1)); } }
+
+// =====================================================================
+//  描画
+// =====================================================================
+let camX = 0, camY = 0;
+function drawWorld(cx, cy, clipY, clipH, opts={}){
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, clipY, VW, clipH); ctx.clip();
+  ctx.translate(-Math.round(cx), -Math.round(cy) + clipY);
+  const anim = Math.floor(frame/20) % 4;
+  const x0 = Math.floor(cx/TS), y0 = Math.floor(cy/TS);
+  for (let y=y0; y<=y0+Math.ceil(clipH/TS); y++) for (let x=x0; x<=x0+VW/TS; x++){
+    const t = tileAt(x,y), v = Math.floor(hash2(x,y)*4);
+    let ox = 0; const ts = tileShake[x+','+y]; if (ts) ox = (ts%2?1:-1);
+    if (t===T.TREE||t===T.PALM){ ctx.drawImage(tileImg(t===T.PALM?T.SAND:T.GRASS, v, 0), x*TS, y*TS); }
+    ctx.drawImage(tileImg(t, v, isWater(t)||t===T.BRIDGEX||t===T.BRIDGE ? anim : 0), x*TS+ox, y*TS);
+    // 岸の白波
+    if (isWater(t)) { for (const [dx,dy] of [[0,-1],[0,1],[-1,0],[1,0]]){ const n = tileAt(x+dx,y+dy); if (!isWater(n) && n!==T.BRIDGEX && n!==T.BRIDGE){ ctx.fillStyle = (frame>>4)%2 ? C.foam : '#a8e0f8'; if (dy) ctx.fillRect(x*TS, y*TS + (dy<0?0:15), 16, 1); else ctx.fillRect(x*TS + (dx<0?0:15), y*TS, 1, 16); } } }
+    if (t===T.PALM && !res['c'+x+','+y]){ R(ctx, x*TS+6, y*TS+4, 2, 2, '#7a5028'); R(ctx, x*TS+9, y*TS+5, 2, 2, '#7a5028'); }
+  }
+  // 置いた物
+  for (const o of S.objs){
+    const ox = o.x*TS, oy = o.y*TS;
+    if (o.type === 'shelter'){ ctx.drawImage(outlined('shelter',16,14,c=>{ for(let i=0;i<7;i++) R(c,7-i,1+i*1.6,2+i*2,2,i%2?C.leafL:C.leaf); R(c,0,12,16,2,C.trunk); R(c,6,8,4,4,C.leafD); }), ox-1, oy+1); }
+    if (o.type === 'fire'){
+      R(ctx, ox+3, oy+11, 10, 3, C.trunk); R(ctx, ox+5, oy+10, 6, 2, C.trunkD);
+      const fl = (frame>>2)%3;
+      R(ctx, ox+5, oy+4+fl, 6, 7-fl, C.fire); R(ctx, ox+6, oy+2+(fl===1?1:0), 4, 6, C.fireL); R(ctx, ox+7, oy+7, 2, 3, '#fff');
+      if (frame % 6 === 0) parts.push({x:ox+8+Math.random()*4-2, y:oy+4, vx:(Math.random()-.5)*.3, vy:-0.6, g:0, t:20, col:Math.random()<.5?C.fireL:C.fire, sz:1});
+      if (o.smoke && frame % 3 === 0) parts.push({x:ox+8, y:oy, vx:(Math.random()-.3)*.4, vy:-0.8, g:-0.005, t:90, col:Math.random()<.5?'#f0f0f0':'#c8c8d0', sz:3});
+    }
+  }
+  // 落ちている物
+  for (const g of S.ground){ const b = Math.sin(frame/12 + g.x)*1; ctx.drawImage(icon(g.id), Math.round(g.x-7), Math.round(g.y-10 + b - (g.drop||0))); }
+  // キャラ（y順）
+  const actors = [];
+  actors.push({y:player.y, draw:()=>drawKid('kai', player, player.actPose || (player.walk>0?'walk':'idle'), player.inv>0 && (frame>>2)%2)});
+  actors.push({y:riku.y, draw:()=>drawKid('riku', riku, S.rikuJoined ? (riku.walk>0?'walk':'idle') : (riku.waving?'wave':'sit'), false)});
+  for (const s of snakes) actors.push({y:s.y, draw:()=>{ ctx.drawImage(snakeSprite((s.t>>3)%2, s.flash>0 && (s.flash>>1)%2===0), Math.round(s.x-8), Math.round(s.y-7)); }});
+  actors.sort((a,b)=>a.y-b.y).forEach(a=>a.draw());
+  // つり
+  if (fishing){
+    const [dx,dy] = DIRV[player.dir];
+    const bx = player.x + dx*22, by = player.y + dy*22 - 2 + (fishing.state==='bite' ? 3 : Math.sin(frame/10));
+    ctx.strokeStyle = '#f0f0f0'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(player.x+dx*8, player.y-12); ctx.lineTo(bx, by); ctx.stroke();
+    R(ctx, bx-1, by-1, 3, 3, C.red); R(ctx, bx-1, by-1, 3, 1, '#fff');
+    if (fishing.state==='bite'){ ctx.fillStyle = (frame>>2)%2 ? C.yellow : '#fff'; ctx.font = 'bold 10px ' + FONT; ctx.fillText('!', player.x-2, player.y-20); }
+  }
+  // パーティクル
+  for (const q of parts){ R(ctx, Math.round(q.x), Math.round(q.y), q.sz, q.sz, q.col); }
+  ctx.restore();
+}
+function drawKid(who, k, pose, blink){
+  if (blink) return;
+  const fr = pose==='walk' ? 1 + (Math.floor(k.walk/7) % 2) : 0;
+  const img = kidSprite(who, k.dir, fr, pose);
+  let sx = 0, sy = 0;
+  if (pose==='windup') sy = 1;
+  ctx.drawImage(img, Math.round(k.x - 8 + sx), Math.round(k.y - 14 + sy));
+  // 道具を持っている（構え→ふり）
+  if (who==='kai' && (pose==='windup' || pose==='swing')){
+    const tool = count('axe') ? 'axe' : (count('sharp') ? 'sharp' : null);
+    if (tool){
+      const [dx,dy] = DIRV[k.dir];
+      const off = pose==='windup' ? -6 : 9;
+      ctx.drawImage(icon(tool), Math.round(k.x - 7 + dx*off), Math.round(k.y - 12 + dy*off - (pose==='windup'?4:0)));
+    }
+    if (pose==='swing'){ // 風切り（#140）
+      const [dx,dy] = DIRV[k.dir];
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      for (let i=-2;i<=2;i++) ctx.fillRect(Math.round(k.x + dx*12 + dy*i*3), Math.round(k.y - 6 + dy*10 + dx*i*3), 2, 2);
+    }
+  }
+  if (who==='kai' && S.torch > 0){ const [dx] = DIRV[k.dir]; R(ctx, k.x+5-(dx<0?12:0), k.y-14, 2, 6, C.trunk); R(ctx, k.x+4-(dx<0?12:0), k.y-18+((frame>>2)%2), 4, 4, (frame>>2)%2?C.fire:C.fireL); }
+}
+// 夜の暗さと明かり
+const lightCv = document.createElement('canvas'); lightCv.width = VW; lightCv.height = VH; const lctx = lightCv.getContext('2d');
+function drawLight(cx, cy){
+  const dk = darkness();
+  const caveDark = tileAt(Math.floor(player.x/TS), Math.floor(player.y/TS)) === T.CAVE ? 0.82 : 0;
+  const a = Math.max(dk, caveDark);
+  if (a <= 0.01) return;
+  lctx.globalCompositeOperation = 'source-over'; lctx.clearRect(0,0,VW,VH);
+  lctx.fillStyle = `rgba(8,10,40,${a})`; lctx.fillRect(0,0,VW,VH);
+  lctx.globalCompositeOperation = 'destination-out';
+  const hole = (x, y, r) => { const g = lctx.createRadialGradient(x,y,r*0.3,x,y,r); g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(1,'rgba(0,0,0,0)'); lctx.fillStyle = g; lctx.beginPath(); lctx.arc(x,y,r,0,7); lctx.fill(); };
+  const flick = Math.sin(frame/5)*2;
+  hole(player.x-cx, player.y-cy-6, (S.torch>0 ? 64 : 26) + flick);
+  for (const o of S.objs) if (o.type==='fire') hole(o.x*TS+8-cx, o.y*TS+8-cy, p('たき火の明かりの半径(px)') + flick);
+  ctx.drawImage(lightCv, 0, HUD);
+  // たき火の色
+  if (S.objs.some(o=>o.type==='fire') || S.torch>0){
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.12 * a;
+    for (const o of S.objs) if (o.type==='fire'){ R(ctx, o.x*TS-cx-24, o.y*TS-cy+HUD-24, 64, 64, C.fire); }
+    ctx.restore();
+  }
+}
+
+// HUD（メーター4本 #252）
+function drawHud(){
+  R(ctx, 0, 0, VW, HUD, C.ui); R(ctx, 0, HUD-1, VW, 1, C.uiD);
+  const bars = [['hp',C.red,'♥',S.hp,false],['hu','#e08830','●',S.hu,false],['th',C.blue,'◆',S.th,false],['fa',C.purple,'z',S.fa,true]];
+  bars.forEach(([k,col,ic,v,inv], i) => {
+    const x = 2 + i*31, y = 3;
+    const low = inv ? v > 80 : v < 25;
+    const blink = low && (frame>>3)%2;
+    R(ctx, x, y, 29, 10, C.ink);
+    R(ctx, x+9, y+2, 18, 6, '#4a4050');
+    R(ctx, x+9, y+2, Math.max(0, Math.round(18*v/100)), 6, blink ? '#fff' : col);
+    R(ctx, x+9, y+2, Math.max(0, Math.round(18*v/100)), 1, 'rgba(255,255,255,.4)');
+  });
+  // 日数と昼夜
+  R(ctx, 126, 3, 32, 10, C.ink);
+}
+function drawHudText(){
+  // 2倍解像度で文字
+  ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+  ctx.font = '12px ' + FONT; ctx.textBaseline = 'middle';
+  const labs = ['体','食','水','疲'];
+  labs.forEach((l,i)=>{ ctx.fillStyle = '#fff'; ctx.fillText(l, (2+i*31)*2+3, 16); });
+  ctx.fillStyle = isNight() ? '#b0c0ff' : C.yellow;
+  ctx.fillText((isNight()?'☾':'☀') , 254, 16);
+  ctx.fillStyle = '#fff'; ctx.fillText(S.day + '日目', 268, 16);
+  ctx.restore();
+}
+function textBox(x, y, w, h){
+  ctx.fillStyle = C.ink; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = C.ui; ctx.fillRect(x+2, y+2, w-4, h-4);
+  ctx.fillStyle = C.uiD; ctx.fillRect(x+2, y+h-4, w-4, 2);
+}
+function drawOverlayText(){
+  ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+  ctx.font = '12px ' + FONT; ctx.textBaseline = 'top';
+  // トースト
+  toasts.forEach((t, i) => {
+    const a = Math.min(1, t.t/15);
+    ctx.globalAlpha = a;
+    const w = ctx.measureText(t.msg).width + 14, y = 38 + i*20;
+    ctx.fillStyle = 'rgba(24,24,32,.85)'; ctx.fillRect(160 - w/2, y, w, 18);
+    ctx.fillStyle = t.col || '#fff'; ctx.fillText(t.msg, 160 - w/2 + 7, y + 3);
+    ctx.globalAlpha = 1;
+  });
+  // 浮き文字
+  ctx.font = '12px ' + FONT;
+  for (const f of floats){
+    const x = (f.x - camX)*2, y = (f.y - camY + HUD)*2;
+    ctx.globalAlpha = Math.min(1, f.t/15);
+    const w = ctx.measureText(f.msg).width;
+    ctx.fillStyle = C.ol; for (const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1]]) ctx.fillText(f.msg, x - w/2 + dx, y + dy);
+    ctx.fillStyle = f.col; ctx.fillText(f.msg, x - w/2, y);
+    ctx.globalAlpha = 1;
+  }
+  // 目標（下に1行）
+  if (!dialog && !menu && scene==='play'){
+    const g = goalText();
+    ctx.font = '12px ' + FONT;
+    const w = ctx.measureText(g).width + 16;
+    ctx.fillStyle = 'rgba(24,24,32,.7)'; ctx.fillRect(4, 288-22, Math.min(312, w), 18);
+    ctx.fillStyle = S.flags.tut < TUT.length ? C.yellow : '#e8e0f0';
+    ctx.fillText(g, 12, 288-19);
+  }
+  if (fishing && fishing.state==='wait'){ ctx.fillStyle = '#fff'; ctx.fillText('…アタリを待とう（かかったらすぐA）', 40, 60); }
+  // 会話
+  if (dialog){
+    textBox(6, 206, 308, 76);
+    const line = dialog.lines[dialog.i];
+    ctx.fillStyle = C.ink; ctx.font = '14px ' + FONT;
+    wrap(line.slice(0, Math.floor(dialog.ch)), 18, 218, 284, 20);
+    if (dialog.ch >= line.length && (frame>>4)%2) { ctx.fillStyle = C.ink; ctx.fillText('▼', 292, 262); }
+  }
+  if (menu) drawMenu();
+  if (debug.info){
+    ctx.font = '10px monospace'; ctx.fillStyle = '#ff0';
+    ctx.fillText(`t=${S.time.toFixed(0)} hp${S.hp.toFixed(0)} hu${S.hu.toFixed(0)} th${S.th.toFixed(0)} fa${S.fa.toFixed(0)} tile${Math.floor(player.x/TS)},${Math.floor(player.y/TS)} sn${snakes.length}`, 4, 36);
+  }
+  ctx.restore();
+}
+function wrap(text, x, y, maxW, lh){
+  let line = '', yy = y;
+  for (const ch of text){ if (ctx.measureText(line+ch).width > maxW){ ctx.fillText(line, x, yy); line = ''; yy += lh; } line += ch; }
+  ctx.fillText(line, x, yy);
+}
+function drawMenu(){
+  const m = menu;
+  if (m.kind === 'yesno'){
+    textBox(40, 110, 240, 70);
+    ctx.fillStyle = C.ink; ctx.font = '14px ' + FONT; ctx.fillText(m.q, 56, 122);
+    ['はい','いいえ'].forEach((s,i)=>{ ctx.fillText((m.sel===i?'▶ ':'　')+s, 80 + i*90, 150); });
+    return;
+  }
+  if (m.kind === 'pause'){
+    ctx.fillStyle = 'rgba(16,16,24,.88)'; ctx.fillRect(0,0,320,288);
+    ctx.fillStyle = C.yellow; ctx.font = '16px ' + FONT; ctx.fillText('— ひとやすみ —', 100, 14);
+    ctx.font = '12px ' + FONT; ctx.fillStyle = '#fff';
+    ctx.fillText('いまの目標:', 16, 42); ctx.fillStyle = C.yellow; wrap(goalText(), 24, 58, 280, 16);
+    ctx.fillStyle = '#fff'; ctx.fillText(`ひらめきメモ  ${S.recipes.length} / ${BOOK.length}`, 16, 86);
+    BOOK.forEach((id, i) => {
+      const x = 16 + (i%8)*36, y = 104 + Math.floor(i/8)*30;
+      ctx.fillStyle = '#2a2838'; ctx.fillRect(x, y, 30, 26);
+      if (S.recipes.includes(id)) ctx.drawImage(icon(id), x+1, y, 28, 28);
+      else { ctx.fillStyle = '#5a5870'; ctx.fillText('?', x+11, y+6); }
+    });
+    const e = getEndings();
+    ctx.fillStyle = '#fff'; ctx.fillText(`エンディング  ${Object.keys(e).length} / 4`, 16, 172);
+    Object.entries(ENDINGS).forEach(([k,v],i)=>{ ctx.fillStyle = e[k] ? C.yellow : '#5a5870'; ctx.fillText(e[k] ? v.no+'. '+v.n : v.no+'. ？？？', 24 + (i%2)*148, 190 + Math.floor(i/2)*16); });
+    ctx.fillStyle = '#b0a8c0';
+    ctx.fillText('A:しらべる/とる  B:カバン  START:この画面', 16, 232);
+    ctx.fillText('ねむるとセーブ。M:音 '+(muted?'OFF':'ON'), 16, 248);
+    ctx.fillText('A/B/START でもどる', 16, 266);
+    return;
+  }
+  // カバン
+  ctx.fillStyle = 'rgba(16,16,24,.6)'; ctx.fillRect(0,0,320,288);
+  textBox(8, 34, 304, 248);
+  ctx.fillStyle = C.ink; ctx.font = '14px ' + FONT;
+  ctx.fillText(m.pick ? `「${ITEMS[m.pick].n}」と なにを あわせる?` : 'カバン', 20, 44);
+  if (!S.inv.length){ ctx.fillText('なにも もっていない', 40, 90); return; }
+  ctx.font = '12px ' + FONT;
+  S.inv.forEach((s, i) => {
+    const x = 16 + (i%2)*148, y = 66 + Math.floor(i/2)*22;
+    if (i===m.sel){ ctx.fillStyle = m.pick ? '#f8d8a0' : '#e8d8b0'; ctx.fillRect(x-2, y-2, 144, 20); ctx.fillStyle = C.ink; ctx.fillText('▶', x, y+2); }
+    if (m.pick && m.pickSel===i){ ctx.strokeStyle = C.red; ctx.lineWidth = 2; ctx.strokeRect(x-1, y-1, 142, 18); }
+    ctx.drawImage(icon(s.id), x+12, y-1, 18, 18);
+    ctx.fillStyle = C.ink; ctx.fillText(ITEMS[s.id].n + (s.n>1 ? ' x'+s.n : ''), x+34, y+2);
+  });
+  // 説明
+  const cur = S.inv[m.sel];
+  if (cur){ ctx.fillStyle = C.uiD; ctx.fillRect(14, 238, 292, 1); ctx.fillStyle = '#5a4a30'; wrap(ITEMS[cur.id].d, 18, 244, 284, 16); }
+  if (m.sub){
+    textBox(196, 120, 110, 82);
+    ctx.font = '14px ' + FONT;
+    SUBS.forEach((s,i)=>{ ctx.fillStyle = C.ink; ctx.fillText((m.sub.sel===i?'▶':'　')+s, 206, 132 + i*22); });
+  }
+}
+
+// ---------- タイトル／オープニング／エンディング ----------
+function updateTitle(){
+  sceneT++;
+  setBgm('day');
+  if (hit('mute')) setMute(!muted);
+  if (hasSave && (hit('up')||hit('down'))){ titleSel = 1-titleSel; SFX.menu(); }
+  if (hit('a') || hit('start')){
+    SFX.ok();
+    if (hasSave && titleSel===1){ startGame(true); toast(S.day+'日目から つづき', C.yellow); }
+    else { startGame(false); scene = 'opening'; sceneT = 0; }
+  }
+}
+function drawTitle(){
+  // 背景に島を流す
+  const cx = 120 + Math.sin(sceneT/400)*80, cy = 150;
+  drawWorld(cx, cy, 0, 144);
+  ctx.fillStyle = 'rgba(16,24,60,.35)'; ctx.fillRect(0,0,VW,144);
+  ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+  ctx.textBaseline = 'top';
+  ctx.font = '40px ' + FONT;
+  const ttl = 'ふたりじま', w = ctx.measureText(ttl).width;
+  const ty = 52 + Math.sin(sceneT/30)*2;
+  ctx.fillStyle = C.ol; for (const [dx,dy] of [[-3,0],[3,0],[0,-3],[0,3],[3,3]]) ctx.fillText(ttl, 160-w/2+dx, ty+dy);
+  ctx.fillStyle = C.yellow; ctx.fillText(ttl, 160-w/2, ty);
+  ctx.font = '13px ' + FONT;
+  const sub = 'はなればなれの兄弟、双子島からの脱出';
+  const sw = ctx.measureText(sub).width;
+  ctx.fillStyle = 'rgba(16,16,24,.7)'; ctx.fillRect(160-sw/2-8, 104, sw+16, 20);
+  ctx.fillStyle = '#fff'; ctx.fillText(sub, 160-sw/2, 107);
+  ctx.font = '14px ' + FONT;
+  const opts = hasSave ? ['はじめから','つづきから'] : ['はじめる'];
+  opts.forEach((o,i)=>{
+    const sel = !hasSave || titleSel===i;
+    const t = (sel && (sceneT>>4)%2 ? '▶ ' : '　') + o;
+    ctx.fillStyle = C.ol; ctx.fillText(t, 112+1, 176 + i*24 + 1);
+    ctx.fillStyle = sel ? '#fff' : '#a0a0b8'; ctx.fillText(t, 112, 176 + i*24);
+  });
+  const e = getEndings(), ec = Object.keys(e).length;
+  ctx.font = '12px ' + FONT; ctx.fillStyle = '#fff';
+  ctx.fillText('エンディング', 92, 246);
+  Object.keys(ENDINGS).forEach((k,i)=>{ ctx.fillStyle = e[k] ? C.yellow : '#b8b0d0'; ctx.fillText(e[k]?'★':'☆', 172 + i*14, 246); });
+  ctx.fillStyle = '#c8c0d8'; ctx.font = '10px ' + FONT; ctx.fillText('A / Enter で はじめる', 108, 268);
+  ctx.restore();
+}
+// 分割画面のオープニング（ふたりが別々の島で目をさます）
+function updateOpening(){
+  sceneT++;
+  if (hit('a') || hit('start') || hit('b') || sceneT > 330){ scene = 'play'; sceneT = 0; say(['……ここは どこだ?','あらしで 船から投げだされて… リクは!?','（まずは 生きのびる道具を つくろう）']); }
+}
+function drawOpening(){
+  R(ctx, 0, 0, VW, 144, C.ol);
+  const a = Math.min(1, sceneT/40);
+  ctx.globalAlpha = a;
+  drawWorld(START.x*TS+8 - 80, START.y*TS - 40, 2, 68);
+  drawWorld(RIKU_POS.x*TS+8 - 80, RIKU_POS.y*TS - 40, 74, 68);
+  ctx.globalAlpha = 1;
+  R(ctx, 0, 70, VW, 4, C.ol); R(ctx, 0, 71, VW, 2, C.yellow);
+  ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.font = '12px ' + FONT; ctx.textBaseline = 'top';
+  const lab = (t, x, y) => { ctx.fillStyle = 'rgba(16,16,24,.8)'; const w = ctx.measureText(t).width+10; ctx.fillRect(x, y, w, 18); ctx.fillStyle = '#fff'; ctx.fillText(t, x+5, y+3); };
+  if (sceneT > 30) lab('西の島 ― 兄 カイ', 8, 10);
+  if (sceneT > 90) lab('東の島 ― 弟 リク', 8, 154);
+  if (sceneT > 160){ ctx.font = '14px ' + FONT; const t = 'あらしの夜、ふたりは はなればなれに…'; const w = ctx.measureText(t).width; ctx.fillStyle = 'rgba(16,16,24,.85)'; ctx.fillRect(160-w/2-8, 128, w+16, 24); ctx.fillStyle = C.yellow; ctx.fillText(t, 160-w/2, 133); }
+  ctx.font = '10px ' + FONT; ctx.fillStyle = '#a0a0b8'; ctx.fillText('A でスキップ', 250, 272);
+  ctx.restore();
+}
+const ENDTEXT = {
+  alone:['いかだは 波にゆられ、','三日後、漁船に ひろわれた。','でも、心には ずっと 東の島の声が のこっている。','「にいちゃーん…」','── もう一度、あの島へ。'],
+  drift:['帆のない いかだで ふたりは 海へ出た。','何日も 波まかせに ただよい…','ついに 通りかかった 漁船に 見つけられた!','リク「にいちゃん、ぼくら 帰れるんだね」','── 帆があれば もっと早く 帰れたかも?'],
+  voyage:['古い帆が 風をはらみ、','いかだは まっすぐ 水平線をめざす。','リク「にいちゃん、見て! 陸だ!」','ふたりは 自分たちの力で 島を出た。','── 最高の 航海だった!'],
+  smoke:['白いけむりは 一晩じゅう 空へのぼりつづけた。','あくる朝、沖に 大きな船があらわれた。','「おーい! だれかいるのかー!」','ふたりは 手をつないで 浜へ走った。','── 島が くれた 合図だった。'],
+};
+function updateEnding(){
+  sceneT++;
+  setBgm(null);
+  if (sceneT === 2) SFX.fanfare();
+  if (sceneT > 120 && (hit('a') || hit('start'))){ scene = 'title'; sceneT = 0; titleSel = 0; hasSave = false; }
+}
+function drawEnding(){
+  // 海と空
+  R(ctx, 0, 0, VW, 144, '#f8b878'); R(ctx, 0, 0, VW, 30, '#f89868'); R(ctx, 0, 70, VW, 74, C.sea);
+  for (let i=0;i<12;i++) R(ctx, (i*37 + sceneT/3)%VW, 76 + (i*13)%60, 10, 1, C.sea2);
+  R(ctx, 120, 48, 16, 16, '#fff0a0'); R(ctx, 118, 50, 20, 12, '#fff0a0');
+  // いかだ or 島
+  const bob = Math.sin(sceneT/20)*1.5;
+  if (ending === 'smoke'){ R(ctx, 0, 64, 70, 10, C.sand); R(ctx, 10, 58, 40, 8, C.grass); R(ctx, 140, 60, 20, 8, '#e8e8f0'); R(ctx, 146, 52, 4, 8, '#a83030'); }
+  else { const rx = 50 + Math.min(40, sceneT/8); R(ctx, rx, 82+bob, 36, 5, C.trunk); R(ctx, rx, 82+bob, 36, 1, '#c08848'); if (ending==='voyage'){ R(ctx, rx+17, 54+bob, 2, 28, C.trunkD); R(ctx, rx+19, 56+bob, 14, 20, '#e8e0c8'); } }
+  const kx = ending==='smoke' ? 30 : 50 + Math.min(40, sceneT/8) + 6;
+  const ky = ending==='smoke' ? 62 : 80 + bob;
+  ctx.drawImage(kidSprite('kai','right',0, ending==='alone'?'idle':'wave'), kx, ky-14);
+  if (ending !== 'alone') ctx.drawImage(kidSprite('riku','right',0,'wave'), kx+12, ky-14);
+  ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.textBaseline = 'top';
+  textBox(6, 168, 308, 114);
+  ctx.font = '13px ' + FONT;
+  const lines = ENDTEXT[ending], shown = Math.min(lines.length, Math.floor(sceneT/40)+1);
+  for (let i=0;i<shown;i++){ ctx.fillStyle = i===lines.length-1 ? '#a03030' : C.ink; ctx.fillText(lines[i], 18, 178 + i*17); }
+  ctx.font = '12px ' + FONT; ctx.fillStyle = C.ol;
+  const e = ENDINGS[ending];
+  ctx.fillStyle = 'rgba(16,16,24,.8)'; ctx.fillRect(8, 8, 304, 42);
+  ctx.fillStyle = C.yellow; ctx.font = '14px ' + FONT; ctx.fillText(`ENDING ${e.no} / 4「${e.n}」`, 18, 12);
+  ctx.font = '12px ' + FONT; ctx.fillStyle = '#fff';
+  ctx.fillText(`${S.day}日目に脱出　ひらめき ${S.recipes.length}/${BOOK.length}　たおれた ${S.faints}回`, 18, 32);
+  if (sceneT > 120 && (sceneT>>4)%2){ ctx.fillStyle = '#a0a0b8'; ctx.fillText('A でタイトルへ', 220, 266); }
+  ctx.restore();
+}
+
+// =====================================================================
+//  メインループ
+// =====================================================================
+function render(){
+  ctx.setTransform(2,0,0,2,0,0);
+  ctx.imageSmoothingEnabled = false;
+  if (scene === 'title'){ drawTitle(); }
+  else if (scene === 'opening'){ drawOpening(); }
+  else if (scene === 'ending'){ drawEnding(); }
+  else {
+    camX = Math.max(0, Math.min(MW*TS - VW, player.x - VW/2));
+    camY = Math.max(0, Math.min(MH*TS - VH, player.y - VH/2 - 4));
+    // 画面振動：小=縦のみ、中=縦主体、大=横主体（#103）
+    let sx = 0, sy = 0;
+    if (shake.t > 0){
+      const k = shake.t / shake.f, m = shake.mag * k;
+      const flip = (shake.t>>1)%2 ? 1 : -1;
+      if (shake.mode === 0) sy = flip*m;
+      else if (shake.mode === 1){ sy = flip*m; sx = (Math.random()-.5)*m*0.5; }
+      else { sx = flip*m; sy = (Math.random()-.5)*m*0.5; }
+    }
+    drawWorld(camX - sx, camY - sy, HUD, VH);
+    drawLight(camX - sx, camY - sy);
+    drawHud();
+    // フラッシュは明暗を交互に（#221）
+    if (flash > 0){ ctx.fillStyle = flash%2 ? 'rgba(255,255,255,.45)' : 'rgba(20,10,30,.35)'; ctx.fillRect(0,HUD,VW,VH); }
+    drawHudText();
+    drawOverlayText();
+  }
+  if (fade){
+    const h = fade.dur/2, a = fade.t < h ? fade.t/h : 1 - (fade.t-h)/h;
+    ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle = `rgba(0,0,0,${Math.max(0,Math.min(1,a))})`; ctx.fillRect(0,0,320,288);
+  }
+}
+function step(){
+  frame++;
+  bgmTick();
+  if (fade){
+    fade.t++;
+    if (fade.t === Math.floor(fade.dur/2)) fade.mid();
+    if (fade.t >= fade.dur){ const f = fade; fade = null; f.after(); }
+    clearPressed(); return;
+  }
+  if (scene === 'title') updateTitle();
+  else if (scene === 'opening') updateOpening();
+  else if (scene === 'ending') updateEnding();
+  else {
+    setBgm(isNight() ? 'night' : 'day');
+    if (hitstop > 0){ hitstop--; // ヒットストップ中も先行入力は残す
+      return; }
+    updatePlay();
+  }
+  clearPressed();
+}
+let last = performance.now(), acc = 0;
+function loop(now){
+  acc += Math.min(100, now - last); last = now;
+  while (acc >= 1000/60){ step(); acc -= 1000/60; }
+  render();
+  requestAnimationFrame(loop);
+}
+try { hasSave = !!localStorage.getItem('futari_save'); if (hasSave) titleSel = 1; } catch(e){}
+S = newState(); player = {x:S.px,y:S.py,dir:'down',walk:0,trail:[]};
+riku.x = RIKU_POS.x*TS+8; riku.y = RIKU_POS.y*TS+10;
+window.__game = { get fishing(){return fishing;}, doAction, startAction, set dir(d){player.dir=d;}, count, get S(){return S;}, get player(){return player;}, get scene(){return scene;}, give, combine, useItem, P, map:()=>map, setTile:(x,y,t)=>map[y][x]=t, startGame, get menu(){return menu}, get dialog(){return dialog} };
+document.fonts && document.fonts.ready.then(()=>{});
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
