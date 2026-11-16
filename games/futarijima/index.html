@@ -80,8 +80,9 @@ const P = {
   '【ヘビのダメージ】': 10,
   '【ヘビの体力】': 2,
   '【ヘビの追いかける距離(px)】': 56,
-  '【昼のヘビの最大数】': 4,
-  '【夜のヘビの最大数】': 8,
+  '【昼のヘビの最大数】': 2,
+  '【夜のヘビの最大数】': 5,
+  '【スタートの浜でヘビが出ない半径(マス)】': 10,
   '【つりのアタリの受付フレーム】': 32,
   '【たいまつの持続秒数】': 150,
   '【たき火の明かりの半径(px)】': 54,
@@ -120,8 +121,8 @@ const hash2 = (x,y)=>{let h=(x*374761393+y*668265263)^0x5bd1e995;h=Math.imul(h^h
 // =====================================================================
 //  タイル
 // =====================================================================
-const T = {DEEP:0,SHALLOW:1,SAND:2,GRASS:3,TREE:4,PALM:5,ROCK:6,BUSH:7,BUSHE:8,TALL:9,CUT:10,SPRING:11,BAMBOO:12,STUMP:13,CAVE:14,WALL:15,BRIDGEX:16,BRIDGE:17,CHEST:18,CHESTO:19,HILL:20,SUMMIT:21,BAMBOOC:22};
-const SOLID = new Set([T.DEEP,T.TREE,T.PALM,T.ROCK,T.BUSH,T.BUSHE,T.SPRING,T.BAMBOO,T.WALL,T.BRIDGEX,T.CHEST,T.CHESTO]);
+const T = {DEEP:0,SHALLOW:1,SAND:2,GRASS:3,TREE:4,PALM:5,ROCK:6,BUSH:7,BUSHE:8,TALL:9,CUT:10,SPRING:11,BAMBOO:12,STUMP:13,CAVE:14,WALL:15,BRIDGEX:16,BRIDGE:17,CHEST:18,CHESTO:19,HILL:20,SUMMIT:21,BAMBOOC:22,VTREE:23};
+const SOLID = new Set([T.DEEP,T.TREE,T.VTREE,T.PALM,T.ROCK,T.BUSH,T.BUSHE,T.SPRING,T.BAMBOO,T.WALL,T.BRIDGEX,T.CHEST,T.CHESTO]);
 const isWater = t => t===T.DEEP||t===T.SHALLOW;
 
 // =====================================================================
@@ -130,8 +131,8 @@ const isWater = t => t===T.DEEP||t===T.SHALLOW;
 const ITEMS = {
   stone:{n:'いし',ic:'stone',d:'ただの石。2つあればなにかできそう'},
   sharp:{n:'するどい石',ic:'sharp',d:'割れて刃のようになった石。切ったり割ったりできる'},
-  branch:{n:'木の枝',ic:'branch',d:'まっすぐな枝'},
-  vine:{n:'つる',ic:'vine',d:'じょうぶなつる。むすべそう'},
+  branch:{n:'木の枝',ic:'branch',d:'まっすぐな枝。いろいろな道具の もとになる'},
+  vine:{n:'つる',ic:'vine',d:'じょうぶなつる。つる+つる で ロープになる'},
   rope:{n:'ロープ',ic:'rope',d:'つるをよったロープ'},
   coconut:{n:'ヤシの実',ic:'coconut',d:'かたい実。するどい物で割れそう'},
   opencoco:{n:'割ったヤシの実',ic:'opencoco',d:'つかう: のど+35 おなか+8',eat:{th:35,hu:8}},
@@ -395,12 +396,17 @@ function tileImg(t, v, anim){
     case T.GRASS: grassBase(); if (v%3===0){ R(c,4,6,1,2,C.grassD); R(c,5,5,1,2,C.grassD);} break;
     case T.CUT: grassBase(); R(c,3,10,10,2,'#c8b060'); R(c,5,9,2,1,'#c8b060'); break;
     case T.TALL: grassBase(); for (let i=0;i<6;i++){ const x=1+i*2.5|0; R(c,x,4+(i%2)*2,2,10,C.grassD); R(c,x,4+(i%2)*2,1,6,C.grassL);} break;
-    case T.TREE: case T.STUMP: grassBase();
+    case T.TREE: case T.STUMP: case T.VTREE: grassBase();
       if (t===T.STUMP){ R(c,4,8,8,6,C.trunk); R(c,4,8,8,2,'#d8a868'); R(c,6,9,4,1,C.trunkD); R(c,4,13,8,1,C.trunkD); break; }
       R(c,6,10,4,6,C.trunk); R(c,6,10,1,6,C.trunkD);
       R(c,1,1,14,10,C.leaf); R(c,0,3,16,6,C.leaf); R(c,2,1,8,3,C.leafL); R(c,1,8,14,3,C.leafD); R(c,3,0,10,1,C.leaf);
       if (v%2) { R(c,10,3,2,2,C.leafL); R(c,13,5,1,3,C.leafD); }
-      R(c,12,9,1,6,C.leafD); break;   // つる
+      if (t===T.VTREE){ // つるが巻きついた木（見ただけで分かるように明るい黄緑で）
+        const vc='#b8e040', vd='#6a9a20';
+        [[2,4,11],[5,6,9],[11,5,10],[13,3,9]].forEach(([x,y,h])=>{ for(let i=0;i<h;i++){ R(c,x+(i%4<2?0:1),y+i,1,1,i%3?vc:vd); } R(c,x,y+h,2,2,vc); });
+        R(c,6,11,4,1,vc); R(c,6,13,4,1,vd);
+      }
+      break;
     case T.PALM: sandBase();
       R(c,7,6,3,10,'#a07040'); R(c,7,8,3,1,'#7a5028'); R(c,7,12,3,1,'#7a5028');
       R(c,1,3,6,2,C.leaf); R(c,10,3,6,2,C.leaf); R(c,3,1,10,2,C.leafL); R(c,0,5,3,2,C.leafD); R(c,13,5,3,2,C.leafD); R(c,5,0,6,2,C.leaf);
@@ -495,6 +501,9 @@ function genMap(){
   set(SUMMIT_POS.x,SUMMIT_POS.y+3,T.HILL);
   // 西の島に木と草むらを保証
   [[13,13],[14,12],[15,14],[6,16],[7,15],[16,22],[15,23],[12,24]].forEach(([x,y])=>{ if (map[y][x]===T.GRASS) set(x,y,T.TREE); });
+  // つるの木：スタートの近くに必ず置き、ほかにも少しまぜる
+  [[12,24],[15,23],[7,15],[13,13]].forEach(([x,y])=>set(x,y,T.VTREE));
+  { const r3 = mulberry(77); for (let y=0;y<MH;y++) for (let x=0;x<MW;x++) if (map[y][x]===T.TREE && r3()<0.12) map[y][x]=T.VTREE; }
   [[11,22],[12,21],[9,18],[14,19]].forEach(([x,y])=>{ if (map[y][x]===T.GRASS) set(x,y,T.TALL); });
   [[8,20],[17,19]].forEach(([x,y])=>{ if (map[y][x]===T.GRASS) set(x,y,T.BUSH); });
   res = {};
@@ -526,6 +535,8 @@ function startGame(load){
   S = newState();
   if (load) {
     try { const d = JSON.parse(localStorage.getItem('futari_save')); Object.assign(S, d); map = d.map; res = d.res || {}; } catch(e){ }
+    // 旧バージョンのセーブ：つるの木を足す
+    if (!map.some(row => row.includes(T.VTREE))){ const r3 = mulberry(77); for (let y=0;y<MH;y++) for (let x=0;x<MW;x++) if (map[y][x]===T.TREE && r3()<0.15) map[y][x]=T.VTREE; [[12,24],[15,23],[7,15],[13,13]].forEach(([x,y])=>{ if (map[y][x]===T.TREE || map[y][x]===T.GRASS) map[y][x]=T.VTREE; }); }
   } else {
     // 漂着物（遊び始めてすぐ拾えるもの）
     [[START.x+1,START.y],[START.x-2,START.y+1],[START.x+2,START.y+2]].forEach(([x,y])=>S.ground.push({id:'stone',x:x*TS+8,y:y*TS+8}));
@@ -582,8 +593,13 @@ function goalText(){
   if (!S.flags.sawRiku) return '島をしらべよう。東の方から声がする…';
   if (!S.flags.bridge){
     if (count('plank')) return 'こわれた橋で 橋のいた をつかおう';
-    if (!count('axe') && !S.recipes.includes('axe')) return '木を切るには オノが要る（枝+するどい石）';
-    return '丸太 と ロープ で 橋のいた をつくろう';
+    if (!count('axe') && !S.recipes.includes('axe')) return '橋には丸太が要る。オノ = 木の枝+するどい石';
+    if (!count('log')) return 'オノを持って 木に向かってA → 丸太';
+    if (!count('rope')){
+      if (count('vine') >= 2) return 'カバンで つる+つる を あわせて ロープに';
+      return 'ロープ = つる+つる。つるは 黄緑のつるの木でA（' + count('vine') + '/2）';
+    }
+    return 'カバンで 丸太+ロープ を あわせて 橋のいた に';
   }
   if (!S.rikuJoined) return 'リクのところへ行こう';
   if (!S.recipes.includes('raft') && !S.flags.smoke) return 'いかだ か のろし で島を出よう';
@@ -737,7 +753,7 @@ function startAction(){
   const ft = facingTile(), t = tileAt(ft.x, ft.y);
   // ふりかぶる動作が要るもの（木、ヘビ、竹、空ぶり）
   const snakeNear = snakes.find(s => Math.hypot(s.x - (player.x + DIRV[player.dir][0]*10), s.y - (player.y + DIRV[player.dir][1]*10)) < 13);
-  const swingy = snakeNear || (t===T.TREE && count('axe')) || (t===T.BAMBOO);
+  const swingy = snakeNear || ((t===T.TREE||t===T.VTREE) && count('axe')) || (t===T.BAMBOO);
   if (swingy){ player.act = 16; player.actHit = 11; player.actPose = 'windup'; SFX.swing(); return; } // 1F目で構える（#049）
   doAction();
 }
@@ -783,7 +799,7 @@ function doAction(){
       } else if ((res['l'+key]||0) < 2){ res['l'+key] = (res['l'+key]||0)+1; give('leaf'); }
       else { toast('今日はもう 何もとれない'); SFX.empty(); }
       return; }
-    case T.TREE: {
+    case T.TREE: case T.VTREE: {
       if (count('axe')){
         res['h'+key] = (res['h'+key]||0) + 1; S.fa = Math.min(100, S.fa + p('オノをふった時のつかれ'));
         burst(fx, fy+4, '#d8a868', 6, 1.4, 14); burst(fx, fy, C.leafL, 4, 1, 18);
@@ -798,7 +814,8 @@ function doAction(){
       }
       const n = res['b'+key]||0;
       if (n < 2){ res['b'+key] = n+1; S.fa = Math.min(100, S.fa + p('木の枝を取った時のつかれ')); tileShake[key] = 6; burst(fx, fy, C.leafL, 4, 1, 14);
-        if (Math.random() < 0.45) give('vine'); else give('branch');
+        if (t===T.VTREE){ give('vine'); if (!S.flags.vineTip){ S.flags.vineTip = 1; toast('つるを 2本あつめて あわせると ロープ!', C.yellow); } }
+        else { give('branch'); if (!S.flags.vineHint && n===1){ S.flags.vineHint = 1; toast('つるは 黄緑のつるが 巻きついた木から とれる'); } }
       } else { toast('この木からは もう取れない（オノがあれば…）'); SFX.empty(); }
       return; }
     case T.BUSH: map[ft.y][ft.x] = T.BUSHE; give('berry'); if (Math.random()<0.5) give('berry', 1, true); burst(fx,fy,C.berry,5,1,14); return;
@@ -1008,14 +1025,20 @@ function learn(id){ if (!S.recipes.includes(id)){ S.recipes.push(id); return tru
 // ---------- ヘビ ----------
 function updateSnakes(){
   const max = isNight() ? p('夜のヘビの最大数') : p('昼のヘビの最大数');
+  // 新しい要素は落ちついてから出す（#085）。手ほどきの間は出さない
+  if (S.flags.tut < TUT.length) return moveSnakes();
   if (snakes.length < max && frame % 50 === 0){
     for (let tries=0; tries<10; tries++){
       const x = Math.floor(Math.random()*MW), y = Math.floor(Math.random()*MH), t = tileAt(x,y);
-      if ((t===T.TALL || t===T.GRASS) && Math.hypot(x*TS-player.x, y*TS-player.y) > 120 && !S.objs.some(o=>o.type==='fire' && Math.hypot(o.x-x,o.y-y)<4)){
+      // ヘビは草むらにだけいる＝草むらを刈れば安全になる（リスクが見える）
+      if (t===T.TALL && Math.hypot(x-START.x, y-START.y) > p('スタートの浜でヘビが出ない半径(マス)') && Math.hypot(x*TS-player.x, y*TS-player.y) > 120 && !S.objs.some(o=>o.type==='fire' && Math.hypot(o.x-x,o.y-y)<4)){
         snakes.push({x:x*TS+8, y:y*TS+8, hp:p('ヘビの体力'), dir:Math.random()*6.28, t:0, flash:0, kx:0, ky:0, cool:0}); break;
       }
     }
   }
+  moveSnakes();
+}
+function moveSnakes(){
   for (const s of snakes){
     s.t++; if (s.flash) s.flash--; if (s.cool) s.cool--;
     const dx = player.x - s.x, dy = player.y - s.y, d = Math.hypot(dx,dy);
@@ -1124,7 +1147,7 @@ function drawWorld(cx, cy, clipY, clipH, opts={}){
   for (let y=y0; y<=y0+Math.ceil(clipH/TS); y++) for (let x=x0; x<=x0+VW/TS; x++){
     const t = tileAt(x,y), v = Math.floor(hash2(x,y)*4);
     let ox = 0; const ts = tileShake[x+','+y]; if (ts) ox = (ts%2?1:-1);
-    if (t===T.TREE||t===T.PALM){ ctx.drawImage(tileImg(t===T.PALM?T.SAND:T.GRASS, v, 0), x*TS, y*TS); }
+    if (t===T.TREE||t===T.VTREE||t===T.PALM){ ctx.drawImage(tileImg(t===T.PALM?T.SAND:T.GRASS, v, 0), x*TS, y*TS); }
     ctx.drawImage(tileImg(t, v, isWater(t)||t===T.BRIDGEX||t===T.BRIDGE ? anim : 0), x*TS+ox, y*TS);
     // 岸の白波
     if (isWater(t)) { for (const [dx,dy] of [[0,-1],[0,1],[-1,0],[1,0]]){ const n = tileAt(x+dx,y+dy); if (!isWater(n) && n!==T.BRIDGEX && n!==T.BRIDGE){ ctx.fillStyle = (frame>>4)%2 ? C.foam : '#a8e0f8'; if (dy) ctx.fillRect(x*TS, y*TS + (dy<0?0:15), 16, 1); else ctx.fillRect(x*TS + (dx<0?0:15), y*TS, 1, 16); } } }
@@ -1514,7 +1537,7 @@ function loop(now){
 try { hasSave = !!localStorage.getItem('futari_save'); if (hasSave) titleSel = 1; } catch(e){}
 S = newState(); player = {x:S.px,y:S.py,dir:'down',walk:0,trail:[]};
 riku.x = RIKU_POS.x*TS+8; riku.y = RIKU_POS.y*TS+10;
-window.__game = { get fishing(){return fishing;}, doAction, startAction, set dir(d){player.dir=d;}, count, get S(){return S;}, get player(){return player;}, get scene(){return scene;}, give, combine, useItem, P, map:()=>map, setTile:(x,y,t)=>map[y][x]=t, startGame, get menu(){return menu}, get dialog(){return dialog} };
+window.__game = { get snakes(){return snakes;}, get fishing(){return fishing;}, doAction, startAction, set dir(d){player.dir=d;}, count, get S(){return S;}, get player(){return player;}, get scene(){return scene;}, give, combine, useItem, P, map:()=>map, setTile:(x,y,t)=>map[y][x]=t, startGame, get menu(){return menu}, get dialog(){return dialog} };
 document.fonts && document.fonts.ready.then(()=>{});
 requestAnimationFrame(loop);
 </script>
