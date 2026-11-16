@@ -753,7 +753,7 @@ function startAction(){
   const ft = facingTile(), t = tileAt(ft.x, ft.y);
   // ふりかぶる動作が要るもの（木、ヘビ、竹、空ぶり）
   const snakeNear = snakes.find(s => Math.hypot(s.x - (player.x + DIRV[player.dir][0]*10), s.y - (player.y + DIRV[player.dir][1]*10)) < 13);
-  const swingy = snakeNear || ((t===T.TREE||t===T.VTREE) && count('axe')) || (t===T.BAMBOO);
+  const swingy = snakeNear || (t===T.TREE && count('axe')) || (t===T.BAMBOO);
   if (swingy){ player.act = 16; player.actHit = 11; player.actPose = 'windup'; SFX.swing(); return; } // 1F目で構える（#049）
   doAction();
 }
@@ -800,7 +800,8 @@ function doAction(){
       else { toast('今日はもう 何もとれない'); SFX.empty(); }
       return; }
     case T.TREE: case T.VTREE: {
-      if (count('axe')){
+      // つるの木は切りたおさない（オノを持っていても つるが取れる＝詰まない）
+      if (count('axe') && t===T.TREE){
         res['h'+key] = (res['h'+key]||0) + 1; S.fa = Math.min(100, S.fa + p('オノをふった時のつかれ'));
         burst(fx, fy+4, '#d8a868', 6, 1.4, 14); burst(fx, fy, C.leafL, 4, 1, 18);
         if (res['h'+key] >= p('木を切りたおす回数')){
@@ -816,7 +817,7 @@ function doAction(){
       if (n < 2){ res['b'+key] = n+1; S.fa = Math.min(100, S.fa + p('木の枝を取った時のつかれ')); tileShake[key] = 6; burst(fx, fy, C.leafL, 4, 1, 14);
         if (t===T.VTREE){ give('vine'); if (!S.flags.vineTip){ S.flags.vineTip = 1; toast('つるを 2本あつめて あわせると ロープ!', C.yellow); } }
         else { give('branch'); if (!S.flags.vineHint && n===1){ S.flags.vineHint = 1; toast('つるは 黄緑のつるが 巻きついた木から とれる'); } }
-      } else { toast('この木からは もう取れない（オノがあれば…）'); SFX.empty(); }
+      } else { toast(t===T.VTREE ? 'つるは 取りつくした。あしたには また生える' : 'この木からは もう取れない（オノがあれば…）'); SFX.empty(); }
       return; }
     case T.BUSH: map[ft.y][ft.x] = T.BUSHE; give('berry'); if (Math.random()<0.5) give('berry', 1, true); burst(fx,fy,C.berry,5,1,14); return;
     case T.BUSHE: toast('実はまだ なっていない'); SFX.empty(); return;
@@ -1088,6 +1089,17 @@ function updateDialog(){
 
 // ---------- メニュー ----------
 const SUBS = ['つかう','あわせる','すてる'];
+// あわせられる相手（カバンの中の位置）。答えは文字で出さず、選べる物だけを明るくする
+function partners(a, selfIdx){
+  const out = [];
+  S.inv.forEach((s, i) => {
+    if (!RECIPES.some(r => (r[0]===a && r[1]===s.id) || (r[1]===a && r[0]===s.id))) return;
+    if (s.id === a && s.n < 2) return;
+    out.push(i);
+  });
+  return out;
+}
+function subEnabled(m){ const id = S.inv[m.sel] && S.inv[m.sel].id; return [true, !!id && partners(id).length > 0, true]; }
 function updateMenu(){
   const m = menu;
   if (m.kind === 'yesno'){
@@ -1104,24 +1116,32 @@ function updateMenu(){
   // bag
   const n = S.inv.length;
   if (m.sub){
-    if (hit('up')){ m.sub.sel = (m.sub.sel+2)%3; SFX.menu(); }
-    if (hit('down')){ m.sub.sel = (m.sub.sel+1)%3; SFX.menu(); }
+    const en = subEnabled(m);
+    if (hit('up')){ do { m.sub.sel = (m.sub.sel+2)%3; } while (!en[m.sub.sel]); SFX.menu(); }
+    if (hit('down')){ do { m.sub.sel = (m.sub.sel+1)%3; } while (!en[m.sub.sel]); SFX.menu(); }
     if (hit('b')){ m.sub = null; SFX.menu(); return; }
     if (hit('a')){
       const id = S.inv[m.sel].id, act = m.sub.sel;
       m.sub = null; m.lastSub = act;
       if (act === 0){ const used = useItem(id); if (menu === m && used && !ITEMS[id].eat) menu = null; clampBag(); }
-      else if (act === 1){ m.pick = id; m.pickSel = m.sel; SFX.ok(); }
+      else if (act === 1){ const c = partners(id); if (!c.length){ SFX.fail(); return; } m.pick = id; m.pickSel = m.sel; m.sel = c.find(i => i !== m.pickSel) ?? c[0]; SFX.ok(); }
       else { take(id); S.ground.push({id, x:player.x+DIRV[player.dir][0]*12, y:player.y+DIRV[player.dir][1]*12, nopick:90}); SFX.menu(); clampBag(); }
     }
     return;
   }
   if (hit('b') || hit('start')){ if (m.pick){ m.pick = null; SFX.menu(); } else { menu = null; SFX.menu(); } return; }
   if (!n){ if (hit('a')) { menu = null; } return; }
-  if (hit('up')){ m.sel = (m.sel - 2 + n*2) % n; SFX.menu(); }
-  if (hit('down')){ m.sel = (m.sel + 2) % n; SFX.menu(); }
-  if (hit('left')){ m.sel = (m.sel - 1 + n) % n; SFX.menu(); }
-  if (hit('right')){ m.sel = (m.sel + 1) % n; SFX.menu(); }
+  if (m.pick){
+    // あわせる相手を選ぶ間は、あわせられる物だけをカーソルが渡る
+    const c = partners(m.pick), k = Math.max(0, c.indexOf(m.sel));
+    if (hit('up') || hit('left')){ m.sel = c[(k - 1 + c.length) % c.length]; SFX.menu(); }
+    if (hit('down') || hit('right')){ m.sel = c[(k + 1) % c.length]; SFX.menu(); }
+  } else {
+    if (hit('up')){ m.sel = (m.sel - 2 + n*2) % n; SFX.menu(); }
+    if (hit('down')){ m.sel = (m.sel + 2) % n; SFX.menu(); }
+    if (hit('left')){ m.sel = (m.sel - 1 + n) % n; SFX.menu(); }
+    if (hit('right')){ m.sel = (m.sel + 1) % n; SFX.menu(); }
+  }
   if (hit('a')){
     if (m.pick){
       const a = m.pick, b = S.inv[m.sel].id;
@@ -1129,7 +1149,7 @@ function updateMenu(){
       const made = combine(a, b);
       clampBag();
       if (made){ const i = S.inv.findIndex(s=>s.id===made); if (i>=0) m.sel = i; }
-    } else { m.sub = {sel: m.lastSub || 0}; SFX.ok(); }
+    } else { const en = subEnabled(m); m.sub = {sel: en[m.lastSub||0] ? (m.lastSub||0) : 0}; SFX.ok(); }
   }
 }
 function clampBag(){ if (menu && menu.kind==='bag'){ menu.sel = Math.max(0, Math.min(menu.sel, S.inv.length-1)); } }
@@ -1351,12 +1371,15 @@ function drawMenu(){
   ctx.fillText(m.pick ? `「${ITEMS[m.pick].n}」と なにを あわせる?` : 'カバン', 20, 44);
   if (!S.inv.length){ ctx.fillText('なにも もっていない', 40, 90); return; }
   ctx.font = '12px ' + FONT;
+  const cands = m.pick ? partners(m.pick) : null;
   S.inv.forEach((s, i) => {
     const x = 16 + (i%2)*148, y = 66 + Math.floor(i/2)*22;
+    ctx.globalAlpha = (cands && !cands.includes(i) && i !== m.pickSel) ? 0.3 : 1;
     if (i===m.sel){ ctx.fillStyle = m.pick ? '#f8d8a0' : '#e8d8b0'; ctx.fillRect(x-2, y-2, 144, 20); ctx.fillStyle = C.ink; ctx.fillText('▶', x, y+2); }
     if (m.pick && m.pickSel===i){ ctx.strokeStyle = C.red; ctx.lineWidth = 2; ctx.strokeRect(x-1, y-1, 142, 18); }
     ctx.drawImage(icon(s.id), x+12, y-1, 18, 18);
     ctx.fillStyle = C.ink; ctx.fillText(ITEMS[s.id].n + (s.n>1 ? ' x'+s.n : ''), x+34, y+2);
+    ctx.globalAlpha = 1;
   });
   // 説明
   const cur = S.inv[m.sel];
@@ -1364,7 +1387,8 @@ function drawMenu(){
   if (m.sub){
     textBox(196, 120, 110, 82);
     ctx.font = '14px ' + FONT;
-    SUBS.forEach((s,i)=>{ ctx.fillStyle = C.ink; ctx.fillText((m.sub.sel===i?'▶':'　')+s, 206, 132 + i*22); });
+    const en = subEnabled(m);
+    SUBS.forEach((s,i)=>{ ctx.fillStyle = en[i] ? C.ink : '#b8a888'; ctx.fillText((m.sub.sel===i?'▶':'　')+s, 206, 132 + i*22); });
   }
 }
 
