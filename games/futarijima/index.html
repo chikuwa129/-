@@ -1014,17 +1014,18 @@ function useItem(id){
     return true;
   }
   const ft = facingTile(), t = tileAt(ft.x, ft.y);
-  const freeTile = () => (t===T.SAND || t===T.GRASS || t===T.CUT || t===T.HILL || t===T.SUMMIT) && !S.objs.some(o=>o.x===ft.x&&o.y===ft.y);
+  const freeTile = () => (t===T.SAND || t===T.GRASS || t===T.CUT || t===T.TALL || t===T.HILL || t===T.SUMMIT) && !S.objs.some(o=>o.x===ft.x&&o.y===ft.y) && !(ft.x===RIKU_POS.x && ft.y===RIKU_POS.y && !S.rikuJoined);
+  const clearGrass = () => { if (t===T.TALL) map[ft.y][ft.x] = T.CUT; };
   switch(id){
     case 'coconut': toast('かたくて割れない。するどい物とあわせよう'); SFX.empty(); return false;
     case 'firekit':
-      if (!freeTile()){ toast('目の前の あいている地面で つかおう'); SFX.empty(); return false; }
-      take(id); S.objs.push({type:'fire', x:ft.x, y:ft.y, summit: t===T.SUMMIT}); SFX.fire(); burst(ft.x*TS+8, ft.y*TS+8, C.fire, 14, 1.5, 24); toast('火がついた!', C.yellow);
+      if (!freeTile()){ toast('目の前が ふさがっている。砂浜や草地に向いて つかおう'); SFX.empty(); return false; }
+      take(id); clearGrass(); S.objs.push({type:'fire', x:ft.x, y:ft.y, summit: t===T.SUMMIT}); SFX.fire(); burst(ft.x*TS+8, ft.y*TS+8, C.fire, 14, 1.5, 24); toast('火がついた!', C.yellow);
       if (t===T.SUMMIT) toast('大きな葉を くべれば のろしになりそう', C.yellow);
       return true;
     case 'shelterkit':
-      if (!freeTile() || t===T.SUMMIT){ toast('目の前の あいている地面で つかおう'); SFX.empty(); return false; }
-      S.objs = S.objs.filter(o=>o.type!=='shelter'); take(id);
+      if (!freeTile() || t===T.SUMMIT){ toast('目の前が ふさがっている。砂浜や草地に向いて つかおう'); SFX.empty(); return false; }
+      S.objs = S.objs.filter(o=>o.type!=='shelter'); take(id); clearGrass();
       S.objs.push({type:'shelter', x:ft.x, y:ft.y}); SFX.craft(); burst(ft.x*TS+8, ft.y*TS+8, C.leafL, 12, 1.4, 20); toast('寝床ができた! 夜はここでねむろう', C.yellow);
       return true;
     case 'torch': {
@@ -1054,6 +1055,8 @@ function combine(a, b){
   SFX.craft(); flash = 2;
   burst(player.x, player.y-8, C.yellow, 10, 1.5, 20);
   toast((fresh ? 'ひらめいた! ' : '') + ITEMS[r[2]].n + ' ができた!', C.yellow);
+  if (r[2]==='firekit' || r[2]==='shelterkit') toast('カバンで「つかう」と 目の前に置ける', C.yellow);
+  if (r[2]==='torch' && fresh) toast('まちがえたら「ばらす」で もどせる');
   return r[2];
 }
 function learn(id){ if (!S.recipes.includes(id)){ S.recipes.push(id); return true; } return false; }
@@ -1170,6 +1173,7 @@ function updateMenu(){
   }
   // bag
   const n = S.inv.length;
+  if (n && (m.sel < 0 || m.sel >= n)) m.sel = Math.max(0, Math.min(m.sel, n-1));
   if (m.sub){
     const en = subEnabled(m);
     const L = SUBS.length;
@@ -1180,7 +1184,7 @@ function updateMenu(){
       const id = S.inv[m.sel].id, act = m.sub.sel;
       m.sub = null; m.lastSub = act;
       if (act === 0){ const used = useItem(id); if (menu === m && used && !ITEMS[id].eat) menu = null; clampBag(); }
-      else if (act === 1){ const c = partners(id); if (!c.length){ SFX.fail(); return; } m.pick = id; m.pickSel = m.sel; m.sel = c.find(i => i !== m.pickSel) ?? c[0]; SFX.ok(); }
+      else if (act === 1){ const c = partners(id); if (!c.length){ SFX.fail(); return; } m.pick = id; m.pickSel = m.sel; m.sel = c[0]; SFX.ok(); }  // カバンの並び順で最初の相手（同じ物どうしも選べる）
       else if (act === 2){ uncraft(id); clampBag(); }
       else { take(id); S.ground.push({id, x:player.x+DIRV[player.dir][0]*12, y:player.y+DIRV[player.dir][1]*12, nopick:90}); SFX.menu(); clampBag(); }
     }
